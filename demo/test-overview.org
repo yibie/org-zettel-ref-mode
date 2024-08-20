@@ -1,0 +1,13 @@
+#+title: Overview for test.org
+
+* Quick Notes
+
+- [[file:/Users/chenyibin/Documents/emacs/package/org-zettel-ref-mode/demo/test.org::test][test]]
+- [[file:/Users/chenyibin/Documents/emacs/package/org-zettel-ref-mode/demo/test.org::!@!#@$#%$#%$^%&*][!@!#@$#%$#%$^%&*]]
+- [[file:/Users/chenyibin/Documents/emacs/package/org-zettel-ref-mode/demo/test.org::测试][测试]]
+- [[file:/Users/chenyibin/Documents/emacs/package/org-zettel-ref-mode/demo/test.org::test1234][test1234]]
+
+* Marked Text
+
+- *Cras mollis scelerisque nunc. Nullam arcu. Aliquam consequat. Curabitur augue lorem, dapibus quis, laoreet et, pretium ac, nisi. Aenean magna nisl, mollis quis, molestie eu, feugiat in, orci. In hac habitasse platea dictumst.*
+- _Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Pellentesque sed dolor. Aliquam congue fermentum nisl._

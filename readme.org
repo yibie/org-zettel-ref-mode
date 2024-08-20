@@ -1,0 +1,312 @@
+#+title: Readme
+
+* org-zettel-ref-mode
+
+** 主要功能: 自动提取原文里的注释和摘要, 形成概览窗口, 保存为文献笔记
+输入 =M-x org-zettel-ref-init= 命令, 即可调用 "概览窗口", 里面显示在原文里记录的注释, 以及被标记的文本.
+
+1. 每一次形成概览, 都将自动形成一份文献笔记, 保存到你自定义的文件夹里
+2. 快速注释, =M-x org-zettel-ref-add-quick-note= 即可直接在输入注释
+3. 快速标记, 可以绑定快捷键, 快速标记原文中的一段文本
+4. 回顾文献笔记时, 可以从注释直接跳转回原文对应的位置, 重新阅读上下文
+5. 提供一套将其他格式的文档, 转换成 org 格式的方法.
+
+** Demo
+
+[[file:demo/org-zettel-ref-mode-demo.png]]
+
+** 适用范围
+=org-zettel-ref-mode= 仅能在 org-mode 启动时生效:
+
+1. 直接面向 org 文件
+2. 其他用户自定义由 org-mode 方式进行处理的文本格式文件, 比如: md, txt 等
+   在这种情况下, 面向该格式文件的 major-mode 的功能可能会受影响
+
+不过, 我一般是将资料直接转成 org 格式保存, 因此第二种情况虽然存在, 但不常见.
+
+** 价值: 有选择性地过滤信息
+
+TL;DR 版本:
+
+- 简单保存, 摘录或复制资料是不够的,需要对信息进行加工和处理才能转化为有用的知识
+- Zettelkasten方法强调用自己的话总结/回顾和建立联系, 提供了多次信息加工的机会, 但很多介绍忽视了Luhmann处理大量文献笔记的方法
+- 文献笔记是一种兼顾效率和深度的方法, 它记录要点和启发, 便于快速回顾和深入阅读, 同时有助于区分存量信息和增量信息
+
+完整版本:
+
+作为多年的笔记爱好者, 文字工作者, 我逐步体会到一些 "反常识":
+
+- 直接保存, 几乎是无用的.
+- 直接摘录, 几乎是无用的.
+- 直接复制, 几乎是无用的.
+
+背后的原因是, 简单的搬运, 只是增加了资料, 而忽略将资料的再加工. 还记得这个经典的层递关系吗? 资料 -> 信息 -> 知识 -> 智慧.
+
+Zettelkasten 方法总是强调让我们用自己的话总结, 要经常回顾过去的笔记, 增加笔记与笔记之间的联系, 从方法的角度, 它起码提供了 4-7 次信息加工的机会.
+
+即便如此, 市面上讲述 Zettelkasten 的文字或视频, 总沉迷在介绍双链的狂热中, 陷入到直接资料保存的误区里 -- 基本上忽略了 Niklas Luhmann 通过海量文献笔记处理资料的方法.
+
+我引用一个数字, 在 Luhmann 留下的 90000 多张笔记卡片里, 有 10000 多张是文献笔记.
+
+Luhmann 那令人惊叹的高产, 来自夸张的资料处理数量, 而这背后, 是他处理这些资料时体现的高效, 也就是文献笔记的制作.
+
+Luhmann 有一个习惯, 是一边读, 一边记文献笔记. 他的书或者资料, 没有划线, 没有边注, 非常干净, 就好像没读过一样. 每一个文献笔记, 基本上是一份资料的索引. 只在必要时候, 他才会摘录书中的原文.
+
+不过, 当我了解科研人员的制作文献笔记之后, 就发现, Luhmann 的文献笔记几乎和一般的科研文献笔记是一致的. 也是用自己的话注释, 同时记录这句话灵感在论文具体的出处, 等以后有机会再深入阅读.
+
+换言之, 文献笔记这种方法, 是兼顾了效率和深度.
+
+在没有必要对一份资料深入了解时, 用文献笔记记录要点(不是重要的内容, 而是对自己有用的启发); 等有必要深入时，再通过文献笔记快速找到对应上下文, 进行深度阅读和思考, 不用浪费时间重头再读.
+
+除了坚固效率和深度之外, 文献笔记还有一个好处, 那就是非常容易分辨存量信息和增量信息. 已经为类似概念, 重点做过注释的, 就是存量信息, 下次再另外一个资料里遇到, 就没有必要进行注释; 反之, 完全没有了解过的概念, 数据, 就值得添加注释, 记录出处. 让新知的发现变得更加容易.
+
+** 安装
+*** 安装步骤
+1. 下载 =org-zettel-ref-mode.el= 文件。
+2. 将文件放置在您的 Emacs 加载路径中（例如 =~/.emacs.d/lisp/=）。
+3. 在您的 Emacs 配置文件（如 =~/.emacs= 或 =~/.emacs.d/init.el=）中添加：
+
+   #+BEGIN_SRC emacs-lisp
+   (add-to-list 'load-path "~/.emacs.d/lisp/")
+   (require 'org-zettel-ref-mode)
+   #+END_SRC
+
+
+4. 重新启动 Emacs 或评估刚添加的代码。
+
+** 基本用法
+
+*** 启用模式
+在任何 org-mode 缓冲区中，运行：
+=M-x org-zettel-ref-mode=
+
+*** 清理源文件中的 <<>>
+
+由于添加笔记的核心功能是在原文里添加 <<>> 目标链接(target link), 但很多资料转换成 org 格式之后, 会自带很多 <<>> 的文本.
+
+在第一次对 org 文件进行注释或标记文本之前, 可以用 =org-zettel-ref-clean-targets= 清理一下格式, 确保快速笔记的功能正常工作.
+
+
+*** 添加快速笔记
+1. 将光标放置在您想添加笔记的位置。
+2. 使用快速标记功能（默认快捷键为 =C-c m=）。
+3. 选择 "Quick Note" 选项。
+4. 输入笔记名称和内容。
+
+*** 应用文本标记
+1. 选择要标记的文本（可选）。
+2. 使用快速标记功能（=C-c m=）。
+3. 从菜单中选择所需的标记类型。
+
+*** 同步概览文件
+默认自动同步：默认在保存源文件时自动执行。
+手动同步：=M-x org-zettel-ref-sync-overview=
+
+** 高级配置
+
+*** 自定义概览文件位置
+#+BEGIN_SRC emacs-lisp
+(setq org-zettel-ref-overview-directory "~/my-notes/overviews/")
+#+END_SRC
+
+*** 自定义快捷键
+在您的 Emacs 配置文件中添加：
+
+#+BEGIN_SRC emacs-lisp
+(setq org-zettel-ref-quick-markup-key "C-c C-m")
+#+END_SRC
+
+*** 调整自动同步行为
+禁用自动同步：
+#+BEGIN_SRC emacs-lisp
+(org-zettel-ref-disable-auto-sync)
+#+END_SRC
+
+启用自动同步：
+#+BEGIN_SRC emacs-lisp
+(org-zettel-ref-enable-auto-sync)
+#+END_SRC
+
+** 各种文档转换成 org 文件的方法(以下代码仍需测试)
+
+*** PDF 转换
+- 使用 =maker= ::
+
+maker(https://github.com/VikParuchuri/marker) 是一个强大的 pdf-to-markdown 工具, 通过 AI 提升了 OCR 识别的正确率.
+
+安装:
+
+#+begin_src python
+pip install marker-pdf
+#+end_src
+
+安装成功后, 就可以直接在命令行输入指令将 pdf 转换成 markdown:
+
+#+begin_src shell
+marker_single /path/to/file.pdf /path/to/output/folder --batch_multiplier 2
+#+end_src
+
+可以直接将它的命令, 打包成 emacs 指令, 通过 =M-x= 调用.
+
+*** 集成 marker PDF 转换工具到 Emacs
+
+我们可以创建一个自定义函数来调用 marker 命令行工具，并将其绑定到一个 Emacs 命令。这样，您就可以直接在 Emacs 中使用 =M-x= 来转换 PDF 文件了。
+
+**** Emacs Lisp 实现
+
+#+BEGIN_SRC emacs-lisp
+(defcustom marker-pdf-output-directory "~/Documents/pdf_conversions/"
+  "Default output directory for marker PDF conversions."
+  :type 'directory
+  :group 'pdf-tools)
+
+(defun marker-convert-pdf-to-markdown (pdf-file)
+  "Convert a PDF file to Markdown using marker."
+  (interactive "fSelect PDF file to convert: ")
+  (let* ((output-dir (expand-file-name marker-pdf-output-directory))
+         (default-directory (file-name-directory pdf-file))
+         (file-name (file-name-nondirectory pdf-file))
+         (output-file (concat output-dir
+                              (file-name-sans-extension file-name)
+                              ".md")))
+    (unless (file-exists-p output-dir)
+      (make-directory output-dir t))
+    (message "Converting %s to Markdown..." file-name)
+    (async-shell-command
+     (format "marker_single \"%s\" \"%s\" --batch_multiplier 2"
+             pdf-file output-dir)
+     "*marker-conversion*")
+    (add-hook 'async-shell-command-hook
+              (lambda ()
+                (message "Conversion complete. Output saved to %s" output-file)
+                (find-file output-file)))))
+
+(defalias 'pdf-to-markdown 'marker-convert-pdf-to-markdown)
+#+END_SRC
+
+**** 使用说明
+
+1. 将上述代码添加到您的 Emacs 配置文件中（例如 =~/.emacs= 或 =~/.emacs.d/init.el=）。
+2. 重新加载配置或重启 Emacs。
+3. 使用 =M-x pdf-to-markdown= 命令来转换 PDF 文件。
+4. 选择要转换的 PDF 文件。
+5. 转换过程将在后台运行，完成后会自动打开转换后的 Markdown 文件。
+
+**** 自定义选项
+
+- 您可以通过自定义 =marker-pdf-output-directory= 变量来更改默认的输出目录。
+
+**** 注意事项
+
+- 确保已经通过 pip 安装了 marker-pdf。
+- 转换大型 PDF 文件可能需要一些时间，请耐心等待。
+- 转换质量可能因 PDF 的复杂度而异。
+
+**** 与 org-zettel-ref-mode 集成
+
+转换完成后，您可以使用 Pandoc 将 Markdown 文件转换为 Org 格式，然后应用 org-zettel-ref-mode：
+
+#+BEGIN_SRC emacs-lisp
+(defun convert-markdown-to-org-and-apply-zettel (markdown-file)
+  "Convert Markdown to Org and apply org-zettel-ref-mode."
+  (interactive "fSelect Markdown file: ")
+  (let* ((org-file (concat (file-name-sans-extension markdown-file) ".org")))
+    (call-process "pandoc" nil nil nil "-f" "markdown" "-t" "org"
+                  "-o" org-file markdown-file)
+    (find-file org-file)
+    (org-zettel-ref-mode 1)))
+#+END_SRC
+
+使用 =M-x convert-markdown-to-org-and-apply-zettel= 来转换 Markdown 文件并应用 org-zettel-ref-mode。
+*** EPUB 转换
+- 使用 =pandoc= ::
+  Pandoc 是一个强大的文档转换工具，可以将 EPUB 转换为 org 格式。
+
+  #+BEGIN_SRC emacs-lisp
+  (defun convert-epub-to-org (epub-file)
+    (let ((org-file (concat (file-name-sans-extension epub-file) ".org")))
+      (call-process "pandoc" nil nil nil "-f" "epub" "-t" "org"
+                    "-o" org-file epub-file)
+      (find-file org-file)))
+  #+END_SRC
+
+*** 集成到 org-zettel-ref-mode
+- 自动转换和导入
+  可以编写一个函数，检测文件类型并自动调用适当的转换函数：
+
+  #+BEGIN_SRC emacs-lisp
+  (defun org-zettel-ref-import-document (file)
+    (interactive "fSelect document to import: ")
+    (let ((extension (file-name-extension file)))
+      (cond
+       ((string= extension "pdf") (convert-pdf-to-org file))
+       ((string= extension "epub") (convert-epub-to-org file))
+       (t (message "Unsupported file format")))))
+  #+END_SRC
+
+- 转换后自动应用 org-zettel-ref-modeh
+  在转换函数中添加自动启用 org-zettel-ref-mode 的逻辑：
+
+  #+BEGIN_SRC emacs-lisp
+  (add-hook 'find-file-hook
+            (lambda ()
+              (when (and (eq major-mode 'org-mode)
+                         (string-match-p "converted-from-\\(pdf\\|epub\\)"
+                                         (buffer-file-name)))
+                (org-zettel-ref-mode 1))))
+  #+END_SRC
+
+** 使用建议
+
+- 使用有意义的笔记名称以便于后续检索
+- 定期审阅概览文件，以识别需要深入发展的想法
+- 利用 org-mode 的标签和属性系统对笔记进行分类和组织
+- 使用 org-mode 的搜索功能在笔记网络中快速导航
+
+** 常见问题解答
+
+Q: 如何在多个项目之间使用 org-zettel-ref-mode？
+A: 您可以为每个项目设置不同的概览目录，使用 =let-bound= 的方式在项目切换时动态改变 =org-zettel-ref-overview-directory= 的值。
+
+Q: 概览文件变得太大怎么办？
+A: 考虑按主题或时间周期分割概览文件。您可以自定义 =org-zettel-ref-create-or-open-overview-file= 函数来实现这一点。
+
+Q: 如何备份我的笔记？
+A: 将源文件和概览文件都纳入您的版本控制系统（如 Git）中。另外，定期执行文件系统级别的备份也是好的做法。
+
+** 故障排除
+
+如果遇到问题：
+1. 确保您使用的是最新版本的 org-zettel-ref-mode。
+2. 检查您的 Emacs 配置，确保没有冲突的设置。
+3. 尝试在一个干净的 Emacs 配置（emacs -q）中重现问题。
+4. 查看 =*Messages*= 缓冲区中的任何错误消息。
+
+如果问题持续存在，请通过 GitHub 仓库提交 issue，附上问题描述和重现步骤。
+
+** 贡献
+
+我们欢迎社区贡献! 以下是一些参与方式：
+- 报告 bugs 或提出功能建议。
+- 提交补丁或拉取请求。
+- 改进文档或编写教程。
+- 分享您使用 org-zettel-ref-mode 的经验和技巧。
+
+** 致谢
+
+org-zettel-ref-mode 的灵感借鉴了朋友 @lijigang 的 org-marked-text-overview, 由于自己改造的地方太多, 在经过沟通的情况下, 单独发布为 org-zettel-ref-mode.
+
+** 版本历史
+
+- v0.1 (2024-xx-xx): 初始发布
+  - 实现基本的快速笔记和标记功能
+  - 添加自动同步机制
+  - 提供自定义选项
+
+** 未来计划
+
+- 改进性能，优化大型文件的处理
+- 与其他知识管理 Package 的集成, 比如 org-roam, denote
+- 支持更多文件格式(可能)
+
+如果喜欢, 请 Star.
