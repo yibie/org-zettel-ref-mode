@@ -316,7 +316,7 @@ A: 将源文件和概览文件都纳入您的版本控制系统（如 Git）中�
 
 ** 致谢
 
-org-zettel-ref-mode 的灵感借鉴了朋友 @lijigang 的 org-marked-text-overview, 由于自己改造的地方太多, 在经过沟通的情况下, 单独发布为 org-zettel-ref-mode.
+org-zettel-ref-mode 的灵感借鉴了朋友 [[https://github.com/lijigang][@lijigang]] 的 [[https://github.com/lijigang/org-marked-text-overview][org-marked-text-overview]], 由于自己改造的地方太多, 在经过沟通的情况下, 单独发布为 org-zettel-ref-mode.
 
 ** 版本历史
 
