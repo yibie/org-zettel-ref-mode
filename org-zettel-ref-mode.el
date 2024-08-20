@@ -322,15 +322,6 @@ This should be a string that can be passed to `kbd'."
   :type 'string
   :group 'org-zettel-ref)
 
-(defcustom org-zettel-ref-quick-markup-key "C-c m"
-  "Key binding for quick markup function in org-zettel-ref-mode.
-This should be a string that can be passed to `kbd'."
-  :type 'string
-  :group 'org-zettel-ref
-  :set (lambda (sym val)
-         (set-default sym val)
-         (when (featurep 'org-zettel-ref-mode)
-           (org-zettel-ref-setup-quick-markup))))
 
 (defun org-zettel-ref-setup-quick-markup ()
   "Set up the key binding for quick markup."

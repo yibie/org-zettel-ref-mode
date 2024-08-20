@@ -12,6 +12,7 @@
 5. 提供一套将其他格式的文档, 转换成 org 格式的方法.
 
 ** Demo
+如题所示, 左边是窗口显示的是原文, 右边窗口显示的是概览.
 
 [[file:demo/org-zettel-ref-mode-demo.png]]
 
@@ -24,7 +25,7 @@
 
 不过, 我一般是将资料直接转成 org 格式保存, 因此第二种情况虽然存在, 但不常见.
 
-** 价值: 有选择性地过滤信息
+** 价值: 兼顾广度, 和深度的阅读方法
 
 TL;DR 版本:
 
@@ -58,27 +59,53 @@ Luhmann 有一个习惯, 是一边读, 一边记文献笔记. 他的书或者资
 
 在没有必要对一份资料深入了解时, 用文献笔记记录要点(不是重要的内容, 而是对自己有用的启发); 等有必要深入时，再通过文献笔记快速找到对应上下文, 进行深度阅读和思考, 不用浪费时间重头再读.
 
-除了坚固效率和深度之外, 文献笔记还有一个好处, 那就是非常容易分辨存量信息和增量信息. 已经为类似概念, 重点做过注释的, 就是存量信息, 下次再另外一个资料里遇到, 就没有必要进行注释; 反之, 完全没有了解过的概念, 数据, 就值得添加注释, 记录出处. 让新知的发现变得更加容易.
+除了兼顾效率和深度之外, 文献笔记还有一个好处, 那就是非常容易分辨存量信息和增量信息. 已经为类似概念, 重点做过注释的, 就是存量信息, 下次再另外一个资料里遇到, 就没有必要进行注释; 反之, 完全没有了解过的概念, 数据, 就值得添加注释, 记录出处. 让新知的发现变得更加容易.
 
 ** 安装
 *** 安装步骤
 1. 下载 =org-zettel-ref-mode.el= 文件。
 2. 将文件放置在您的 Emacs 加载路径中（例如 =~/.emacs.d/lisp/=）。
-3. 在您的 Emacs 配置文件（如 =~/.emacs= 或 =~/.emacs.d/init.el=）中添加：
+3. 在您的 Emacs 配置文件（如 ~/.emacs 或 ~/.emacs.d/init.el）中添加：
 
-   #+BEGIN_SRC emacs-lisp
-   (add-to-list 'load-path "~/.emacs.d/lisp/")
-   (require 'org-zettel-ref-mode)
-   #+END_SRC
+配置示例 1:
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'load-path "~/.emacs.d/lisp/")
+(require 'org-zettel-ref-mode)
+#+END_SRC
 
+配置示例 2:
+#+BEGIN_SRC emacs-lisp
+(use-package org-zettel-ref-mode
+  :ensure t  ; 如果通过包管理器安装
+  :init
+  (setq org-zettel-ref-overview-directory "~/Documents/org-overviews/")
+  :config
+  (setq org-zettel-ref-quick-markup-key "C-c m"))
+#+END_SRC
 
+配置示例 3(Doom Emacs 用户):
+
+在 =~/.doom.d/packages.el= 中：
+
+#+BEGIN_SRC emacs-lisp
+(package! org-zettel-ref-mode
+  :recipe (:host github :repo "username/org-zettel-ref-mode"))
+#+END_SRC
+
+在 =~/.doom.d/config.el= 中：
+
+#+BEGIN_SRC emacs-lisp
+(use-package! org-zettel-ref-mode
+  :config
+  (setq org-zettel-ref-overview-directory "~/Documents/org-overviews/"))
+#+END_SRC
 4. 重新启动 Emacs 或评估刚添加的代码。
 
 ** 基本用法
 
 *** 启用模式
 在任何 org-mode 缓冲区中，运行：
-=M-x org-zettel-ref-mode=
+=M-x org-zettel-ref-init=
 
 *** 清理源文件中的 <<>>
 
@@ -89,19 +116,17 @@ Luhmann 有一个习惯, 是一边读, 一边记文献笔记. 他的书或者资
 
 *** 添加快速笔记
 1. 将光标放置在您想添加笔记的位置。
-2. 使用快速标记功能（默认快捷键为 =C-c m=）。
+2. 使用快速标记功能。
 3. 选择 "Quick Note" 选项。
 4. 输入笔记名称和内容。
 
-*** 应用文本标记
-1. 选择要标记的文本（可选）。
-2. 使用快速标记功能（=C-c m=）。
-3. 从菜单中选择所需的标记类型。
 
 *** 同步概览文件
 默认自动同步：默认在保存源文件时自动执行。
 手动同步：=M-x org-zettel-ref-sync-overview=
 
+*** ⚠️注意事项
+1. 不要随便修改笔记文件名字的后缀 "-overview.org", 可能会导致概览丢失的情况.
 ** 高级配置
 
 *** 自定义概览文件位置
@@ -109,12 +134,6 @@ Luhmann 有一个习惯, 是一边读, 一边记文献笔记. 他的书或者资
 (setq org-zettel-ref-overview-directory "~/my-notes/overviews/")
 #+END_SRC
 
-*** 自定义快捷键
-在您的 Emacs 配置文件中添加：
-
-#+BEGIN_SRC emacs-lisp
-(setq org-zettel-ref-quick-markup-key "C-c C-m")
-#+END_SRC
 
 *** 调整自动同步行为
 禁用自动同步：
@@ -127,7 +146,7 @@ Luhmann 有一个习惯, 是一边读, 一边记文献笔记. 他的书或者资
 (org-zettel-ref-enable-auto-sync)
 #+END_SRC
 
-** 各种文档转换成 org 文件的方法(以下代码仍需测试)
+** 各种文档转换成 org 文件的方法(慎用! 大部分代码尚未测试, 仅提供可能性参考)
 
 *** PDF 转换
 - 使用 =maker= ::
@@ -148,11 +167,11 @@ marker_single /path/to/file.pdf /path/to/output/folder --batch_multiplier 2
 
 可以直接将它的命令, 打包成 emacs 指令, 通过 =M-x= 调用.
 
-*** 集成 marker PDF 转换工具到 Emacs
+**** 集成 marker PDF 转换工具到 Emacs
 
 我们可以创建一个自定义函数来调用 marker 命令行工具，并将其绑定到一个 Emacs 命令。这样，您就可以直接在 Emacs 中使用 =M-x= 来转换 PDF 文件了。
 
-**** Emacs Lisp 实现
+***** Emacs Lisp 实现
 
 #+BEGIN_SRC emacs-lisp
 (defcustom marker-pdf-output-directory "~/Documents/pdf_conversions/"
@@ -184,7 +203,7 @@ marker_single /path/to/file.pdf /path/to/output/folder --batch_multiplier 2
 (defalias 'pdf-to-markdown 'marker-convert-pdf-to-markdown)
 #+END_SRC
 
-**** 使用说明
+***** 使用说明
 
 1. 将上述代码添加到您的 Emacs 配置文件中（例如 =~/.emacs= 或 =~/.emacs.d/init.el=）。
 2. 重新加载配置或重启 Emacs。
@@ -192,17 +211,17 @@ marker_single /path/to/file.pdf /path/to/output/folder --batch_multiplier 2
 4. 选择要转换的 PDF 文件。
 5. 转换过程将在后台运行，完成后会自动打开转换后的 Markdown 文件。
 
-**** 自定义选项
+***** 自定义选项
 
 - 您可以通过自定义 =marker-pdf-output-directory= 变量来更改默认的输出目录。
 
-**** 注意事项
+***** 注意事项
 
 - 确保已经通过 pip 安装了 marker-pdf。
 - 转换大型 PDF 文件可能需要一些时间，请耐心等待。
 - 转换质量可能因 PDF 的复杂度而异。
 
-**** 与 org-zettel-ref-mode 集成
+***** 与 org-zettel-ref-mode 集成
 
 转换完成后，您可以使用 Pandoc 将 Markdown 文件转换为 Org 格式，然后应用 org-zettel-ref-mode：
 
@@ -230,6 +249,8 @@ marker_single /path/to/file.pdf /path/to/output/folder --batch_multiplier 2
       (find-file org-file)))
   #+END_SRC
 
+
+*** 网页转换(WIP)
 *** 集成到 org-zettel-ref-mode
 - 自动转换和导入
   可以编写一个函数，检测文件类型并自动调用适当的转换函数：
@@ -255,6 +276,7 @@ marker_single /path/to/file.pdf /path/to/output/folder --batch_multiplier 2
                                          (buffer-file-name)))
                 (org-zettel-ref-mode 1))))
   #+END_SRC
+
 
 ** 使用建议
 
@@ -298,7 +320,7 @@ org-zettel-ref-mode 的灵感借鉴了朋友 @lijigang 的 org-marked-text-overv
 
 ** 版本历史
 
-- v0.1 (2024-xx-xx): 初始发布
+- v0.1 (2024-8-21): 初始发布
   - 实现基本的快速笔记和标记功能
   - 添加自动同步机制
   - 提供自定义选项
