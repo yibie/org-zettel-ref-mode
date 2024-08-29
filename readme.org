@@ -181,9 +181,9 @@ Main features
 Usage instructions:
 1. Ensure all necessary libraries are installed (see library installation guide below)
 2. Three parameters need to be provided when running the script:
-   - --temp: temporary folder path
-   - --reference: reference material folder path (output location for Org files)
-   - --archive: archive folder path
+   - =--temp=: temporary folder path
+   - =--reference=: reference material folder path (output location for Org files)
+   - =--archive=: archive folder path
 3. Example command:
    ```
    python document_convert_to_org.py --temp ~/Documents/temp_convert/ --reference ~/Documents/ref/ --archive /Volumes/Collect/archives/
