@@ -1,13 +1,17 @@
 * org-zettel-ref-mode
 
+** 版本 0.2
+   - 完善整体工作流, 提供自动化脚本处理不同格式的电子文档
+   - 改善与其他工具的连接性, 通过自定义配置, org-zettel-ref-mode 生成的笔记文件可以以 denote, org-roam 的方式进行保存
+   - 提供快速标记功能, 在源文件中高亮了某一个段落后, 可启动 =org-zettel-quick-markup= 快速为高亮文本添加加粗、斜体、下划线等标记
 ** 主要功能: 自动提取原文里的注释和摘要, 形成概览窗口, 保存为文献笔记
 输入 =M-x org-zettel-ref-init= 命令, 即可调用 "概览窗口", 里面显示在原文里记录的注释, 以及被标记的文本.
 
 1. 每一次形成概览, 都将自动形成一份文献笔记, 保存到你自定义的文件夹里
 2. 快速注释, =M-x org-zettel-ref-add-quick-note= 即可直接在输入注释
 3. 回顾文献笔记时, 可以从注释直接跳转回原文对应的位置, 重新阅读上下文
-4. 提供一套将其他格式的文档, 转换成 org 格式的方法.
-
+4. 提供一套将其他格式的文档, 转换成 org 格式的方法
+5. (2024-08-29 新增)提供快速标记功能, 快速为源文件中的文本添加 org 里的加粗、斜体、下滑线等标记
 ** Demo
 如题所示, 左边是窗口显示的是原文, 右边窗口显示的是概览.
 
@@ -106,25 +110,35 @@ Luhmann 有一个习惯, 是一边读, 一边记文献笔记. 他的书或者资
 
 *** 清理源文件中的 <<>>
 
-由于添加笔记的核心功能是在原文里添加 <<>> 目标链接(target link), 但很多资料转换成 org 格式之后, 会自带很多 <<>> 的文本.
+由于添加笔记的核心功能是在原文里添加 <<>> 目标链接(target link)，但很多资料转换成 org 格式之后, 会自带很多 <<>> 的文本。
 
-在第一次对 org 文件进行注释或标记文本之前, 可以用 =org-zettel-ref-clean-targets= 清理一下格式, 确保快速笔记的功能正常工作.
-
+在第一次对 org 文件进行注释或标记文本之前, 可以用 =org-zettel-ref-clean-targets= 清理一下格式, 确保快速笔记的功能正常工作。
 
 *** 添加快速笔记
-1. 将光标放置在您想添加笔记的位置。
-2. 使用快速标记功能。
-3. 选择 "Quick Note" 选项。
-4. 输入笔记名称和内容。
+1. 将光标放置在您想添加笔记的位置
+2. =M-x org-zettel-ref-add-quick-note=
+3. 输入笔记名称和内容
 
+*** 快速添加标记
+1. 在源文件中选中文本
+2. =M-x org-zettel-ref-quick-markup=
+3. 选择自己希望的标记风格
 
 *** 同步概览文件
 默认自动同步：默认在保存源文件时自动执行。
 手动同步：=M-x org-zettel-ref-sync-overview=
 
 *** ⚠️注意事项
-1. 不要随便修改笔记文件名字的后缀 "-overview.org", 可能会导致概览丢失的情况.
+1. 不要随便修改笔记文件名. 如果修改了, 在源文件上再次添加快速笔记/标记, 在同步时, 会生成重复的笔记.
 ** 高级配置
+
+*** 自定义笔记保存模式
+（2024-08-29 更新）org-zettel-ref-mode 提供了 normal、org-roam、denote 三种模式，让笔记文件能够以对应的格式进行保存，比如，选用 org-roam 模式之后, 所保存的笔记文件, 会自动附上 id，方便检索。
+
+配置方法：
+
+=(setq org-zettel-ref-mode-type 'normal) ;可选：'normal, 'denote, 'org-roam）=
+
 
 *** 自定义概览文件位置
 #+BEGIN_SRC emacs-lisp
@@ -142,145 +156,75 @@ Luhmann 有一个习惯, 是一边读, 一边记文献笔记. 他的书或者资
 #+BEGIN_SRC emacs-lisp
 (org-zettel-ref-enable-auto-sync)
 #+END_SRC
+** 工作流
 
-** 各种文档转换成 org 文件的方法(慎用! 大部分代码尚未测试, 仅提供可能性参考)
+[[file:demo/pkm-system-diagram.png]]
 
-*** PDF 转换
-- 使用 =maker= ::
+*** 使用脚本将 PDF, ePub, html, md, txt 等文档格式转换成 org 文件
 
-maker(https://github.com/VikParuchuri/marker) 是一个强大的 pdf-to-markdown 工具, 通过 AI 提升了 OCR 识别的正确率.
+脚本: [[file:convert-to-org.py]]
 
-安装:
+我写了一个 python 脚本，用于将各种格式的文档（包括PDF、EPUB、HTML、Markdown和TXT）转换为Org格式。它支持英文, 中文, 中英文混合的PDF文档，能够处理电子版和扫描版PDF。
 
-#+begin_src python
-pip install marker-pdf
-#+end_src
+主要功能
+1. 支持多种文档格式转换（PDF、EPUB、HTML、Markdown、TXT）到Org格式
+2. 自动识别并处理电子版和扫描版PDF
+3. 使用OCR技术处理扫描版PDF，支持中英文识别
+4. 文件大小检查，防止处理过大的文件
+5. 扫描后, 将源文件归档
+6. 详细的处理日志输出
 
-安装成功后, 就可以直接在命令行输入指令将 pdf 转换成 markdown:
+使用说明：
+1. 确保安装了所有必要的库（见下方库安装指南）
+2. 运行脚本时需要提供三个参数：
+   - --temp：临时文件夹路径
+   - --reference：参考资料文件夹路径（输出Org文件的位置）
+   - --archive：归档文件夹路径
+3. 示例命令：
+   ```
+   python document_convert_to_org.py --temp ~/Documents/temp_convert/ --reference ~/Documents/ref/ --archive /Volumes/Collect/archives/
+   ```
 
-#+begin_src shell
-marker_single /path/to/file.pdf /path/to/output/folder --batch_multiplier 2
-#+end_src
+安装依赖：
 
-可以直接将它的命令, 打包成 emacs 指令, 通过 =M-x= 调用.
+1. PyPDF2
+   安装命令：`pip install PyPDF2`
+   用途：处理PDF文件，检查PDF是否为扫描版
 
-**** 集成 marker PDF 转换工具到 Emacs
+2. pdf2image
+   安装命令：`pip install pdf2image`
+   用途：将PDF转换为图像以进行OCR
+   注意：这个库依赖于poppler，您可能需要单独安装poppler
 
-我们可以创建一个自定义函数来调用 marker 命令行工具，并将其绑定到一个 Emacs 命令。这样，您就可以直接在 Emacs 中使用 =M-x= 来转换 PDF 文件了。
+3. pytesseract
+   安装命令：`pip install pytesseract`
+   用途：进行OCR（光学字符识别）
+   注意：这个库需要额外安装Tesseract OCR引擎
+   - 在Ubuntu/Debian上：`sudo apt-get install tesseract-ocr`
+   - 在macOS上（使用Homebrew）：`brew install tesseract`
+   - 在Windows上，下载安装程序：https://github.com/UB-Mannheim/tesseract/wiki
 
-***** Emacs Lisp 实现
+4. Pillow (PIL)
+   安装命令：`pip install Pillow`
+   用途：图像处理，与pdf2image和pytesseract配合使用
 
-#+BEGIN_SRC emacs-lisp
-(defcustom marker-pdf-output-directory "~/Documents/pdf_conversions/"
-  "Default output directory for marker PDF conversions."
-  :type 'directory
-  :group 'pdf-tools)
+5. 其他标准库（无需额外安装）：
+   - os
+   - sys
+   - shutil
+   - subprocess
+   - argparse
+   - time
+   - platform
+   - zipfile
+   - tempfile
+*** 使用 Markdownload 等浏览器拓展将网页保存 Markdown 文件到本地, 然后再用脚本转换
+*** 使用 Whisper 将音频文件转换成文本
+*** ⚠️注意事项
+推荐使用该脚本对 ePub, markdown, txt, 电子版 PDF 文档进行转换.
 
-(defun marker-convert-pdf-to-markdown (pdf-file)
-  "Convert a PDF file to Markdown using marker."
-  (interactive "fSelect PDF file to convert: ")
-  (let* ((output-dir (expand-file-name marker-pdf-output-directory))
-         (default-directory (file-name-directory pdf-file))
-         (file-name (file-name-nondirectory pdf-file))
-         (output-file (concat output-dir
-                              (file-name-sans-extension file-name)
-                              ".md")))
-    (unless (file-exists-p output-dir)
-      (make-directory output-dir t))
-    (message "Converting %s to Markdown..." file-name)
-    (async-shell-command
-     (format "marker_single \"%s\" \"%s\" --batch_multiplier 2"
-             pdf-file output-dir)
-     "*marker-conversion*")
-    (add-hook 'async-shell-command-hook
-              (lambda ()
-                (message "Conversion complete. Output saved to %s" output-file)
-                (find-file output-file)))))
+不推荐将该脚本用于转换扫描版 PDF, 原因是转换速度慢, 而且转换的效果也不非常好.
 
-(defalias 'pdf-to-markdown 'marker-convert-pdf-to-markdown)
-#+END_SRC
-
-***** 使用说明
-
-1. 将上述代码添加到您的 Emacs 配置文件中（例如 =~/.emacs= 或 =~/.emacs.d/init.el=）。
-2. 重新加载配置或重启 Emacs。
-3. 使用 =M-x pdf-to-markdown= 命令来转换 PDF 文件。
-4. 选择要转换的 PDF 文件。
-5. 转换过程将在后台运行，完成后会自动打开转换后的 Markdown 文件。
-
-***** 自定义选项
-
-- 您可以通过自定义 =marker-pdf-output-directory= 变量来更改默认的输出目录。
-
-***** 注意事项
-
-- 确保已经通过 pip 安装了 marker-pdf。
-- 转换大型 PDF 文件可能需要一些时间，请耐心等待。
-- 转换质量可能因 PDF 的复杂度而异。
-
-***** 与 org-zettel-ref-mode 集成
-
-转换完成后，您可以使用 Pandoc 将 Markdown 文件转换为 Org 格式，然后应用 org-zettel-ref-mode：
-
-#+BEGIN_SRC emacs-lisp
-(defun convert-markdown-to-org-and-apply-zettel (markdown-file)
-  "Convert Markdown to Org and apply org-zettel-ref-mode."
-  (interactive "fSelect Markdown file: ")
-  (let* ((org-file (concat (file-name-sans-extension markdown-file) ".org")))
-    (call-process "pandoc" nil nil nil "-f" "markdown" "-t" "org"
-                  "-o" org-file markdown-file)
-    (find-file org-file)
-    (org-zettel-ref-mode 1)))
-#+END_SRC
-
-使用 =M-x convert-markdown-to-org-and-apply-zettel= 来转换 Markdown 文件并应用 org-zettel-ref-mode。
-*** EPUB 转换
-- 使用 =pandoc= ::
-  Pandoc 是一个强大的文档转换工具，可以将 EPUB 转换为 org 格式。
-
-  #+BEGIN_SRC emacs-lisp
-  (defun convert-epub-to-org (epub-file)
-    (let ((org-file (concat (file-name-sans-extension epub-file) ".org")))
-      (call-process "pandoc" nil nil nil "-f" "epub" "-t" "org"
-                    "-o" org-file epub-file)
-      (find-file org-file)))
-  #+END_SRC
-
-
-*** 网页转换(WIP)
-*** 集成到 org-zettel-ref-mode
-- 自动转换和导入
-  可以编写一个函数，检测文件类型并自动调用适当的转换函数：
-
-  #+BEGIN_SRC emacs-lisp
-  (defun org-zettel-ref-import-document (file)
-    (interactive "fSelect document to import: ")
-    (let ((extension (file-name-extension file)))
-      (cond
-       ((string= extension "pdf") (convert-pdf-to-org file))
-       ((string= extension "epub") (convert-epub-to-org file))
-       (t (message "Unsupported file format")))))
-  #+END_SRC
-
-- 转换后自动应用 org-zettel-ref-modeh
-  在转换函数中添加自动启用 org-zettel-ref-mode 的逻辑：
-
-  #+BEGIN_SRC emacs-lisp
-  (add-hook 'find-file-hook
-            (lambda ()
-              (when (and (eq major-mode 'org-mode)
-                         (string-match-p "converted-from-\\(pdf\\|epub\\)"
-                                         (buffer-file-name)))
-                (org-zettel-ref-mode 1))))
-  #+END_SRC
-
-
-** 使用建议
-
-- 使用有意义的笔记名称以便于后续检索
-- 定期审阅概览文件，以识别需要深入发展的想法
-- 利用 org-mode 的标签和属性系统对笔记进行分类和组织
-- 使用 org-mode 的搜索功能在笔记网络中快速导航
 
 ** 常见问题解答
 
@@ -316,7 +260,10 @@ A: 将源文件和概览文件都纳入您的版本控制系统（如 Git）中�
 org-zettel-ref-mode 的灵感借鉴了朋友 [[https://github.com/lijigang][@lijigang]] 的 [[https://github.com/lijigang/org-marked-text-overview][org-marked-text-overview]], 由于自己改造的地方太多, 在经过沟通的情况下, 单独发布为 org-zettel-ref-mode.
 
 ** 版本历史
-
+- v0.2 (2024-08-29)
+  - 完善整体工作流, 提供自动化脚本处理不同格式的电子文档
+  - 改善与其他工具的连接性, 通过自定义配置, org-zettel-ref-mode 生成的笔记文件可以以 denote, org-roam 的方式进行保存
+  - 提供快速标记功能, 在源文件中高亮了某一个段落后, 可启动 =org-zettel-quick-markup= 快速为高亮文本添加加粗、斜体、下划线等标记
 - v0.1 (2024-8-21): 初始发布
   - 实现基本的快速笔记和标记功能
   - 添加自动同步机制
@@ -325,7 +272,7 @@ org-zettel-ref-mode 的灵感借鉴了朋友 [[https://github.com/lijigang][@lij
 ** 未来计划
 
 - 改进性能，优化大型文件的处理
-- 与其他知识管理 Package 的集成, 比如 org-roam, denote
+✅ 与其他知识管理 Package 的集成, 比如 org-roam, denote
 - 支持更多文件格式(可能)
 
 如果喜欢, 请 Star.
