@@ -53,6 +53,11 @@ Possible values are:
                  (const :tag "Org-roam" org-roam))
   :group 'org-zettel-ref)
 
+(defcustom org-zettel-ref-org-roam-temp-id nil
+  "Save Org-roam ID, Prevent broken references"
+  :type 'string
+  :group 'org-zettel-ref)
+
 (defun org-zettel-ref-generate-filename (title)
   "Generate a filename based on TITLE and current mode type."
   (let* ((sanitized-title (replace-regexp-in-string "[^a-zA-Z0-9\u4e00-\u9fff]+" "-" title))
@@ -84,8 +89,17 @@ Possible values are:
 
 (defun org-zettel-ref-generate-org-roam-content (title)
   "Generate org-roam compatible file content with TITLE."
-  (let ((id (org-id-new)))
-    (format "#+title: %s\n#+roam_tags:\n\n* %s\n:PROPERTIES:\n:ID:       %s\n:END:\n\n"
+
+  (let ((file (bound-and-true-p org-zettel-ref-overview-file)))
+    (when (and file (file-exists-p file))
+      (with-temp-buffer
+        (insert-file-contents file)
+        (goto-char (point-min))
+        (when (re-search-forward "^:ID: \\(.*\\)" nil t)
+          (setq org-zettel-ref-org-roam-temp-id (match-string 1))))))
+
+  (let ((id (or org-zettel-ref-org-roam-temp-id (org-id-new))))
+    (format "#+title: %s\n#+roam_tags:\n\n* %s\n:PROPERTIES:\n:ID: %s\n:END:\n\n"
             title title id)))
 
 (defun org-zettel-ref-init ()
