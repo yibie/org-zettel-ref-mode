@@ -378,8 +378,10 @@ This should be a string that can be passed to `kbd'."
     (org-zettel-ref-mode-disable)))
 
 (defcustom org-zettel-ref-python-script
-  (expand-file-name "conversion_script.py"
-                    (file-name-directory (locate-library "org-zettel-ref-mode")))
+  (let ((lib-path (locate-library "org-zettel-ref-mode")))
+    (expand-file-name "conversion_script.py"
+                      (or (and lib-path (file-name-directory lib-path))
+                          default-directory)))
   "Path to the Python conversion script."
   :type 'file
   :group 'org-zettel-ref)
