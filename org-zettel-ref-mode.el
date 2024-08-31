@@ -377,30 +377,5 @@ This should be a string that can be passed to `kbd'."
         (org-zettel-ref-setup-quick-markup))
     (org-zettel-ref-mode-disable)))
 
-(defcustom org-zettel-ref-python-script
-  (let ((lib-path (locate-library "org-zettel-ref-mode")))
-    (expand-file-name "conversion_script.py"
-                      (or (and lib-path (file-name-directory lib-path))
-                          default-directory)))
-  "Path to the Python conversion script."
-  :type 'file
-  :group 'org-zettel-ref)
-
-(defun org-zettel-ref-convert-to-org (file)
-  "Convert FILE to org format using the external Python script."
-  (interactive "fSelect file to convert: ")
-  (let* ((input-file (expand-file-name file))
-         (output-file (concat (file-name-sans-extension input-file) ".org")))
-    (if (file-exists-p org-zettel-ref-python-script)
-        (progn
-          (call-process "python" nil "*conversion-output*" nil
-                        org-zettel-ref-python-script input-file output-file)
-          (if (file-exists-p output-file)
-              (progn
-                (find-file output-file)
-                (message "File converted and opened: %s" output-file))
-            (message "Conversion failed. Check *conversion-output* buffer for details.")))
-      (message "Python script not found: %s" org-zettel-ref-python-script))))
-
 (provide 'org-zettel-ref-mode)
 ;;; org-zettel-ref-mode.el ends here

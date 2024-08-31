@@ -1,4 +1,3 @@
-
 import os
 import sys
 import shutil
@@ -63,7 +62,6 @@ def preprocess_epub(epub_path):
                     file_path = os.path.join(root, file)
                     arcname = os.path.relpath(file_path, temp_dir)
                     zipf.write(file_path, arcname)
-
         return new_epub_path
     except Exception as e:
         print(f"Error preprocessing EPUB {epub_path}: {str(e)}")
@@ -218,14 +216,44 @@ def process_pdf(input_file, output_file):
     else:
         return convert_pdf_to_text(input_file, output_file)
 
+
+def convert_mobi_to_text(input_file, output_file):
+    """
+    Convert MOBI file to text using Calibre's ebook-convert tool.
+    """
+    if not EBOOK_CONVERT_PATH:
+        print("ebook-convert not found. Please install Calibre.")
+        return False
+
+    try:
+        subprocess.run([EBOOK_CONVERT_PATH, input_file, output_file],
+                       check=True, capture_output=True, text=True)
+        print(f"Converted MOBI to text: {input_file} -> {output_file}")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"Error converting MOBI to text {input_file}: {e.stderr}")
+        return False
+
 def process_file(file, temp_folder, reference_folder, archive_folder):
     input_file = os.path.join(temp_folder, file)
     file_extension = os.path.splitext(file)[1].lower()
     output_name = os.path.splitext(file)[0]  # No sanitization
 
-    if file_extension in ['.md', '.html', '.epub', '.txt']:
-        output_file = os.path.join(reference_folder, f"{output_name}.org")
-        success = convert_with_pandoc(input_file, output_file)
+    if file_extension in ['.md', '.html', '.epub', '.txt', '.mobi']:
+        if file_extension == '.mobi':
+            # First convert MOBI to text
+            text_file = os.path.join(temp_folder, f"{output_name}.txt")
+            success = convert_mobi_to_text(input_file, text_file)
+            if success:
+                # Then convert text to org
+                output_file = os.path.join(reference_folder, f"{output_name}.org")
+                success = convert_with_pandoc(text_file, output_file)
+                os.remove(text_file)  # Remove temporary text file
+            else:
+                return False
+        else:
+            output_file = os.path.join(reference_folder, f"{output_name}.org")
+            success = convert_with_pandoc(input_file, output_file)
     elif file_extension == '.pdf':
         if is_pdf_processable(input_file):
             output_file = os.path.join(reference_folder, f"{output_name}.org")
@@ -249,7 +277,7 @@ def process_file(file, temp_folder, reference_folder, archive_folder):
 def process_files_by_type(temp_folder, reference_folder, archive_folder):
     unprocessed_files = []
 
-    file_types = ['.md', '.html', '.epub', '.pdf']
+    file_types = ['.md', '.html', '.epub', '.pdf', '.txt', '.mobi']
 
     for file_type in file_types:
         print(f"\nProcessing {file_type.upper()} files...")
@@ -266,6 +294,7 @@ def process_files_by_type(temp_folder, reference_folder, archive_folder):
         print(f"Finished processing {file_type.upper()} files.")
 
     return unprocessed_files
+
 
 def main():
     parser = argparse.ArgumentParser(description="Document Processing and Conversion Script")
