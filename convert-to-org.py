@@ -1,16 +1,87 @@
 import os
 import sys
-import shutil
-import subprocess
+import re
 import argparse
-import time
+import subprocess
 import platform
 import zipfile
 import tempfile
-import PyPDF2
-from pdf2image import convert_from_path
-import pytesseract
-from PIL import Image
+import shutil
+import logging
+import venv
+
+# 设置日志
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# 在脚本开头定义默认路径
+DEFAULT_TEMP_FOLDER = os.path.expanduser("~/Documents/temp_convert/")
+DEFAULT_REFERENCE_FOLDER = os.path.expanduser("~/Documents/ref/")
+DEFAULT_ARCHIVE_FOLDER = os.path.expanduser("/Volumes/Collect/archives/")
+
+def find_conda():
+    conda_path = shutil.which('conda')
+    if conda_path:
+        return conda_path
+    common_paths = [
+        os.path.expanduser('~/miniconda3/bin/conda'),
+        os.path.expanduser('~/anaconda3/bin/conda'),
+        '/usr/local/bin/conda',
+        '/opt/conda/bin/conda'
+    ]
+    for path in common_paths:
+        if os.path.exists(path):
+            return path
+    return None
+
+def is_venv():
+    return (hasattr(sys, 'real_prefix') or
+            (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix))
+
+def activate_environment():
+    if 'CONDA_PREFIX' in os.environ:
+        conda_path = find_conda()
+        if conda_path:
+            # 首先尝试运行 conda init
+            init_command = f"{conda_path} init bash"
+            subprocess.run(init_command, shell=True, capture_output=True, text=True)
+            
+            # 然后尝试激活环境
+            activate_command = f"source $(dirname $(dirname {conda_path}))/etc/profile.d/conda.sh && conda activate {os.environ.get('CONDA_DEFAULT_ENV', 'base')}"
+            result = subprocess.run(activate_command, shell=True, capture_output=True, text=True, executable='/bin/bash')
+            print(f"Activation command output: {result.stdout}")
+            print(f"Activation command error: {result.stderr}")
+            if result.returncode == 0:
+                print(f"Activated Conda environment: {os.environ.get('CONDA_DEFAULT_ENV', 'base')}")
+            else:
+                print(f"Failed to activate Conda environment. Return code: {result.returncode}")
+        else:
+            print("Conda not found, but CONDA_PREFIX is set. Using current environment.")
+    elif is_venv():
+        print(f"Using venv: {sys.prefix}")
+    else:
+        print("No virtual environment detected. Using system Python.")
+
+    # 打印 Python 路径和版本信息，以便调试
+    print(f"Python executable: {sys.executable}")
+    print(f"Python version: {sys.version}")
+
+# 在脚本开始时调用此函数
+activate_environment()
+
+# 导入所需模块
+try:
+    import PyPDF2
+    from pdf2image import convert_from_path
+    import pytesseract
+    from PIL import Image
+    print(f"Successfully imported PyPDF2 from {PyPDF2.__file__}")
+    print(f"Successfully imported pdf2image from {convert_from_path.__module__}")
+    print(f"Successfully imported pytesseract from {pytesseract.__file__}")
+    print(f"Successfully imported PIL from {Image.__file__}")
+except ImportError as e:
+    print(f"Error importing required modules: {e}")
+    print("Please make sure all required modules are installed in your current environment.")
+    sys.exit(1)
 
 # Constants
 MAX_PDF_SIZE_MB = 100
@@ -295,32 +366,106 @@ def process_files_by_type(temp_folder, reference_folder, archive_folder):
 
     return unprocessed_files
 
+def check_folders(temp_folder, reference_folder, archive_folder):
+    for folder in [temp_folder, reference_folder, archive_folder]:
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+            logging.info(f"Created folder: {folder}")
+        elif not os.access(folder, os.W_OK):
+            logging.error(f"No write permission for folder: {folder}")
+            sys.exit(1)
+
+def create_venv(venv_dir):
+    print(f"Creating virtual environment in {venv_dir}")
+    venv.create(venv_dir, with_pip=True)
+
+def activate_venv(venv_dir):
+    activate_this = os.path.join(venv_dir, 'bin', 'activate_this.py')
+    exec(open(activate_this).read(), {'__file__': activate_this})
+    print(f"Activated venv: {venv_dir}")
+
+def install_dependencies(requirements_file):
+    print("Installing dependencies...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", requirements_file])
+
+def setup_environment():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    venv_dir = os.path.join(script_dir, 'venv')
+    requirements_file = os.path.join(script_dir, 'requirements.txt')
+
+    # 检查是否在 Conda 环境中
+    if 'CONDA_PREFIX' in os.environ:
+        print("Running in Conda environment:", os.environ['CONDA_PREFIX'])
+    # 检查是否有 venv 或 virtualenv
+    elif hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix):
+        print("Running in virtualenv or venv")
+    else:
+        # 如果没有虚拟环境，创建并激活一个
+        if not os.path.exists(venv_dir):
+            create_venv(venv_dir)
+        activate_venv(venv_dir)
+
+    # 检查并安装依赖
+    if os.path.exists(requirements_file):
+        try:
+            import pkg_resources
+            requirements = pkg_resources.parse_requirements(open(requirements_file, 'r'))
+            installed = {pkg.key for pkg in pkg_resources.working_set}
+            missing = [req for req in requirements if req.key not in installed]
+            if missing:
+                install_dependencies(requirements_file)
+            else:
+                print("All dependencies are already installed.")
+        except Exception as e:
+            print(f"Error checking dependencies: {e}")
+            install_dependencies(requirements_file)
+    else:
+        print("No requirements.txt file found. Skipping dependency check.")
 
 def main():
-    parser = argparse.ArgumentParser(description="Document Processing and Conversion Script")
-    parser.add_argument("--temp", help="Temporary folder path", required=True)
-    parser.add_argument("--reference", help="Reference material folder path", required=True)
-    parser.add_argument("--archive", help="Archive folder path", required=True)
+    parser = argparse.ArgumentParser(description="Convert files to Org format")
+    parser.add_argument("--temp", help="Temporary folder path")
+    parser.add_argument("--reference", help="Reference folder path")
+    parser.add_argument("--archive", help="Archive folder path")
+    
     args = parser.parse_args()
-
-    temp_folder = os.path.expanduser(args.temp)
-    reference_folder = os.path.expanduser(args.reference)
-    archive_folder = os.path.expanduser(args.archive)
-
+    
+    # 使用命令行参数或默认值
+    temp_folder = args.temp or DEFAULT_TEMP_FOLDER
+    reference_folder = args.reference or DEFAULT_REFERENCE_FOLDER
+    archive_folder = args.archive or DEFAULT_ARCHIVE_FOLDER
+    
+    print(f"Using folders:")
     print(f"Temporary folder: {temp_folder}")
     print(f"Reference folder: {reference_folder}")
     print(f"Archive folder: {archive_folder}")
-    print(f"Images folder: {IMAGES_FOLDER}")
-
-    if EBOOK_CONVERT_PATH:
-        print(f"Found ebook-convert at: {EBOOK_CONVERT_PATH}")
-    else:
-        print("Warning: ebook-convert not found. EPUB conversion may be limited.")
-
-    for folder in [temp_folder, reference_folder, archive_folder, IMAGES_FOLDER]:
-        os.makedirs(folder, exist_ok=True)
-
+    
+    # 检查文件夹是否存在，如果不存在则创建
+    for folder in [temp_folder, reference_folder, archive_folder]:
+        if not os.path.exists(folder):
+            try:
+                os.makedirs(folder)
+                print(f"Created folder: {folder}")
+            except OSError as e:
+                print(f"Error creating folder {folder}: {e}")
+                print("Please manually create the folder or modify the path in the script.")
+                sys.exit(1)
+    
+    # 如果是首次运行或需要修改路径，只打印提示信息
+    if args.temp is None and args.reference is None and args.archive is None:
+        print("\nNote: You're using default folder paths. If you need to change them:")
+        print("1. Open the script file 'convert-to-org.py'")
+        print("2. Locate the following lines near the top of the file:")
+        print("   DEFAULT_TEMP_FOLDER = os.path.expanduser(\"~/Documents/temp_convert/\")")
+        print("   DEFAULT_REFERENCE_FOLDER = os.path.expanduser(\"~/Documents/ref/\")")
+        print("   DEFAULT_ARCHIVE_FOLDER = os.path.expanduser(\"/Volumes/Collect/archives/\")")
+        print("3. Modify these paths as needed")
+        print("4. Save the file and run the script again")
+    
+    # 处理文件
+    logging.info("Starting file processing")
     unprocessed_files = process_files_by_type(temp_folder, reference_folder, archive_folder)
+    logging.info("File processing completed")
 
     print("\nProcessing complete.")
 
@@ -333,4 +478,5 @@ def main():
         print("\nAll files processed successfully.")
 
 if __name__ == "__main__":
+    setup_environment()
     main()

@@ -1,6 +1,43 @@
+大家好, 我是一名 Emacs 用户, 同时也在实践 Zettelksaten 这一套知识管理系统.
+
+在我的实践中, 发现大部分人比较重视双链, 或者是 ToC 之类的, 但很少有人会重视文献笔记, 但我了解了 Lumann 也就是 Zettelksaten 的发明人, 他一生有 90000 多条笔记里, 其中有 10000 多条是文献笔记之后, 开始了自己的探索.
+
+我在实践中觉得, 文献笔记很重要, 一个是, 不再直接保存资料, 而是经过自己的话总结来保存资料, 这是一个将资料转化成信息的过程 -- 就算以后忘记了, 我起码也知道, 自己在哪里找; 二个是, 由于自己的记性不好, 总是重复翻看同一份文档, 解决同一个问题, 实际上, 就等于自己没读过, 所以文献笔记很快地就能知道自己, 之前已经了解了什么, 以及什么还是需要了解的.
+
+我觉得文献笔记, 是一个比起直接保存资料, 是一种更加高效的方式. 尽管这听起来有点 "反常识".
+
+现在, 让我来演示这个工具 org-zettel-ref-mode 的使用方法:
+
+这是一个示例文本. 有 2 个窗口, 左边是原文, 也就是一会儿, 我会在上面做笔记, 或者是标记的地方.
+
+右边是概览区, 是将我的笔记, 和标记内容抓取过去, 然后显示的地方. 因此这套工具, 可以做到一边读, 一边记的效果.
+
+现在, 让我恢复原状.
+
+此时,输入 M-x org-zettel-ref-init, 就可以启动了.
+
+这是, 你看到这个概览窗口里面, 什么都没有. 输入, M-x org-zettel-ref-sync-overview 指令就可以同步
+
+现在, 让我来添加一条笔记
+
+<<这是一条新笔记, 今天老打错字...>>
+
+好的, 你已经看到, 无须输入同步指令, 它就自动添加到概览窗口去了.
+
+然后, 跟随我的鼠标, 可以看到, 在生成概览窗口的同时, 也已经同时生成了笔记.
+
+
+现在, 演示快速标记功能. 快速标记完之后, 需要同步一下才能将内容抓取到概览窗口.
+
+现在, 让我来演示, 如果未来有一天, 我搜索文献笔记时, 是否可以跳转回原文.
+
+
+好的, 今天的演示, 就到这里. 功能比较简单, 希望你喜欢! 🫰
+
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
 <<test>>
-Curabitur pretium tincidunt lacus. Nulla gravida orci a odio. Nullam varius, turpis et commodo pharetra, est eros bibendum elit, nec luctus magna felis sollicitudin mauris. Integer in mauris eu nibh euismod gravida. Duis ac tellus et risus vulputate vehicula. Donec lobortis risus a elit. Etiam tempor.<<!@!#@$#%$#%$^%&*>> Ut ullamcorper, ligula eu tempor congue, eros est euismod turpis, id tincidunt sapien risus a quam. Maecenas fermentum consequat mi. Donec fermentum. Pellentesque malesuada nulla a mi. Duis sapien sem, aliquet nec, commodo eget, consequat quis, neque. Aliquam faucibus, elit ut dictum aliquet, felis nisl adipiscing sapien, sed malesuada diam lacus eget erat. *Cras mollis scelerisque nunc. Nullam arcu. Aliquam consequat. Curabitur augue lorem, dapibus quis, laoreet et, pretium ac, nisi. Aenean magna nisl, mollis quis, molestie eu, feugiat in, orci. In hac habitasse platea dictumst.*
+
+_Curabitur pretium tincidunt lacus. Nulla gravida orci a odio. Nullam varius_, turpis et commodo pharetra, est eros bibendum elit, nec luctus magna felis sollicitudin mauris. Integer in mauris eu nibh euismod gravida. Duis ac tellus et risus vulputate vehicula. Donec lobortis risus a elit. Etiam tempor.<<!@!#@$#%$#%$^%&*>> Ut ullamcorper, ligula eu tempor congue, eros est euismod turpis, id tincidunt sapien risus a quam. Maecenas fermentum consequat mi. Donec fermentum. Pellentesque malesuada nulla a mi. Duis sapien sem, aliquet nec, commodo eget, consequat quis, neque. Aliquam faucibus, elit ut dictum aliquet, felis nisl adipiscing sapien, sed malesuada diam lacus eget erat. *Cras mollis scelerisque nunc. Nullam arcu. Aliquam consequat. Curabitur augue lorem, dapibus quis, laoreet et, pretium ac, nisi. Aenean magna nisl, mollis quis, molestie eu, feugiat in, orci. In hac habitasse platea dictumst.*
 <<测试>>
 Fusce euismod consequat ante. _Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Pellentesque sed dolor. Aliquam congue fermentum nisl._ Mauris accumsan nulla vel diam. Sed in lacus ut enim adipiscing aliquet. Nulla venenatis. In pede mi, aliquet sit amet, euismod in, sodales in, magna. Sed eu dolor. Duis nulla dui, convallis ac, malesuada a, mollis nec, felis. Sed libero. Aliquam faucibus, magna a molestie malesuada, pede urna gravida arcu, ac torlus metus lorem eu massa. Sed eu eros. Sed quis diam. Praesent in mauris eu tortor porttitor accumsan.
 <<test1234>>

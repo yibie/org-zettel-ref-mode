@@ -1,17 +1,34 @@
 * org-zettel-ref-mode
-
-** 版本 0.2
-   - 完善整体工作流, 提供自动化脚本处理不同格式的电子文档
-   - 改善与其他工具的连接性, 通过自定义配置, org-zettel-ref-mode 生成的笔记文件可以以 denote, org-roam 的方式进行保存
-   - 提供快速标记功能, 在源文件中高亮了某一个段落后, 可启动 =org-zettel-quick-markup= 快速为高亮文本添加加粗、斜体、下划线等标记
-** 主要功能: 自动提取原文里的注释和摘要, 形成概览窗口, 保存为文献笔记
+** 版本 0.3 (2024-09-03)
+   - 完善了与 org-roam 的集成:
+     + 增加了条件加载和错误处理机制，提高了稳定性
+     + 优化了数据库操作，提高了效率
+     + 改进了文件处理方式，增强了兼容性
+     + 新增了数据库状态检查功能，方便调试
+   - 增强了 Conda 环境的支持:
+     + 提供了更灵活的 Python 环境配置选项
+     + 改进了 Conda 环境的初始化和激活过程
+   - 改进了文件名生成和处理的逻辑:
+     + 增加了文件名清理功能，提高了健壮性
+     + 优化了不同模式下的文件命名策略
+   - 优化了概览文件的同步机制:
+     + 实现了选择性更新，只更新变化的部分
+     + 改进了缓冲区处理，减少了文件 I/O 操作
+     + 优化了内容生成过程，提高了效率
+   - 新增了调试功能:
+     + 添加了详细的日志输出，方便问题排查
+     + 提供了更多的错误信息和状态检查选项
+** 主要功能
 输入 =M-x org-zettel-ref-init= 命令, 即可调用 "概览窗口", 里面显示在原文里记录的注释, 以及被标记的文本.
 
 1. 每一次形成概览, 都将自动形成一份文献笔记, 保存到你自定义的文件夹里
 2. 快速注释, =M-x org-zettel-ref-add-quick-note= 即可直接在输入注释
 3. 回顾文献笔记时, 可以从注释直接跳转回原文对应的位置, 重新阅读上下文
 4. 提供一套将其他格式的文档, 转换成 org 格式的方法
-5. (2024-08-29 新增)提供快速标记功能, 快速为源文件中的文本添加 org 里的加粗、斜体、下滑线等标记
+5. 提供快速标记功能, 快速为源文件中的文本添加 org 里的加粗、斜体、下滑线等标记
+6. 支持与 org-roam 和 denote 等知识管理工具的集成
+7. 灵活的文件关联机制，支持多种知识管理模式（普通模式、Denote、Org-roam）
+8. 直接通过 Emacs 调用外部 Python 脚本，将多种格式的电子文档转换为 Org 文件
 ** Demo
 如题所示, 左边是窗口显示的是原文, 右边窗口显示的是概览.
 
@@ -130,8 +147,35 @@ Luhmann 有一个习惯, 是一边读, 一边记文献笔记. 他的书或者资
 
 *** ⚠️注意事项
 1. 不要随便修改笔记文件名. 如果修改了, 在源文件上再次添加快速笔记/标记, 在同步时, 会生成重复的笔记.
-** 高级配置
+** 高级功能
+*** 文件关联机制
+org-zettel-ref-mode 现在支持多种文件关联机制，不再完全依赖于文件名中的 "-overview" 后缀：
 
+- 普通模式：仍然使用 "-overview" 后缀（为了向后兼容）
+- Denote 模式：使用 Denote 的命名约定
+- Org-roam 模式：使用 Org-roam 的命名约定和 ID 属性
+
+如果您从旧版本升级，您的现有 "-overview" 文件仍然可以正常工作。但对于新文件，我们建议使用新的关联机制。
+
+*** org-roam 模式下调试功能
+ =M-x org-zettel-ref-check-roam-db= 函数，用于检查 org-roam 数据库状态。
+
+*** 概览文件同步机制优化
+
+org-zettel-ref-mode 在 0.3 版本中对概览文件的同步机制进行了重要优化：
+
+1. 选择性更新：只更新变化的部分（Quick Notes 和 Marked Text），而不是重写整个文件。
+2. 智能缓冲区处理：优先使用已打开的缓冲区，减少文件 I/O 操作。
+3. 内容生成优化：移除了重复的内容生成步骤。
+
+这些优化带来以下好处：
+
+- 显著提高了同步速度，特别是对大型概览文件。
+- 减少了资源使用，包括内存和磁盘 I/O。
+- 提高了稳定性，降低了数据丢失的风险。
+- 改善了用户体验，减少了界面闪烁。
+
+对于频繁使用概览功能的用户来说，这个优化将带来明显的性能提升。
 *** 自定义笔记保存模式
 （2024-08-29 更新）org-zettel-ref-mode 提供了 normal、org-roam、denote 三种模式，让笔记文件能够以对应的格式进行保存，比如，选用 org-roam 模式之后, 所保存的笔记文件, 会自动附上 id，方便检索。
 
@@ -156,75 +200,106 @@ Luhmann 有一个习惯, 是一边读, 一边记文献笔记. 他的书或者资
 #+BEGIN_SRC emacs-lisp
 (org-zettel-ref-enable-auto-sync)
 #+END_SRC
-** 工作流
+*** 启用调试模式
+如果您在使用过程中遇到问题，可以启用调试模式来获取更多信息:
+
+#+BEGIN_SRC emacs-lisp
+(setq org-zettel-ref-debug t)
+#+END_SRC
+*** 使用脚本将 PDF, ePub, html, md, txt 等文档格式转换成 org 文件
 
 [[file:demo/pkm-system-diagram.png]]
 
-*** 使用脚本将 PDF, ePub, html, md, txt 等文档格式转换成 org 文件
 
 脚本: [[file:convert-to-org.py]]
 
-我写了一个 python 脚本，用于将各种格式的文档（包括PDF、EPUB、HTML、Markdown和TXT）转换为Org格式。它支持英文, 中文, 中英文混合的PDF文档，能够处理电子版和扫描版PDF。
+org-zettel-ref-mode 现在支持直接通过 Emacs 调用外部 Python 脚本，用于将多种不同格式的电子文档转换成 org 文件。
 
-主要功能
-1. 支持多种文档格式转换（PDF、EPUB、HTML、Markdown、TXT）到Org格式
-2. 自动识别并处理电子版和扫描版PDF
-3. 使用OCR技术处理扫描版PDF，支持中英文识别
-4. 文件大小检查，防止处理过大的文件
-5. 扫描后, 将源文件归档
-6. 详细的处理日志输出
+**** 主要特性
 
-使用说明：
-1. 确保安装了所有必要的库（见下方库安装指南）
-2. 运行脚本时需要提供三个参数：
-   - --temp：临时文件夹路径
-   - --reference：参考资料文件夹路径（输出Org文件的位置）
-   - --archive：归档文件夹路径
-3. 示例命令：
-   ```
-   python document_convert_to_org.py --temp ~/Documents/temp_convert/ --reference ~/Documents/ref/ --archive /Volumes/Collect/archives/
-   ```
+1. 多格式支持：
+   - 支持将 PDF、EPUB、HTML、Markdown 和 TXT 等格式转换为 Org 格式。
+   - 能够处理电子版和扫描版 PDF，支持中英文混合文档。
 
-安装依赖：
+2. OCR 功能：
+   - 使用 OCR 技术处理扫描版 PDF，支持中英文识别。
 
-1. PyPDF2
-   安装命令：`pip install PyPDF2`
-   用途：处理PDF文件，检查PDF是否为扫描版
+3. 文件管理：
+   - 自动进行文件大小检查，防止处理过大的文件。
+   - 转换完成后，可以自动将源文件归档。
 
-2. pdf2image
-   安装命令：`pip install pdf2image`
-   用途：将PDF转换为图像以进行OCR
-   注意：这个库依赖于poppler，您可能需要单独安装poppler
+4. 灵活配置：
+   - 支持自定义临时文件夹、参考资料文件夹和归档文件夹路径。
+   - 可以选择使用系统 Python、Conda 环境或虚拟环境。
 
-3. pytesseract
-   安装命令：`pip install pytesseract`
-   用途：进行OCR（光学字符识别）
-   注意：这个库需要额外安装Tesseract OCR引擎
-   - 在Ubuntu/Debian上：`sudo apt-get install tesseract-ocr`
-   - 在macOS上（使用Homebrew）：`brew install tesseract`
-   - 在Windows上，下载安装程序：https://github.com/UB-Mannheim/tesseract/wiki
+**** 使用方法
 
-4. Pillow (PIL)
-   安装命令：`pip install Pillow`
-   用途：图像处理，与pdf2image和pytesseract配合使用
+1. 配置 Python 环境：
+   #+BEGIN_SRC emacs-lisp
+   (setq org-zettel-ref-python-environment 'conda)  ; 或 'system, 'venv
+   (setq org-zettel-ref-python-env-name "your-env-name")  ; 如果使用 Conda 或 venv
+   #+END_SRC
 
-5. 其他标准库（无需额外安装）：
-   - os
-   - sys
-   - shutil
-   - subprocess
-   - argparse
-   - time
-   - platform
-   - zipfile
-   - tempfile
-*** 使用 Markdownload 等浏览器拓展将网页保存 Markdown 文件到本地, 然后再用脚本转换
-*** 使用 Whisper 将音频文件转换成文本
-*** ⚠️注意事项
+2. 设置脚本路径和文件夹：
+   #+BEGIN_SRC emacs-lisp
+   (setq org-zettel-ref-python-file "~/path/to/document_convert_to_org.py")
+   (setq org-zettel-ref-temp-folder "~/Documents/temp_convert/")
+   (setq org-zettel-ref-reference-folder "~/Documents/ref/")
+   (setq org-zettel-ref-archive-folder "/Volumes/Collect/archives/")
+   #+END_SRC
+
+3. 运行转换脚本：
+   使用 =M-x org-zettel-ref-run-python-script= 命令来执行转换操作。
+
+**** 注意事项
+
+- 确保已安装所有必要的 Python 库（如 PyPDF2、pdf2image、pytesseract 等）。
+- 对于扫描版 PDF，转换过程可能较慢，且效果可能不如电子版理想。
+- 建议优先使用该脚本处理电子版 PDF、EPUB、Markdown 和 TXT 文档。
+
+**** 工作流建议
+
+1. 使用浏览器扩展（如 Markdownload）将网页保存为 Markdown 文件。
+2. 使用 org-zettel-ref-mode 的 Python 脚本将 Markdown 文件转换为 Org 格式。
+3. 对于音频文件，可以先使用 Whisper 转换为文本，然后再使用脚本转换为 Org 格式。
+
+这一功能极大地扩展了 org-zettel-ref-mode 的应用范围，使其成为一个更全面的知识管理工具。
+**** ⚠️注意事项
 推荐使用该脚本对 ePub, markdown, txt, 电子版 PDF 文档进行转换.
 
 不推荐将该脚本用于转换扫描版 PDF, 原因是转换速度慢, 而且转换的效果也不非常好.
 
+
+** 可调用指令列表
+
+以下是 org-zettel-ref-mode 提供的主要可调用指令：
+
+- =M-x org-zettel-ref-init=: 初始化 org-zettel-ref-mode，创建或打开概览文件
+- =M-x org-zettel-ref-add-quick-note=: 在当前位置添加快速笔记
+- =M-x org-zettel-ref-sync-overview=: 手动同步概览文件
+- =M-x org-zettel-ref-quick-markup=: 快速为选中文本添加标记
+- =M-x org-zettel-ref-clean-multiple-targets=: 清理源文件中的多余标记
+- =M-x org-zettel-ref-enable-auto-sync=: 启用自动同步
+- =M-x org-zettel-ref-disable-auto-sync=: 禁用自动同步
+- =M-x org-zettel-ref-check-roam-db=: 检查 org-roam 数据库状态
+- =M-x org-zettel-ref-run-python-script=: 运行指定的 Python 脚本
+
+** 可配置变量列表
+
+以下是 org-zettel-ref-mode 的主要可配置变量：
+
+- =setq org-zettel-ref-overview-directory "~/org-zettel-ref-overviews/"=: 设置概览文件存储目录
+- =setq org-zettel-ref-mode-type 'normal=: 设置模式类型（可选：'normal, 'denote, 'org-roam）
+- =setq org-zettel-ref-include-empty-notes nil=: 设置是否包含空的快速笔记
+- =setq org-zettel-ref-include-context nil=: 设置是否在概览中包含更多上下文
+- =setq org-zettel-ref-quick-markup-key "C-c m"=: 设置快速标记的快捷键
+- =setq org-zettel-ref-python-environment 'system=: 设置 Python 环境类型（可选：'system, 'conda, 'venv）
+- =setq org-zettel-ref-python-env-name nil=: 设置 Python 环境名称
+- =setq org-zettel-ref-python-file "~/path/to/script.py"=: 设置 Python 脚本文件路径
+- =setq org-zettel-ref-temp-folder "~/Documents/temp_convert/"=: 设置临时文件夹路径
+- =setq org-zettel-ref-reference-folder "~/Documents/ref/"=: 设置参考资料文件夹路径
+- =setq org-zettel-ref-archive-folder "/Volumes/Collect/archives/"=: 设置归档文件夹路径
+- =setq org-zettel-ref-debug nil=: 设置是否启用调试模式
 
 ** 常见问题解答
 
@@ -237,6 +312,9 @@ A: 考虑按主题或时间周期分割概览文件。您可以自定义 =org-ze
 Q: 如何备份我的笔记？
 A: 将源文件和概览文件都纳入您的版本控制系统（如 Git）中。另外，定期执行文件系统级别的备份也是好的做法。
 
+Q: 如何检查org-roam数据库的状态?
+A: 您可以使用 =M-x org-zettel-ref-check-roam-db= 命令来检查org-roam数据库的状态,包括版本信息、节点数量等。
+
 ** 故障排除
 
 如果遇到问题：
@@ -244,8 +322,11 @@ A: 将源文件和概览文件都纳入您的版本控制系统（如 Git）中�
 2. 检查您的 Emacs 配置，确保没有冲突的设置。
 3. 尝试在一个干净的 Emacs 配置（emacs -q）中重现问题。
 4. 查看 =*Messages*= 缓冲区中的任何错误消息。
+5. 如果问题与Python脚本或Conda环境有关,请检查您的Python环境配置。
+6. 启用调试模式(设置 =org-zettel-ref-debug= 为 =t=)以获取更详细的日志信息。
 
-如果问题持续存在，请通过 GitHub 仓库提交 issue，附上问题描述和重现步骤。
+如果问题持续存在，请通过 GitHub 仓库提交 issue，附上问题描述、重现步骤和调试日志。
+
 
 ** 贡献
 
@@ -260,6 +341,13 @@ A: 将源文件和概览文件都纳入您的版本控制系统（如 Git）中�
 org-zettel-ref-mode 的灵感借鉴了朋友 [[https://github.com/lijigang][@lijigang]] 的 [[https://github.com/lijigang/org-marked-text-overview][org-marked-text-overview]], 由于自己改造的地方太多, 在经过沟通的情况下, 单独发布为 org-zettel-ref-mode.
 
 ** 版本历史
+- v0.3 (2024-09-03)
+  - 增强了与org-roam的集成
+  - 改进了Conda环境支持
+  - 优化了文件处理逻辑
+  - 改进了概览文件同步机制
+  - 添加了调试功能
+  - 集成了外部Python脚本功能
 - v0.2 (2024-08-29)
   - 完善整体工作流, 提供自动化脚本处理不同格式的电子文档
   - 改善与其他工具的连接性, 通过自定义配置, org-zettel-ref-mode 生成的笔记文件可以以 denote, org-roam 的方式进行保存
@@ -270,9 +358,11 @@ org-zettel-ref-mode 的灵感借鉴了朋友 [[https://github.com/lijigang][@lij
   - 提供自定义选项
 
 ** 未来计划
-
-- 改进性能，优化大型文件的处理
+✅ 改进性能，优化大型文件的处理
 ✅ 与其他知识管理 Package 的集成, 比如 org-roam, denote
 - 支持更多文件格式(可能)
+- 进一步优化Python脚本集成
+- 增加更多自定义选项
+- 优化文件关联机制，减少对特定文件名后缀的依赖
 
 如果喜欢, 请 Star.
