@@ -517,23 +517,22 @@ This should be a string that can be passed to `kbd'."
      ((string-match-p "csh" shell) "source")
      (t "."))))
 
-(defun org-zettel-ref-call-python-script (script-path &rest args)
-  "Call a Python script at SCRIPT-PATH with ARGS."
-  (let* ((python-command (org-zettel-ref-get-python-command))
-         (full-command (concat python-command " "
-                               (shell-quote-argument script-path)
-                               " "
-                               (mapconcat #'shell-quote-argument args " "))))
-    (org-zettel-ref-debug-message "Full command: %s" full-command)
-    (with-temp-buffer
-      (org-zettel-ref-debug-message "Executing command...")
-      (let ((exit-code (call-process-shell-command full-command nil (current-buffer) t)))
-        (org-zettel-ref-debug-message "Command exit code: %d" exit-code)
-        (org-zettel-ref-debug-message "Command output: %s" (buffer-string))
-        (if (= exit-code 0)
-            (buffer-string)
-          (error "Python script failed with exit code %d: %s" 
-                 exit-code (buffer-string)))))))
+(defun org-zettel-ref-run-python-script ()
+  (interactive)
+  (let* ((script-path (expand-file-name org-zettel-ref-python-file))
+         (default-directory (file-name-directory script-path))
+         (conda-env-name org-zettel-ref-python-env-name)
+         (python-command (org-zettel-ref-get-python-command))
+         (command (format "conda run -n %s %s %s"
+                          (shell-quote-argument conda-env-name)
+                          python-command
+                          (shell-quote-argument (file-name-nondirectory script-path)))))
+    (if (file-exists-p script-path)
+        (progn
+          (message "Executing command: %s" command)
+          (let ((default-directory default-directory))
+            (async-shell-command command "*Convert to Org*")))
+      (error "Cannot find the specified Python script: %s" script-path))))
 
 (defun org-zettel-ref-get-python-command ()
   "根据设置的环境类型返回适当的 Python 命令。"
@@ -552,20 +551,74 @@ This should be a string that can be passed to `kbd'."
     (org-zettel-ref-debug-message "Python command: %s" command)
     command))
 
-(defun org-zettel-ref-run-python-script ()
-  "Run the specified Python script in a Conda environment."
-  (interactive)
-  (if (file-exists-p org-zettel-ref-python-file)
-      (let* ((default-directory (file-name-directory org-zettel-ref-python-file))
-             (conda-env-name org-zettel-ref-python-env-name)
-             (python-command (org-zettel-ref-get-python-command))
-             (command (format "conda run -n %s %s %s"
-                              (shell-quote-argument conda-env-name)
-                              python-command
-                              (shell-quote-argument org-zettel-ref-python-file))))
-        (message "Executing command: %s" command)
-        (async-shell-command command "*Convert to Org*"))
-    (message "Error: Cannot find the specified Python script: %s" org-zettel-ref-python-file)))
+(defun org-zettel-ref-get-overview-file (source-buffer)
+  "Get or create an overview file for SOURCE-BUFFER based on the current mode type."
+  (let* ((source-file (buffer-file-name source-buffer))
+         (title (format "Overview of %s" (file-name-base source-file)))
+         (sanitized-title (if (fboundp 'org-zettel-ref-sanitize-filename)
+                              (org-zettel-ref-sanitize-filename title)
+                            title))
+         file-path)
+    (message "Debug: Starting org-zettel-ref-get-overview-file for %s" title)
+    
+    (setq file-path
+          (pcase org-zettel-ref-mode-type
+            ('org-roam
+             (if (require 'org-roam nil t)
+                 (condition-case err
+                     (let ((existing-node (org-roam-node-from-title-or-alias title)))
+                       (if existing-node
+                           (progn
+                             (message "Debug: Existing node found. File path: %s" (org-roam-node-file existing-node))
+                             (org-roam-node-file existing-node))
+                         (message "Debug: No existing node found, creating new one")
+                         (let* ((id (org-id-new))
+                                (slug (org-roam-node-slug (org-roam-node-create :title title)))
+                                (new-file (expand-file-name (concat slug ".org") org-roam-directory)))
+                           (unless (file-exists-p new-file)
+                             (with-temp-file new-file
+                               (insert (format ":PROPERTIES:
+:ID:       %s
+:END:
+#+title: %s
+#+filetags: :overview:
+
+* Quick Notes
+
+* Marked Text
+
+"
+                                               id title))))
+                           (message "Debug: New node created. File path: %s" new-file)
+                           new-file)))
+                   (error
+                    (message "Error in org-roam operations: %S" err)
+                    (org-zettel-ref-fallback-file-path sanitized-title))))
+               (message "org-roam not available, falling back to normal mode")
+               (org-zettel-ref-fallback-file-path sanitized-title)))
+            
+            ('denote
+             (if (require 'denote nil t)
+                 (let ((denote-file (denote-create-note-using-title title)))
+                   (message "Debug: Created denote file: %s" denote-file)
+                   denote-file)
+               (message "denote not available, falling back to normal mode")
+               (org-zettel-ref-fallback-file-path sanitized-title)))
+            
+            ('normal
+             (org-zettel-ref-fallback-file-path sanitized-title))
+            
+            (_ (message "Unknown mode type, falling back to normal mode")
+               (org-zettel-ref-fallback-file-path sanitized-title))))
+
+    (unless (file-exists-p file-path)
+      (with-temp-file file-path
+        (insert (format "#+title: %s\n\n* Overview\n\n* Quick Notes\n\n* Marked Text\n" title))))
+
+    (if file-path
+        (progn (message "Debug: Returning file path: %s" file-path) file-path)
+      (error "Failed to create or find overview file for %s" title)))
+
 
 (defun org-zettel-ref-init-conda ()
   "Initialize and activate Conda environment."
