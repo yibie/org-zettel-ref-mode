@@ -352,23 +352,23 @@ This is an overview of the note \"%s\".
     (org-zettel-ref-init)))
 
 (defun org-zettel-ref-clean-multiple-targets ()
-  "Remove all <<target>>, **, and == markers from the current buffer after confirmation."
+  "Remove all <<target>>, *, and = markers from the current buffer after confirmation."
   (interactive)
-  (when (yes-or-no-p "Are you sure you want to remove all <<target>>, **, and == markers? This cannot be undone. ")
+  (when (yes-or-no-p "Are you sure you want to remove all <<target>>, *, and = markers? This cannot be undone. ")
     (save-excursion
       (goto-char (point-min))
       ;; Remove <<target>> markers
       (while (re-search-forward "<<\\([^>]+\\)>>" nil t)
         (replace-match "")
         (just-one-space))
-      ;; Remove ** markers
+      ;; Remove * markers
+      ;; Remove single * symbols within a line, preserve content
       (goto-char (point-min))
-      (while (re-search-forward "\\*\\*\\([^*]+\\)\\*\\*" nil t)
-        (replace-match "\\1")
-        (just-one-space))
+      (while (re-search-forward "\\*\\([^*\n]+?\\)\\*" nil t)
+        (replace-match "\\1"))
       ;; Remove == markers
       (goto-char (point-min))
-      (while (re-search-forward "==\\([^=]+\\)==" nil t)
+      (while (re-search-forward "=\\([^=]+\\)=" nil t)
         (replace-match "\\1")
         (just-one-space)))
     (message "All <<target>>, **, and == markers have been removed.")))
