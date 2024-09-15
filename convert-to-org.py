@@ -11,10 +11,10 @@ import logging
 import venv
 import time
 
-# 设置日志
+# Setting Log 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# 在脚本开头定义默认路径
+# Setting DEFAULT path
 DEFAULT_TEMP_FOLDER = os.path.expanduser("~/Documents/temp_convert/")
 DEFAULT_REFERENCE_FOLDER = os.path.expanduser("~/Documents/ref/")
 DEFAULT_ARCHIVE_FOLDER = os.path.expanduser("/Volumes/Collect/archives/")
@@ -42,11 +42,11 @@ def activate_environment():
     if 'CONDA_PREFIX' in os.environ:
         conda_path = find_conda()
         if conda_path:
-            # 首先尝试运行 conda init
+            # First run conda init
             init_command = f"{conda_path} init bash"
             subprocess.run(init_command, shell=True, capture_output=True, text=True)
             
-            # 然后尝试激活环境
+            # Try to active env
             activate_command = f"source $(dirname $(dirname {conda_path}))/etc/profile.d/conda.sh && conda activate {os.environ.get('CONDA_DEFAULT_ENV', 'base')}"
             result = subprocess.run(activate_command, shell=True, capture_output=True, text=True, executable='/bin/bash')
             print(f"Activation command output: {result.stdout}")
@@ -365,12 +365,18 @@ def create_venv(venv_dir):
     venv.create(venv_dir, with_pip=True)
 
 def activate_venv(venv_dir):
-    activate_python = os.path.join(venv_dir, 'bin', 'python')
+    if platform.system() == 'Windows':
+        activate_python = os.path.join(venv_dir, 'Scripts', 'python.exe')
+    else:
+        activate_python = os.path.join(venv_dir, 'bin', 'python')
+    
     if not os.path.exists(activate_python):
         print(f"Python executable not found in venv: {activate_python}")
-        sys.exit(1)
+        return False
+    
     print(f"Re-running script with venv Python: {activate_python}")
     os.execl(activate_python, activate_python, *sys.argv)
+    return True
 
 def install_dependencies(requirements_file):
     print("Installing dependencies...")
@@ -381,32 +387,34 @@ def setup_environment():
     venv_dir = os.path.join(script_dir, 'venv')
     requirements_file = os.path.join(script_dir, 'requirements.txt')
 
+    # 检查环境设置
+    env_setting = os.environ.get('ORG_ZETTEL_REF_PYTHON_ENVIRONMENT', 'system')
+
+    if env_setting == 'system':
+        print("Using system Python as specified in settings.")
+        return
+
     # 检查是否在 Conda 环境中
     if 'CONDA_PREFIX' in os.environ:
         print("Running in Conda environment:", os.environ['CONDA_PREFIX'])
+        return
+
     # 检查是否有 venv 或 virtualenv
-    elif hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix):
+    if hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix):
         print("Running in virtualenv or venv")
-    else:
-        # 如果没有虚拟环境，创建并激活一个
+        return
+
+    # 如果设置为 'venv' 且没有虚拟环境，创建并激活一个
+    if env_setting == 'venv':
         if not os.path.exists(venv_dir):
             create_venv(venv_dir)
-        activate_venv(venv_dir)
+        if not activate_venv(venv_dir):
+            print("Failed to activate venv. Using system Python.")
+            return
 
     # 检查并安装依赖
     if os.path.exists(requirements_file):
-        try:
-            import pkg_resources
-            requirements = pkg_resources.parse_requirements(open(requirements_file, 'r'))
-            installed = {pkg.key for pkg in pkg_resources.working_set}
-            missing = [str(req) for req in requirements if req.key not in installed]
-            if missing:
-                install_dependencies(requirements_file)
-            else:
-                print("All dependencies are already installed.")
-        except Exception as e:
-            print(f"Error checking dependencies: {e}")
-            install_dependencies(requirements_file)
+        install_dependencies(requirements_file)
     else:
         print("No requirements.txt file found. Skipping dependency check.")
 
