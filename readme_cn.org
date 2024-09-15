@@ -1,23 +1,38 @@
 * org-zettel-ref-mode
-** 版本 0.3 (2024-09-03)
-   - 完善了与 org-roam 的集成:
-     + 增加了条件加载和错误处理机制，提高了稳定性
-     + 优化了数据库操作，提高了效率
-     + 改进了文件处理方式，增强了兼容性
-     + 新增了数据库状态检查功能，方便调试
-   - 增强了 Conda 环境的支持:
-     + 提供了更灵活的 Python 环境配置选项
-     + 改进了 Conda 环境的初始化和激活过程
-   - 改进了文件名生成和处理的逻辑:
-     + 增加了文件名清理功能，提高了健壮性
-     + 优化了不同模式下的文件命名策略
-   - 优化了概览文件的同步机制:
-     + 实现了选择性更新，只更新变化的部分
-     + 改进了缓冲区处理，减少了文件 I/O 操作
-     + 优化了内容生成过程，提高了效率
-   - 新增了调试功能:
-     + 添加了详细的日志输出，方便问题排查
-     + 提供了更多的错误信息和状态检查选项
+** 版本历史
+- v0.3.1 (2024-09-15)
+  - 兼容 emacs 30 以后的版本
+  - 概览文件现在有更加优雅的文件名，减少 overview 这个字眼的重复出现
+  - 修复偶发的恶性 (setq, 5) 错误
+  - 去除 org-zettel-ref-mode.el 代码里对 conda.el 的依赖，将 Python 运行环境的判断完全交给 convert-to-org.py 
+    - 自动通过 python venv 命令设置虚拟环境，并安装所需的库（!注意：更新到该版本后启动 convert-to-org.py 时，会重新安装第三方库，如果对运行环境有洁癖，请自行手动清理）
+  - 改进概览文件的同步机制，不再出现针对同一个源文件重复新建概览文件的情况，同时改进功能的健壮性和稳定性
+    - 使用哈希表记录源文件与概览文件之间的映射关系，有一点很棒，你不必手动设置哈希表文件的位置
+    - 为此概览文件的文件头增加了新的属性块： ~#+SOURCE-FILE:~ 以确认映射关系
+    - 新增命令：
+      - ~org-zettel-ref-check-and-repair-links~ - Check and repair links between source files and overview files.
+      - ~org-zettel-ref-maintenance-menu~	- Display a menu for org-zettel-ref-mode maintenance operations.
+      - ~org-zettel-ref-refresh-index~ - Manually refresh the overview index.
+      - ~org-zettel-ref-rescan-overview-files~ - Rescan the overview directory and update the index.
+      - ~org-zettel-ref-status~ - Display the current status of org-zettel-ref-mode.
+
+      
+- v0.3 (2024-09-03)
+  - 增强了与org-roam的集成
+  - 改进了Conda环境支持
+  - 优化了文件处理逻辑
+  - 改进了概览文件同步机制
+  - 添加了调试功能
+  - 集成了外部Python脚本功能
+- v0.2 (2024-08-29)
+  - 完善整体工作流, 提供自动化脚本处理不同格式的电子文档
+  - 改善与其他工具的连接性, 通过自定义配置, org-zettel-ref-mode 生成的笔记文件可以以 denote, org-roam 的方式进行保存
+  - 提供快速标记功能, 在源文件中高亮了某一个段落后, 可启动 =org-zettel-quick-markup= 快速为高亮文本添加加粗、斜体、下划线等标记
+- v0.1 (2024-8-21): 初始发布
+  - 实现基本的快速笔记和标记功能
+  - 添加自动同步机制
+  - 提供自定义选项
+
 ** 主要功能
 输入 =M-x org-zettel-ref-init= 命令, 即可调用 "概览窗口", 里面显示在原文里记录的注释, 以及被标记的文本.
 
@@ -339,23 +354,6 @@ A: 您可以使用 =M-x org-zettel-ref-check-roam-db= 命令来检查org-roam数
 ** 致谢
 
 org-zettel-ref-mode 的灵感借鉴了朋友 [[https://github.com/lijigang][@lijigang]] 的 [[https://github.com/lijigang/org-marked-text-overview][org-marked-text-overview]], 由于自己改造的地方太多, 在经过沟通的情况下, 单独发布为 org-zettel-ref-mode.
-
-** 版本历史
-- v0.3 (2024-09-03)
-  - 增强了与org-roam的集成
-  - 改进了Conda环境支持
-  - 优化了文件处理逻辑
-  - 改进了概览文件同步机制
-  - 添加了调试功能
-  - 集成了外部Python脚本功能
-- v0.2 (2024-08-29)
-  - 完善整体工作流, 提供自动化脚本处理不同格式的电子文档
-  - 改善与其他工具的连接性, 通过自定义配置, org-zettel-ref-mode 生成的笔记文件可以以 denote, org-roam 的方式进行保存
-  - 提供快速标记功能, 在源文件中高亮了某一个段落后, 可启动 =org-zettel-quick-markup= 快速为高亮文本添加加粗、斜体、下划线等标记
-- v0.1 (2024-8-21): 初始发布
-  - 实现基本的快速笔记和标记功能
-  - 添加自动同步机制
-  - 提供自定义选项
 
 ** 未来计划
 ✅ 改进性能，优化大型文件的处理

@@ -69,21 +69,6 @@ def activate_environment():
 # 在脚本开始时调用此函数
 activate_environment()
 
-# 导入所需模块
-try:
-    import PyPDF2
-    from pdf2image import convert_from_path
-    import pytesseract
-    from PIL import Image
-    print(f"Successfully imported PyPDF2 from {PyPDF2.__file__}")
-    print(f"Successfully imported pdf2image from {convert_from_path.__module__}")
-    print(f"Successfully imported pytesseract from {pytesseract.__file__}")
-    print(f"Successfully imported PIL from {Image.__file__}")
-except ImportError as e:
-    print(f"Error importing required modules: {e}")
-    print("Please make sure all required modules are installed in your current environment.")
-    sys.exit(1)
-
 # Constants
 MAX_PDF_SIZE_MB = 100
 IMAGES_FOLDER = os.path.expanduser("~/Documents/ref/images")
@@ -288,7 +273,6 @@ def process_pdf(input_file, output_file):
     else:
         return convert_pdf_to_text(input_file, output_file)
 
-
 def convert_mobi_to_text(input_file, output_file):
     """
     Convert MOBI file to text using Calibre's ebook-convert tool.
@@ -381,9 +365,12 @@ def create_venv(venv_dir):
     venv.create(venv_dir, with_pip=True)
 
 def activate_venv(venv_dir):
-    activate_this = os.path.join(venv_dir, 'bin', 'activate_this.py')
-    exec(open(activate_this).read(), {'__file__': activate_this})
-    print(f"Activated venv: {venv_dir}")
+    activate_python = os.path.join(venv_dir, 'bin', 'python')
+    if not os.path.exists(activate_python):
+        print(f"Python executable not found in venv: {activate_python}")
+        sys.exit(1)
+    print(f"Re-running script with venv Python: {activate_python}")
+    os.execl(activate_python, activate_python, *sys.argv)
 
 def install_dependencies(requirements_file):
     print("Installing dependencies...")
@@ -412,7 +399,7 @@ def setup_environment():
             import pkg_resources
             requirements = pkg_resources.parse_requirements(open(requirements_file, 'r'))
             installed = {pkg.key for pkg in pkg_resources.working_set}
-            missing = [req for req in requirements if req.key not in installed]
+            missing = [str(req) for req in requirements if req.key not in installed]
             if missing:
                 install_dependencies(requirements_file)
             else:
@@ -424,6 +411,12 @@ def setup_environment():
         print("No requirements.txt file found. Skipping dependency check.")
 
 def main():
+    # 在 main 中导入模块，确保在环境设置和依赖安装之后
+    import PyPDF2
+    from pdf2image import convert_from_path
+    import pytesseract
+    from PIL import Image
+
     parser = argparse.ArgumentParser(description="Convert files to Org format")
     parser.add_argument("--temp", help="Temporary folder path")
     parser.add_argument("--reference", help="Reference folder path")
