@@ -448,14 +448,22 @@ Your choice: "
               (insert source-file-prop "\n"))
             (insert "#+filetags: :overview:\n#+STARTUP: showall\n\n")
             (insert "* Quick Notes\n\n")
-            (org-zettel-ref-insert-quick-notes source-buffer overview-buffer)
+            (condition-case inner-err
+                (org-zettel-ref-insert-quick-notes source-buffer overview-buffer)
+              (error
+               (message "Error in org-zettel-ref-insert-quick-notes: %s" (error-message-string inner-err))))
             (insert "\n* Marked Text\n\n")
-            (org-zettel-ref-insert-marked-text source-buffer overview-buffer)
+            (condition-case inner-err
+                (org-zettel-ref-insert-marked-text source-buffer overview-buffer)
+              (error
+               (message "Error in org-zettel-ref-insert-marked-text: %s" (error-message-string inner-err))))
             (save-buffer)))
         
-        (message "Debug: Sync completed successfully")
+        (message "Debug: Sync completed successfully"))
     (error
-     (message "Error during synchronization: %s" (error-message-string err))))))
+     (message "Error during synchronization: %s" (error-message-string err))
+     (message "Error type: %s" (car err))
+     (message "Backtrace: %s" (with-output-to-string (backtrace))))))
 
 (defun org-zettel-ref-get-source-file-property ()
   "Get the SOURCE_FILE property from the current buffer."
@@ -494,47 +502,55 @@ Your choice: "
                          ("Underline" . "_")
                          ("Code" . "~")
                          ("Verbatim" . "=")
-                         ("Strikethrough" . "+")
-                         ("Quick Note" . "<<")))
+                         ("Strikethrough" . "+")))
          (markup (completing-read "Choose markup: " markup-types nil t))
          (marker (cdr (assoc markup markup-types)))
-         (is-quick-note (string= marker "<<"))
          (region-active (use-region-p))
          (beg (if region-active (region-beginning) (point)))
          (end (if region-active (region-end) (point))))
-
-    (if is-quick-note
-        (let ((note-name (read-string "Enter quick note: ")))
-          (if region-active
-              (let ((content (buffer-substring-no-properties beg end)))
-                (delete-region beg end)
-                (insert (format "<<%s>> %s" note-name content)))
-            (insert (format "<<%s>> " note-name))))
-      (if region-active
-          (progn
-            (goto-char end)
-            (insert marker)
-            (goto-char beg)
-            (insert marker))
-        (insert marker marker)
-        (backward-char)))))
+    (if region-active
+        (progn
+          (goto-char end)
+          (insert marker)
+          (goto-char beg)
+          (insert marker))
+      (insert marker marker)
+      (backward-char))))
 
 
 (defun org-zettel-ref-insert-quick-notes (source-buffer overview-buffer)
   "Insert quick notes from SOURCE-BUFFER into OVERVIEW-BUFFER."
-  (with-current-buffer source-buffer
-    (org-element-map (org-element-parse-buffer) 'target
-      (lambda (target)
-        (let* ((begin (org-element-property :begin target))
-               (end (org-element-property :end target))
-               (content (buffer-substring-no-properties begin end)))
-          (when (string-match "<<\\([^>]+\\)>>" content)
-            (let ((note-name (match-string 1 content)))
-              (with-current-buffer overview-buffer
-                (insert (format "- [[file:%s::%s][%s]]\n"
-                                (buffer-file-name source-buffer)
-                                note-name
-                                note-name))))))))))
+  (condition-case err
+      (progn
+        (unless (buffer-live-p source-buffer)
+          (error "Source buffer is not live"))
+        (unless (buffer-live-p overview-buffer)
+          (error "Overview buffer is not live"))
+        (with-current-buffer source-buffer
+          (let ((ast (condition-case parse-err
+                         (org-element-parse-buffer)
+                       (error
+                        (message "Error parsing buffer: %s" (error-message-string parse-err))
+                        nil))))
+            (when ast
+              (org-element-map ast 'target
+                (lambda (target)
+                  (let* ((begin (org-element-property :begin target))
+                         (end (org-element-property :end target))
+                         (content (buffer-substring-no-properties begin end)))
+                    (when (string-match "<<\\([^>]+\\)>>" content)
+                      (let ((note-name (match-string 1 content))
+                            (file-name (buffer-file-name source-buffer)))
+                        (if file-name
+                            (with-current-buffer overview-buffer
+                              (insert (format "- [[file:%s::%s][%s]]\n"
+                                              file-name
+                                              note-name
+                                              note-name)))
+                          (message "Warning: Source buffer is not associated with a file"))))))))))
+        (message "Quick notes insertion completed successfully"))
+    (error
+     (message "Error in org-zettel-ref-insert-quick-notes: %s" (error-message-string err)))))
 
 
 (defun org-zettel-ref-jump-to-quick-note ()

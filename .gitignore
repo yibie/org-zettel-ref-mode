@@ -3,5 +3,5 @@
 *.log
 tmp/
 venv/venv/
-back2
+backup2
 org-zettel-ref-mode.el.backup
