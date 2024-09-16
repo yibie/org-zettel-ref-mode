@@ -11,8 +11,14 @@ import logging
 import venv
 import time
 
+
+
+
 # Setting Log 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
+
 
 # Setting DEFAULT path
 DEFAULT_TEMP_FOLDER = os.path.expanduser("~/Documents/temp_convert/")
@@ -426,16 +432,16 @@ def main():
     from PIL import Image
 
     parser = argparse.ArgumentParser(description="Convert files to Org format")
-    parser.add_argument("--temp", help="Temporary folder path")
-    parser.add_argument("--reference", help="Reference folder path")
-    parser.add_argument("--archive", help="Archive folder path")
+    parser.add_argument("--temp", help="Temporary folder path", default=DEFAULT_TEMP_FOLDER)
+    parser.add_argument("--reference", help="Reference folder path", default=DEFAULT_REFERENCE_FOLDER)
+    parser.add_argument("--archive", help="Archive folder path", default=DEFAULT_ARCHIVE_FOLDER)
     
     args = parser.parse_args()
     
     # 使用命令行参数或默认值
-    temp_folder = args.temp or DEFAULT_TEMP_FOLDER
-    reference_folder = args.reference or DEFAULT_REFERENCE_FOLDER
-    archive_folder = args.archive or DEFAULT_ARCHIVE_FOLDER
+    temp_folder = args.temp
+    reference_folder = args.reference
+    archive_folder = args.archive
     
     print(f"Using folders:")
     print(f"Temporary folder: {temp_folder}")
@@ -452,17 +458,6 @@ def main():
                 print(f"Error creating folder {folder}: {e}")
                 print("Please manually create the folder or modify the path in the script.")
                 sys.exit(1)
-    
-    # 如果是首次运行或需要修改路径，只打印提示信息
-    if args.temp is None and args.reference is None and args.archive is None:
-        print("\nNote: You're using default folder paths. If you need to change them:")
-        print("1. Open the script file 'convert-to-org.py'")
-        print("2. Locate the following lines near the top of the file:")
-        print("   DEFAULT_TEMP_FOLDER = os.path.expanduser(\"~/Documents/temp_convert/\")")
-        print("   DEFAULT_REFERENCE_FOLDER = os.path.expanduser(\"~/Documents/ref/\")")
-        print("   DEFAULT_ARCHIVE_FOLDER = os.path.expanduser(\"/Volumes/Collect/archives/\")")
-        print("3. Modify these paths as needed")
-        print("4. Save the file and run the script again")
     
     # 处理文件
     logging.info("Starting file processing")

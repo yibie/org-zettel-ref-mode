@@ -798,6 +798,11 @@ Otherwise, open the source file in a new window."
   :type 'string
   :group 'org-zettel-ref)
 
+(defcustom org-zettel-ref-archive-folder "/Volumes/Collect/archives/"
+  "Archive folder path."
+  :type 'string
+  :group 'org-zettel-ref)
+
 
 
 (defcustom org-zettel-ref-quick-markup-key "C-c m"
@@ -816,11 +821,14 @@ Otherwise, open the source file in a new window."
   (interactive)
   (let* ((script-path (expand-file-name org-zettel-ref-python-file))
          (default-directory (file-name-directory script-path))
-	 (command (format "python %s"
-                          (shell-quote-argument (file-name-nondirectory script-path)))))
+         (command (format "python %s --temp %s --reference %s --archive %s"
+                          (shell-quote-argument (file-name-nondirectory script-path))
+                          (shell-quote-argument org-zettel-ref-temp-folder)
+                          (shell-quote-argument org-zettel-ref-reference-folder)
+                          (shell-quote-argument org-zettel-ref-archive-folder))))
     (if (file-exists-p script-path)
         (progn
-          (message "ExecutIng command: %s" command)
+          (message "Executing command: %s" command)
           (async-shell-command command "*Convert to Org*"))
       (error "Cannot find the specified Python script: %s" script-path))))
 
