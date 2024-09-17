@@ -66,30 +66,26 @@ Possible values are:
 
 ;; Function to create or retrieve the overview file with '__overview' keyword
 (defun org-zettel-ref-create-denote-overview (title)
-  "Create or retrieve a Denote note with the '__overview' keyword."
-  ;; Check if the mode type is 'denote
-  (when (eq org-zettel-ref-mode-type 'denote)
-    ;; Ensure Denote is loaded
-    (unless (featurep 'denote)
-      (user-error "Denote package is required for org-zettel-ref-mode when using Denote. Please install and load Denote."))
-    ;; Ensure the overview directory exists
-    (unless (file-directory-p org-zettel-ref-overview-directory)
-      (make-directory org-zettel-ref-overview-directory t))
-    (let* ((denote-title (org-zettel-ref-denote-title title))
-           (keywords '("__overview"))
-           (existing-file (org-zettel-ref-find-denote-overview-file denote-title)))
-      (if existing-file
-          existing-file
-        ;; Manually construct the file path in the overview directory
-        (let* ((timestamp (format-time-string "%Y%m%dT%H%M%S"))
-               (base-name (concat timestamp "--" denote-title "__overview.org"))
-               (file-path (expand-file-name base-name org-zettel-ref-overview-directory)))
-          ;; Create the file using Denote's functions if needed
-          (unless (file-exists-p file-path)
-            (with-temp-file file-path
-              (insert "#+title: " denote-title "__overview\n")
-              (insert "#+filetags: :overview:\n")))
-          file-path)))))
+  "Create or retrieve a Denote overview file for TITLE."
+  (let* ((slug-title (org-zettel-ref-denote-slug-title title))
+         (existing-file (org-zettel-ref-find-denote-overview-file slug-title)))
+    (if existing-file
+        (progn
+          (message "Debug: Found existing Denote overview file: %s" existing-file)
+          existing-file)
+      (let* ((timestamp (format-time-string "%Y%m%dT%H%M%S"))
+             (base-name (concat timestamp "--" slug-title "--__overview.org"))
+             (file-path (expand-file-name base-name org-zettel-ref-overview-directory)))
+        (message "Debug: Creating new Denote overview file: %s" file-path)
+        (unless (file-exists-p file-path)
+          (with-temp-file file-path
+            (insert (format "#+title: %s\n" title))
+            (insert "#+filetags: :overview:\n")
+            (insert (format "#+SOURCE_FILE: %s\n" title))))
+        (when (and (fboundp 'denote-rename-file-using-front-matter)
+                   (not (string-prefix-p timestamp (file-name-nondirectory file-path))))
+          (denote-rename-file-using-front-matter file-path))
+        file-path))))
 
 ;;;###autoload
 (defun org-zettel-ref-sanitize-filename (filename)
@@ -108,7 +104,7 @@ Preserves alphanumeric characters, Chinese characters, and some common punctuati
          (filename (pcase org-zettel-ref-mode-type
                      ('normal (concat truncated-title "-overview.org"))
                      ('denote (let ((date-time (format-time-string "%Y%m%dT%H%M%S")))
-                                (format "%s--%s.org" date-time truncated-title)))
+                                (format "%s--%s--__overview.org" date-time truncated-title)))
                      ('org-roam (format "%s-overview.org" truncated-title)))))
     (if (string-empty-p filename)
         (error "Generated filename is empty")
@@ -253,24 +249,26 @@ Preserves alphanumeric characters, Chinese characters, and some common punctuati
 (defvar org-zettel-ref-overview-index (make-hash-table :test 'equal)
   "Hash table storing the mapping of source files to overview files.")
 
+(defun org-zettel-ref-load-index ()
+  "Load the overview index from a file."
+  (let ((index-file (expand-file-name ".overview-index.el" org-zettel-ref-overview-directory)))
+    (if (file-exists-p index-file)
+        (with-temp-buffer
+          (insert-file-contents index-file)
+          (setq org-zettel-ref-overview-index (read (current-buffer))))
+      (setq org-zettel-ref-overview-index (make-hash-table :test 'equal)))))
+
 (defun org-zettel-ref-save-index ()
   "Save the overview index to a file."
   (let ((index-file (expand-file-name ".overview-index.el" org-zettel-ref-overview-directory)))
     (with-temp-file index-file
       (prin1 org-zettel-ref-overview-index (current-buffer)))))
 
-(defun org-zettel-ref-load-index ()
-  "Load the overview index from a file."
-  (let ((index-file (expand-file-name ".overview-index.el" org-zettel-ref-overview-directory)))
-    (when (file-exists-p index-file)
-      (with-temp-buffer
-        (insert-file-contents index-file)
-        (setq org-zettel-ref-overview-index (read (current-buffer)))))))
-
 (defun org-zettel-ref-update-index (source-file overview-file)
   "Update the index with a new or existing SOURCE-FILE to OVERVIEW-FILE mapping."
   (puthash source-file overview-file org-zettel-ref-overview-index)
-  (org-zettel-ref-save-index))
+  (org-zettel-ref-save-index)
+  (message "Debug: Updated index with %s -> %s" source-file overview-file))
 
 (defun org-zettel-ref-get-overview-from-index (source-file)
   "Get the overview file for SOURCE-FILE from the index."
@@ -294,15 +292,6 @@ Preserves alphanumeric characters, Chinese characters, and some common punctuati
       (insert (format "#+SOURCE_FILE: %s\n" source-file))
       (insert (cdr content)))))
 
-(defun org-zettel-ref-create-denote-overview (file-path content source-file)
-  "Create a Denote overview file at FILE-PATH with CONTENT and SOURCE-FILE property."
-  (unless (file-exists-p file-path)
-    (with-temp-file file-path
-      (insert (format "#+SOURCE_FILE: %s\n" source-file))
-      (insert (cdr content))))
-  (when (fboundp 'denote-rename-file-using-front-matter)
-    (denote-rename-file-using-front-matter file-path)))
-
 (defun org-zettel-ref-create-org-roam-overview (file-path content source-file)
   "Create an Org-roam overview file at FILE-PATH with CONTENT and SOURCE-FILE property."
   (unless (file-exists-p file-path)
@@ -317,22 +306,20 @@ Preserves alphanumeric characters, Chinese characters, and some common punctuati
   "Get or create the overview file for SOURCE-BUFFER based on the current mode type."
   (let* ((source-file (buffer-file-name source-buffer))
          (title (file-name-base source-file))
-         (existing-overview (org-zettel-ref-get-overview-from-index source-file)))
+         (existing-overview (gethash source-file org-zettel-ref-overview-index)))
     (if existing-overview
-        existing-overview
-      (let* ((filename (org-zettel-ref-generate-filename title))
-             (file-path (expand-file-name filename org-zettel-ref-overview-directory))
-             (file-content (org-zettel-ref-generate-file-content source-buffer title)))
-        (pcase org-zettel-ref-mode-type
-          ('normal
-           (org-zettel-ref-create-normal-overview file-path file-content source-file))
-          ('denote
-           (org-zettel-ref-create-denote-overview file-path file-content source-file))
-          ('org-roam
-           (org-zettel-ref-create-org-roam-overview file-path file-content source-file))
-          (_ (error "Unsupported org-zettel-ref-mode-type: %s" org-zettel-ref-mode-type)))
-        (org-zettel-ref-update-index source-file file-path)
-        file-path))))
+        (progn
+          (message "Debug: Found existing overview file: %s" existing-overview)
+          existing-overview)
+      (let ((new-overview
+             (pcase org-zettel-ref-mode-type
+               ('normal (org-zettel-ref-create-normal-overview title))
+               ('denote (org-zettel-ref-create-denote-overview title))
+               ('org-roam (org-zettel-ref-create-org-roam-overview title))
+               (_ (error "Unsupported org-zettel-ref-mode-type: %s" org-zettel-ref-mode-type)))))
+        (org-zettel-ref-update-index source-file new-overview)
+        (message "Debug: Created new overview file: %s" new-overview)
+        new-overview))))
 
 (defun org-zettel-ref-get-source-file-property ()
   "Get the SOURCE_FILE property from the current buffer."
@@ -448,8 +435,9 @@ Your choice: "
   :keymap org-zettel-ref-mode-map
   (if org-zettel-ref-mode
       (progn
-        (org-zettel-ref-mode-enable)
-        (org-zettel-ref-load-index))
+        (org-zettel-ref-load-index)
+        (org-zettel-ref-rescan-overview-files)
+        (org-zettel-ref-mode-enable))
     (org-zettel-ref-mode-disable)))
 
 
@@ -464,7 +452,7 @@ Your choice: "
              (source-file (buffer-file-name source-buffer))
              (overview-file (org-zettel-ref-get-overview-file source-buffer))
              (overview-buffer (or (get-buffer org-zettel-ref-current-overview-buffer)
-                                  (find-file-noselect overview-file))))
+                                 (find-file-noselect overview-file))))
         (message "Debug: Starting sync for overview file: %s" overview-file)
         (unless (buffer-live-p source-buffer)
           (error "Source buffer is not live"))
@@ -681,25 +669,18 @@ Otherwise, open the source file in a new window."
 (defun org-zettel-ref-clean-targets-and-sync ()
   "Clean all <<target>> markers from the current buffer and then sync the overview."
   (interactive)
-  (org-zettel-ref-clean-targets)
+  (org-zettel-ref-clean-multiple-targets)
   (save-buffer)
   (org-zettel-ref-sync-overview))
 
 ;; Function to find existing overview file matching the title and '__overview' keyword
-(defun org-zettel-ref-find-denote-overview-file (denote-title)
-  "Find an existing Denote overview file matching DENOTE-TITLE and containing the '__overview' keyword."
-  ;; Check if the mode type is 'denote
-  (when (eq org-zettel-ref-mode-type 'denote)
-    ;; Ensure Denote is loaded
-    (unless (featurep 'denote)
-      (user-error "Denote package is required for org-zettel-ref-mode when using Denote. Please install and load Denote."))
-    (let* ((files (directory-files org-zettel-ref-overview-directory t "__overview\\.org\\'"))
-           (matched-file (cl-find-if
-                          (lambda (file)
-                            (let ((basename (file-name-base file)))
-                              (string-match-p (regexp-quote denote-title) basename)))
-                          files)))
-      matched-file)))
+(defun org-zettel-ref-find-denote-overview-file (slug-title)
+  "Find an existing Denote overview file matching SLUG-TITLE."
+  (let ((files (directory-files org-zettel-ref-overview-directory t "__overview\\.org$")))
+    (cl-find-if
+     (lambda (file)
+       (string-match-p (regexp-quote slug-title) (file-name-nondirectory file)))
+     files)))
 
 ;; Function to get the buffer name for the overview file
 (defun org-zettel-ref-get-overview-buffer-name (source-buffer)
@@ -714,18 +695,21 @@ Otherwise, open the source file in a new window."
 (defun org-zettel-ref-init ()
   "Initialize the org-zettel-ref-mode, create or open the overview file and set up the layout."
   (interactive)
+  (unless org-zettel-ref-mode
+    (org-zettel-ref-mode 1))
   (message "Debug: Entering org-zettel-ref-init")
   (org-zettel-ref-load-index) 
   (let* ((source-buffer (current-buffer))
-         (source-file (buffer-file-name source-buffer)))
+         (source-file (buffer-file-name source-buffer))
+         (denote-title (file-name-base source-file))
+         (overview-buffer-name (and source-file (org-zettel-ref-get-overview-buffer-name source-buffer))))
     (if (not source-file)
         (message "org-zettel-ref-mode cannot be initialized in buffers without associated files.")
       (let* ((_ (message "Debug: source-buffer = %S" source-buffer))
              (overview-file (org-zettel-ref-get-overview-file source-buffer))
              (_ (message "Debug: overview-file = %S" overview-file))
-             (overview-buffer-name (org-zettel-ref-get-overview-buffer-name source-buffer))
              (_ (message "Debug: overview-buffer-name = %S" overview-buffer-name))
-             (existing-overview-buffer (get-buffer overview-buffer-name)))
+             (existing-overview-buffer (and overview-buffer-name (get-buffer overview-buffer-name))))
         
         ;; Ensure the overview directory exists
         (unless (file-directory-p org-zettel-ref-overview-directory)
@@ -787,7 +771,42 @@ Otherwise, open the source file in a new window."
       (select-window win)
       (message "Debug: Focused on existing overview window."))))
 
-;; Function to set up buffer-related variables without making the source buffer read-only
+(defun org-zettel-ref-find-source-file (overview-file)
+  "Find the source file associated with OVERVIEW-FILE using the index."
+  (let ((source-file nil))
+    (maphash (lambda (key value)
+               (when (string= value overview-file)
+                 (setq source-file key)))
+             org-zettel-ref-overview-index)
+    source-file))
+
+(defun org-zettel-ref-jump-to-source ()
+  "Jump from the overview file to its associated source file."
+  (interactive)
+  (let* ((overview-file (buffer-file-name))
+         (source-file (org-zettel-ref-find-source-file overview-file)))
+    (if source-file
+        (if (file-exists-p source-file)
+            (progn
+              (find-file source-file)
+              (message "Jump to source file: %s" source-file))
+          (message "Source file not found: %s" source-file))
+      (message "No associated source file found."))))
+
+(defun org-zettel-ref-mode-enable ()
+  "Enable org-zettel-ref-mode."
+  (let ((overview-file (org-zettel-ref-get-overview-file (current-buffer))))
+    (org-zettel-ref-check-overview-content overview-file))
+  (advice-add 'org-open-at-point :around #'org-zettel-ref-advice-open-at-point)
+  (org-zettel-ref-setup-quick-markup))
+
+(defun org-zettel-ref-mode-disable ()
+  "Disable org-zettel-ref-mode."
+  (advice-remove 'org-open-at-point #'org-zettel-ref-advice-open-at-point)
+  (local-unset-key (kbd org-zettel-ref-quick-markup-key)) 
+  (local-unset-key (kbd "C-o")))
+
+(provide 'org-zettel-ref)
 (defun org-zettel-ref-setup-buffers (source-buffer overview-buffer)
   "Set up SOURCE-BUFFER and OVERVIEW-BUFFER related variables."
   (with-current-buffer source-buffer
@@ -898,6 +917,8 @@ Otherwise, open the source file in a new window."
   :group 'org-zettel-ref
   (if org-zettel-ref-mode
       (progn
+        (org-zettel-ref-load-index)
+        (org-zettel-ref-rescan-overview-files)
         (when (eq org-zettel-ref-mode-type 'org-roam)
           (if (require 'org-roam nil t)
               (condition-case err
@@ -918,6 +939,3 @@ Otherwise, open the source file in a new window."
 
 
 (provide 'org-zettel-ref-mode)
-
-
-
