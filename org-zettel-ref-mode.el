@@ -475,7 +475,7 @@ Your choice: "
           (let ((inhibit-read-only t)
                 (source-file-prop (org-zettel-ref-get-source-file-property)))
             (erase-buffer)
-            (insert (format "#+TITLE: Overview for %s\n" (file-name-base source-file)))
+            (insert (format "#+TITLE: %s\n" (file-name-base source-file)))
             (insert (format "#+SOURCE_FILE: %s\n" source-file))
             (insert "#+filetags: :overview:\n#+STARTUP: showall\n\n")
             (insert "* Quick Notes\n\n")
