@@ -10,7 +10,7 @@ import shutil
 import logging
 import venv
 import time
-
+from PyPDF2 import PdfReader
 
 
 
@@ -231,20 +231,24 @@ def is_scanned_pdf(file_path):
     Returns:
     bool: True if the PDF is likely scanned, False if it's likely digital.
     """
-    with open(file_path, 'rb') as file:
-        reader = PyPDF2.PdfReader(file)
-        page = reader.pages[0]  # Check only the first page
+    try:
+        with open(file_path, 'rb') as file:
+            reader = PdfReader(file)
+            page = reader.pages[0]  # Check only the first page
 
-        # If the page has text, it's likely a digital PDF
-        if page.extract_text().strip():
-            return False
+            # If the page has text, it's likely a digital PDF
+            if page.extract_text().strip():
+                return False
 
-        # If the page has images and no text, it's likely a scanned PDF
-        if '/XObject' in page['/Resources']:
-            return True
+            # If the page has images and no text, it's likely a scanned PDF
+            if '/XObject' in page['/Resources']:
+                return True
 
-    # If we can't determine, assume it's digital
-    return False
+        # If we can't determine, assume it's digital
+        return False
+    except Exception as e:
+        logging.error(f"Error processing PDF {file_path}: {str(e)}")
+        return False  # Assume digital if we can't process the file
 
 def ocr_pdf(input_file, output_file):
     try:
