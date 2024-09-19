@@ -290,7 +290,8 @@ Preserves alphanumeric characters, Chinese characters, and some common punctuati
   (unless (file-exists-p file-path)
     (with-temp-file file-path
       (insert (format "#+SOURCE_FILE: %s\n" source-file))
-      (insert (cdr content)))))
+      (insert (cdr content))))
+  file-path)
 
 (defun org-zettel-ref-create-org-roam-overview (file-path content source-file)
   "Create an Org-roam overview file at FILE-PATH with CONTENT and SOURCE-FILE property."
@@ -311,12 +312,16 @@ Preserves alphanumeric characters, Chinese characters, and some common punctuati
         (progn
           (message "Debug: Found existing overview file: %s" existing-overview)
           existing-overview)
-      (let ((new-overview
-             (pcase org-zettel-ref-mode-type
-               ('normal (org-zettel-ref-create-normal-overview title))
-               ('denote (org-zettel-ref-create-denote-overview title))
-               ('org-roam (org-zettel-ref-create-org-roam-overview title))
-               (_ (error "Unsupported org-zettel-ref-mode-type: %s" org-zettel-ref-mode-type)))))
+      (let* ((sanitized-title (org-zettel-ref-sanitize-filename title))
+             (file-name (org-zettel-ref-generate-filename sanitized-title))
+             (file-path (expand-file-name file-name org-zettel-ref-overview-directory))
+             (content (org-zettel-ref-generate-file-content source-buffer title))
+             (new-overview
+              (pcase org-zettel-ref-mode-type
+                ('normal (org-zettel-ref-create-normal-overview file-path content source-file))
+                ('denote (org-zettel-ref-create-denote-overview title))
+                ('org-roam (org-zettel-ref-create-org-roam-overview file-path content source-file))
+                (_ (error "Unsupported org-zettel-ref-mode-type: %s" org-zettel-ref-mode-type)))))
         (org-zettel-ref-update-index source-file new-overview)
         (message "Debug: Created new overview file: %s" new-overview)
         new-overview))))
