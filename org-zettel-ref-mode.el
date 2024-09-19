@@ -307,7 +307,7 @@ Preserves alphanumeric characters, Chinese characters, and some common punctuati
   "Get or create the overview file for SOURCE-BUFFER based on the current mode type."
   (let* ((source-file (buffer-file-name source-buffer))
          (title (file-name-base source-file))
-         (existing-overview (gethash source-file org-zettel-ref-overview-index)))
+         (existing-overview (org-zettel-ref-get-overview-from-index source-file)))
     (if existing-overview
         (progn
           (message "Debug: Found existing overview file: %s" existing-overview)
@@ -450,7 +450,7 @@ Your choice: "
 ;;-----------END: org-zettel-ref-overveiw-index------------------
 
 (defun org-zettel-ref-sync-overview ()
-  "Synchronize the quick notes and marked text from the source buffer to the overview file."
+  "Synchronize quick notes and marked text from the source buffer to the overview file."
   (interactive)
   (condition-case err
       (let* ((source-buffer (or (buffer-base-buffer) (current-buffer)))
@@ -458,15 +458,14 @@ Your choice: "
              (overview-file (org-zettel-ref-get-overview-file source-buffer))
              (overview-buffer (or (get-buffer org-zettel-ref-current-overview-buffer)
                                  (find-file-noselect overview-file))))
-        (message "Debug: Starting sync for overview file: %s" overview-file)
+        (message "Debug: Starting to sync overview file: %s" overview-file)
         (unless (buffer-live-p source-buffer)
-          (error "Source buffer is not live"))
+          (error "Source buffer does not exist"))
         (unless (file-writable-p overview-file)
           (error "Overview file is not writable: %s" overview-file))
         
         (with-current-buffer overview-buffer
-          (let ((inhibit-read-only t)
-                (source-file-prop (org-zettel-ref-get-source-file-property)))
+          (let ((inhibit-read-only t))
             (erase-buffer)
             (insert (format "#+TITLE: %s\n" (file-name-base source-file)))
             (insert (format "#+SOURCE_FILE: %s\n" source-file))
@@ -476,16 +475,22 @@ Your choice: "
                 (org-zettel-ref-insert-quick-notes source-buffer overview-buffer)
               (error
                (message "Error in org-zettel-ref-insert-quick-notes: %s" (error-message-string inner-err))))
+            (goto-char (point-max))  ; Ensure we're at the end of the buffer
             (insert "\n* Marked Text\n\n")
-            (condition-case inner-err
-                (org-zettel-ref-insert-marked-text source-buffer overview-buffer)
-              (error
-               (message "Error in org-zettel-ref-insert-marked-text: %s" (error-message-string inner-err))))
+            (let ((marked-text-start (point)))  ; Remember where "Marked Text" section starts
+              (condition-case inner-err
+                  (org-zettel-ref-insert-marked-text source-buffer overview-buffer)
+                (error
+                 (message "Error in org-zettel-ref-insert-marked-text: %s" (error-message-string inner-err))))
+              ;; Check if any marked text was actually inserted
+              (if (= marked-text-start (point))
+                  (message "Debug: No marked text was inserted")
+                (message "Debug: Marked text was successfully inserted")))
             (save-buffer)))
         
         (message "Debug: Sync completed successfully"))
     (error
-     (message "Error during synchronization: %s" (error-message-string err))
+     (message "Error during sync process: %s" (error-message-string err))
      (message "Error type: %s" (car err))
      (message "Backtrace: %s" (with-output-to-string (backtrace))))))
 
@@ -507,39 +512,98 @@ Your choice: "
     (org-zettel-ref-sync-overview)))
 
 (defun org-zettel-ref-insert-marked-text (source-buffer overview-buffer)
-  "Insert marked text from SOURCE-BUFFER into OVERVIEW-BUFFER."
-  (with-current-buffer source-buffer
-    (org-element-map (org-element-parse-buffer) '(bold underline verbatim code)
-      (lambda (element)
-        (let* ((begin (org-element-property :begin element))
-               (end (org-element-property :end element))
-               (raw-text (string-trim (buffer-substring-no-properties begin end))))
-          (when (and raw-text (not (string-empty-p raw-text)))
-            (with-current-buffer overview-buffer
-              (insert (format "- %s\n" raw-text)))))))))
+  "Insert marked text from SOURCE-BUFFER into OVERVIEW-BUFFER in the order they appear, preserving original markup."
+  (message "Debug: Starting to insert marked text")
+  (let ((marked-elements '())
+        (count 0))
+    (with-current-buffer source-buffer
+      (message "Debug: Parsing source buffer: %s (size: %d)" (buffer-name) (buffer-size))
+      (let ((parsed-buffer (org-element-parse-buffer)))
+        (message "Debug: Finished parsing buffer")
+        (org-element-map parsed-buffer '(bold italic underline strike-through code verbatim)
+          (lambda (element)
+            (let ((begin (org-element-property :begin element))
+                  (end (org-element-property :end element)))
+              (message "Debug: Found element %s from %d to %d" (org-element-type element) begin end)
+              (when (and begin end (<= end (point-max)))
+                (push (cons begin element) marked-elements)
+                (setq count (1+ count))))))))
+    
+    (setq marked-elements (sort marked-elements (lambda (a b) (< (car a) (car b)))))
+    
+    (with-current-buffer overview-buffer
+      (message "Debug: Inserting into overview buffer: %s (size: %d)" (buffer-name) (buffer-size))
+      (dolist (elem marked-elements)
+        (let* ((element (cdr elem))
+               (begin (org-element-property :begin element))
+               (end (org-element-property :end element)))
+          (message "Debug: Attempting to insert element from %d to %d" begin end)
+          (when (and begin end (<= end (buffer-size source-buffer)))
+            (condition-case err
+                (let ((contents-with-markers (with-current-buffer source-buffer
+                                               (buffer-substring begin end))))
+                  (insert (format "- %s\n" contents-with-markers))
+                  (message "Debug: Successfully inserted element"))
+              (error
+               (message "Error inserting element: %s" (error-message-string err))))))))
+    
+    (message "Debug: Finished inserting marked text, processed %d elements" count)))
 
 (defun org-zettel-ref-quick-markup ()
-  "Quickly apply org-mode markup to the region or insert at point."
+  "Quickly apply org-mode markup to a region or insert at the cursor."
   (interactive)
-  (let* ((markup-types '(("Bold" . "*")
-                         ("Italic" . "/")
-                         ("Underline" . "_")
-                         ("Code" . "~")
-                         ("Verbatim" . "=")
-                         ("Strikethrough" . "+")))
-         (markup (completing-read "Choose markup: " markup-types nil t))
+  (let* ((markup-types '(("bold" . "*")
+                         ("italic" . "/")
+                         ("underline" . "_")
+                         ("code" . "~")
+                         ("verbatim" . "=")
+                         ("strike-through" . "+")))
+         (markup (completing-read "Select markup: " markup-types nil t))
          (marker (cdr (assoc markup markup-types)))
          (region-active (use-region-p))
          (beg (if region-active (region-beginning) (point)))
          (end (if region-active (region-end) (point))))
     (if region-active
-        (progn
+        (save-excursion
+          (goto-char beg)
+          (skip-chars-forward " \t\n")
+          (setq beg (point))
+          (goto-char end)
+          (skip-chars-backward " \t\n")
+          (setq end (point))
           (goto-char end)
           (insert marker)
           (goto-char beg)
-          (insert marker))
+          (insert marker)
+          (backward-char))
       (insert marker marker)
-      (backward-char))))
+      (backward-char))
+    (message "Applied %s markup" markup)))
+
+(defun org-zettel-ref-update-marked-text ()
+  "Update the marked text in the overview file corresponding to the current buffer.
+This function acts as a fallback mechanism when users notice missing marks."
+  (interactive)
+  (let* ((source-buffer (current-buffer))
+         (source-file (buffer-file-name source-buffer))
+         (overview-file (org-zettel-ref-get-overview-file source-buffer))
+         (overview-buffer (find-file-noselect overview-file)))
+    (if (and source-file overview-file)
+        (progn
+          (with-current-buffer overview-buffer
+            (save-excursion
+              (goto-char (point-min))
+              (if (search-forward "* Marked Text" nil t)
+                  (progn
+                    (forward-line 1)
+                    (delete-region (point) (point-max))
+                    (insert "\n")
+                    (org-zettel-ref-insert-marked-text source-buffer overview-buffer)
+                    (save-buffer)
+                    (message "Marked text updated"))
+                (message "No marked text section found, please check the overview file format"))))
+          (pop-to-buffer overview-buffer))
+      (message "Cannot find source or overview file"))))
 
 
 (defun org-zettel-ref-insert-quick-notes (source-buffer overview-buffer)
@@ -660,14 +724,13 @@ Otherwise, open the source file in a new window."
         (replace-match "")
         (just-one-space))
       ;; Remove * markers
-      ;; Remove single * symbols within a line, preserve content
       (goto-char (point-min))
       (while (re-search-forward "\\*\\([^*\n]+?\\)\\*" nil t)
         (replace-match "\\1"))
-      ;; Remove == markers
+      ;; Remove = and == markers
       (goto-char (point-min))
-      (while (re-search-forward "=\\([^=]+\\)=" nil t)
-        (replace-match "\\1")
+      (while (re-search-forward "\\(=\\|==\\)\\([^=\n]+?\\)\\1" nil t)
+        (replace-match "\\2")
         (just-one-space)))
     (message "All <<target>>, **, and == markers have been removed.")))
 
