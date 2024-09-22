@@ -2,3 +2,5 @@ PyPDF2
 pdf2image
 pytesseract
 Pillow
+pyobjc
+pyobjc-framework-Cocoa
