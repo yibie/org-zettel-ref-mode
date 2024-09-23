@@ -6,14 +6,15 @@
 
 ;;; Code:
 
-(require 'org-roam)
+(when (eq org-zettel-ref-mode-type 'org-roam)
+  (require 'org-roam))
 
 (defun org-zettel-ref-get-overview-file-org-roam (source-buffer)
   "Get or create an overview file for SOURCE-BUFFER using org-roam API."
   (let* ((source-file (buffer-file-name source-buffer))
          (title (if source-file
-                    (format "Overview of %s" (file-name-base source-file))
-                  (format "Overview of %s" (buffer-name source-buffer))))
+                    (format "Overview - %s" (file-name-base source-file))
+                  (format "Overview - %s" (buffer-name source-buffer))))
          file-path)
     (message "Debug: Starting org-zettel-ref-get-overview-file for %s" title)
     (condition-case err
@@ -53,21 +54,7 @@ This is an overview of the buffer \"%s\".
        (setq org-zettel-ref-mode-type 'normal)))
     file-path))
 
-(defun org-zettel-ref-update-roam-db (file)
-  "Update org-roam database for FILE."
-  (when (and (eq org-zettel-ref-mode-type 'org-roam)
-             (require 'org-roam nil t))
-    (condition-case err
-        (progn
-          (org-roam-db-update-file file)
-          (message "Debug: org-roam database updated for %s" file)
-          (let ((node (org-roam-node-from-file file)))
-            (when node
-              (message "Debug: Node ID: %s, Title: %s" 
-                       (org-roam-node-id node) 
-                       (org-roam-node-title node)))))
-      (error
-       (message "Error updating org-roam database: %S" err)))))
+
 
 (provide 'org-zettel-ref-org-roam)
 

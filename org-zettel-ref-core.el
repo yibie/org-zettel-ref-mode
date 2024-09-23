@@ -30,10 +30,16 @@ Can be 'normal, 'denote, or 'org-roam."
                  (const :tag "Org-roam" org-roam))
   :group 'org-zettel-ref)
 
+(defcustom org-zettel-ref-overview-file-suffix "__overview"
+  "Suffix to be added to overview files created by org-zettel-ref in Denote mode.
+This suffix will be appended to the filename before the file extension."
+  :type 'string
+  :group 'org-zettel-ref)
+
 (defvar org-zettel-ref-overview-file nil
   "The current overview file being used.")
 
-(defvar org-zettel-ref-current-overview-buffer nil
+(defvar org-zettel-ref-current-overviee-buffer nil
   "The current overview buffer being used.")
 
 (defun org-zettel-ref-init ()

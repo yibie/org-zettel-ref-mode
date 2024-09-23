@@ -17,6 +17,22 @@
    ;; Add other database update methods here if needed
    (t (message "No database update method for current mode type"))))
 
+(defun org-zettel-ref-update-roam-db (file)
+  "Update org-roam database for FILE."
+  (when (and (eq org-zettel-ref-mode-type 'org-roam)
+             (require 'org-roam nil t))
+    (condition-case err
+        (progn
+          (org-roam-db-update-file file)
+          (message "Debug: org-roam database updated for %s" file)
+          (let ((node (org-roam-node-from-file file)))
+            (when node
+              (message "Debug: Node ID: %s, Title: %s" 
+                       (org-roam-node-id node) 
+                       (org-roam-node-title node)))))
+      (error
+       (message "Error updating org-roam database: %S" err)))))
+
 (defun org-zettel-ref-check-roam-db ()
   "Check the status of the org-roam database."
   (interactive)

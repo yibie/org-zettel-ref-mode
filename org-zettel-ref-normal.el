@@ -10,7 +10,7 @@
   "Get or create an overview file for SOURCE-BUFFER using normal mode."
   (let* ((source-file (buffer-file-name source-buffer))
          (title (format "Overview of %s" (file-name-base source-file)))
-         (file-path (expand-file-name (concat (replace-regexp-in-string "[^a-zA-Z0-9]" "-" title) ".org")
+         (file-path (expand-file-name (concat (replace-regexp-in-string "[^a-zA-Z0-9]" "-" title) (or org-zettel-ref-overview-file-suffix ".org"))
                                       org-zettel-ref-overview-directory)))
     (unless (file-exists-p file-path)
       (with-temp-file file-path
