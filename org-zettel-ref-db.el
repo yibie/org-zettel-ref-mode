@@ -86,6 +86,53 @@
   "Get the overview file for SOURCE-FILE from the index."
   (gethash source-file org-zettel-ref-overview-index))
 
+(defun org-zettel-ref-check-and-repair-links ()
+  "Check and repair links between source files and overview files."
+  (interactive)
+  (let ((repaired 0))
+    (maphash (lambda (source-file overview-file)
+                (unless (file-exists-p source-file)
+                  (remhash source-file org-zettel-ref-overview-index)
+                  (setq repaired (1+ repaired)))
+                (unless (file-exists-p overview-file)
+                  (org-zettel-ref-ensure-overview-file source-file)
+                  (setq repaired (1+ repaired))))
+              org-zettel-ref-overview-index)
+    (org-zettel-ref-save-index)
+    (message "Checked and repaired %d links." repaired)))
+
+(defun org-zettel-ref-status ()
+  "Display the current status of org-zettel-ref-mode."
+  (interactive)
+  (let ((index-size (hash-table-count org-zettel-ref-overview-index))
+        (current-overview (org-zettel-ref-get-overview-from-index (buffer-file-name))))
+    (message "org-zettel-ref-mode status:
+- Index size: %d entries
+- Current file: %s
+- Associated overview: %s
+- Overview directory: %s"
+             index-size
+             (buffer-file-name)
+             (or current-overview "None")
+             org-zettel-ref-overview-directory)))
+
+(defun org-zettel-ref-maintenance-menu ()
+  "Display a menu for org-zettel-ref-mode maintenance operations."
+  (interactive)
+  (let ((choice (read-char-choice
+                 "Org-zettel-ref maintenance:
+r: Refresh index
+c: Check and repair links
+s: Show status
+q: Quit
+Your choice: "
+                 '(?r ?c ?s ?q))))
+    (cond
+     ((eq choice ?r) (org-zettel-ref-refresh-index))
+     ((eq choice ?c) (org-zettel-ref-check-and-repair-links))
+     ((eq choice ?s) (org-zettel-ref-status))
+     ((eq choice ?q) (message "Quit")))))
+
 
 (provide 'org-zettel-ref-db)
 

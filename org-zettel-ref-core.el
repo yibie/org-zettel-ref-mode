@@ -35,9 +35,6 @@ This suffix will be appended to the filename before the file extension."
 (defvar org-zettel-ref-overview-file nil
   "The current overview file being used.")
 
-(defvar org-zettel-ref-current-overview-buffer nil
-  "The current overview buffer being used.")
-
 (defvar org-zettel-ref-overview-index (make-hash-table :test 'equal)
   "Hash table storing the mapping of source files to overview files.")
 
@@ -74,6 +71,7 @@ This suffix will be appended to the filename before the file extension."
     (if existing-overview
         (progn
           (message "Debug: Found existing overview file: %s" existing-overview)
+          (setq org-zettel-ref-current-overview-buffer (find-file-noselect existing-overview))
           existing-overview)
       (let* ((sanitized-title (org-zettel-ref-sanitize-filename title))
              (file-name (org-zettel-ref-generate-filename sanitized-title))
@@ -82,10 +80,11 @@ This suffix will be appended to the filename before the file extension."
               (pcase org-zettel-ref-mode-type
                 ('normal (org-zettel-ref-get-normal-overview file-path (org-zettel-ref-generate-file-content source-buffer title) source-file))
                 ('denote (org-zettel-ref-get-overview-file-denote source-buffer))
-                ('org-roam (org-zettel-ref-get-org-roam-overview file-path source-buffer title))
+                ('org-roam (org-zettel-ref-get-overview-file-org-roam source-buffer))
                 (_ (error "Unsupported org-zettel-ref-mode-type: %s" org-zettel-ref-mode-type)))))
         (org-zettel-ref-update-index source-file new-overview)
         (message "Debug: Created new overview file: %s" new-overview)
+        (setq org-zettel-ref-current-overview-buffer (find-file-noselect new-overview))
         new-overview))))
 
 (defun org-zettel-ref-get-normal-overview (file-path content source-file)
@@ -140,23 +139,21 @@ Preserves alphanumeric characters, Chinese characters, and some common punctuati
  )
 
 (defun org-zettel-ref-sync-overview ()
-  "Synchronize the quick notes and marked text from the source buffer to the overview file."
+  "Synchronize quick notes and marked text from the current buffer to the overview file."
   (interactive)
-  (condition-case err
-      (let* ((source-buffer (or (buffer-base-buffer) (current-buffer)))
-             (source-file (buffer-file-name source-buffer))
+  (with-demoted-errors "Error during sync: %S"
+      (let* ((source-buffer (current-buffer))
+             (source-file (buffer-file-name))
              (overview-file (org-zettel-ref-get-overview-file source-buffer))
-             (overview-buffer (or (get-buffer org-zettel-ref-current-overview-buffer)
-                                 (find-file-noselect overview-file))))
-        (message "Debug: Starting sync for overview file: %s" overview-file)
-        (unless (buffer-live-p source-buffer)
-          (error "Source buffer is not live"))
+             (overview-buffer (find-file-noselect overview-file)))
+        (message "Debug: Starting to sync overview file: %s" overview-file)
+        (unless source-file
+          (error "Current buffer is not associated with a file"))
         (unless (file-writable-p overview-file)
           (error "Overview file is not writable: %s" overview-file))
-        (org-zettel-ref-load-index)
+        
         (with-current-buffer overview-buffer
-          (let ((inhibit-read-only t)
-                (source-file-prop (org-zettel-ref-get-source-file-property)))
+          (let ((inhibit-read-only t))
             (erase-buffer)
             (insert (format "#+TITLE: %s\n" (file-name-base source-file)))
             (insert (format "#+SOURCE_FILE: %s\n" source-file))
@@ -166,52 +163,22 @@ Preserves alphanumeric characters, Chinese characters, and some common punctuati
                 (org-zettel-ref-insert-quick-notes source-buffer overview-buffer)
               (error
                (message "Error in org-zettel-ref-insert-quick-notes: %s" (error-message-string inner-err))))
+            (goto-char (point-max))
             (insert "\n* Marked Text\n\n")
-            (condition-case inner-err
-                (org-zettel-ref-insert-marked-text source-buffer overview-buffer)
-              (error
-               (message "Error in org-zettel-ref-insert-marked-text: %s" (error-message-string inner-err))))
-            (save-buffer)))
+            (let ((marked-text-start (point)))
+              (condition-case inner-err
+                  (org-zettel-ref-insert-marked-text source-buffer overview-buffer)
+                (error
+                 (message "Error in org-zettel-ref-insert-marked-text: %s" (error-message-string inner-err))))
+              (if (= marked-text-start (point))
+                  (message "Debug: No marked text was inserted")
+                (message "Debug: Marked text was successfully inserted")))
+            (save-buffer))))
         (message "Debug: Sync completed successfully"))
     (error
-     (message "Error during synchronization: %s" (error-message-string err))
-     (message "Error type: %s" (car err))
-     (message "Backtrace: %s" (with-output-to-string (backtrace))))))
+     (message "Error during sync process: %s" (error-message-string err))))
 
-(defun org-zettel-ref-insert-quick-notes (source-buffer overview-buffer)
-  "Insert quick notes from SOURCE-BUFFER into OVERVIEW-BUFFER."
-  (with-current-buffer source-buffer
-    (org-element-map (org-element-parse-buffer) 'target
-      (lambda (target)
-        (let* ((begin (org-element-property :begin target))
-               (end (org-element-property :end target))
-               (name (org-element-property :value target))
-               (content (buffer-substring-no-properties begin end)))
-          (when (string-match "<<\\([^>]+\\)>>\\(.*\\)" content)
-            (let ((note-name (match-string 1 content))
-                  (note-content (string-trim (match-string 2 content))))
-              (with-current-buffer overview-buffer
-                (let ((inhibit-read-only t))
-                  (insert (format "- [[file:%s::%s][%s]]\n"
-                                  (buffer-file-name source-buffer)
-                                  note-name
-                                  (if (string-empty-p note-content)
-                                      note-name
-                                    note-content))))))))))))
-
-(defun org-zettel-ref-insert-marked-text (source-buffer overview-buffer)
-  "Insert marked text from SOURCE-BUFFER into OVERVIEW-BUFFER."
-  (with-current-buffer source-buffer
-    (org-element-map (org-element-parse-buffer) '(bold underline verbatim code)
-      (lambda (element)
-        (let* ((begin (org-element-property :begin element))
-               (end (org-element-property :end element))
-               (raw-text (string-trim (buffer-substring-no-properties begin end))))
-          (when (and raw-text (not (string-empty-p raw-text)))
-            (with-current-buffer overview-buffer
-              (let ((inhibit-read-only t))
-                (insert (format "- %s\n" raw-text))))))))))
-
+    
 (defun org-zettel-ref-mode-enable ()
   "Enable org-zettel-ref-mode."
   (org-zettel-ref-init)
@@ -262,7 +229,10 @@ Otherwise, it calls the original `org-open-at-point' function."
           (split-window-right)
           (other-window 1)
           (find-file overview-file)
-          (rename-buffer overview-buffer-name t))))))
+          (rename-buffer overview-buffer-name t))))
+    ;; Ensure the cursor returns to the source file
+    (select-window (get-buffer-window source-buffer))
+    (message "Debug: org-zettel-ref-init completed")))
 
 (provide 'org-zettel-ref-core)
 

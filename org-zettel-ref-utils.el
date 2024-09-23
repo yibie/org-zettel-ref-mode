@@ -20,8 +20,6 @@ Preserves alphanumeric characters, Chinese characters, and some common punctuati
   (let ((invalid-chars-regexp "[[:cntrl:]\\/:*?\"<>|]"))
     (replace-regexp-in-string invalid-chars-regexp "_" filename)))
 
-
-
 (defun org-zettel-ref-generate-filename (title)
   "Generate a filename based on TITLE and current mode type."
   (let* ((sanitized-title (replace-regexp-in-string "[^a-zA-Z0-9\u4e00-\u9fff]+" "-" title))
@@ -32,7 +30,7 @@ Preserves alphanumeric characters, Chinese characters, and some common punctuati
                      ('normal (concat truncated-title "-overview.org"))
                      ('denote (let ((date-time (format-time-string "%Y%m%dT%H%M%S")))
                                 (format "%s--%s__overview.org" date-time truncated-title)))
-                     ('org-roam (format "%s-overview.org" truncated-title)))))
+                     ('org-roam (format "%s__overview.org" truncated-title)))))
     (if (string-empty-p filename)
         (error "Generated filename is empty")
       (message "Debug: Generated filename: %s" filename))
@@ -86,6 +84,67 @@ Preserves alphanumeric characters, Chinese characters, and some common punctuati
             (with-current-buffer overview-buffer
               (let ((inhibit-read-only t))
                 (insert (format "- %s\n" raw-text))))))))))
+
+
+;;org-zettel-ref-run-python-script
+
+(defcustom org-zettel-ref-python-file "~/Documents/emacs/package/org-zettel-ref-mode/document_convert_to_org.py"
+  "Python script file path."
+  :type 'string
+  :group 'org-zettel-ref)
+
+(defcustom org-zettel-ref-temp-folder "~/Documents/temp_convert/"
+  "Temporary folder path."
+  :type 'string
+  :group 'org-zettel-ref)
+
+(defcustom org-zettel-ref-reference-folder "~/Documents/ref/"
+  "Reference folder path."
+  :type 'string
+  :group 'org-zettel-ref)
+
+(defcustom org-zettel-ref-archive-folder "/Volumes/Collect/archives/"
+  "Archive folder path."
+  :type 'string
+  :group 'org-zettel-ref)
+
+;; debug message
+(defun org-zettel-ref-debug-message (format-string &rest args)
+  "Print debug information to *Messages* buffer."
+  (apply #'message (concat "ORG-ZETTEL-REF-DEBUG: " format-string) args))
+
+;; run python script
+(defun org-zettel-ref-run-python-script ()
+  "Run the configured Python script, displaying its output in the *Convert to Org* buffer."
+  (interactive)
+  (let* ((script-path (expand-file-name org-zettel-ref-python-file))
+         (default-directory (file-name-directory script-path))
+         (python-path (executable-find "python"))
+         (temp-folder (expand-file-name org-zettel-ref-temp-folder))
+         (reference-folder (expand-file-name org-zettel-ref-reference-folder))
+         (archive-folder (expand-file-name org-zettel-ref-archive-folder)))
+    (cond
+     ((not python-path)
+      (error "Python executable not found in PATH"))
+     ((not (file-exists-p script-path))
+      (error "Cannot find the specified Python script: %s" script-path))
+     ((not (file-directory-p temp-folder))
+      (error "Temporary folder does not exist: %s" temp-folder))
+     ((not (file-directory-p reference-folder))
+      (error "Reference folder does not exist: %s" reference-folder))
+     ((not (file-directory-p archive-folder))
+      (error "Archive folder does not exist: %s" archive-folder))
+     (t
+      (let ((command (format "%s %s --temp %s --reference %s --archive %s"
+                             (shell-quote-argument python-path)
+                             (shell-quote-argument script-path)
+                             (shell-quote-argument temp-folder)
+                             (shell-quote-argument reference-folder)
+                             (shell-quote-argument archive-folder))))
+        (org-zettel-ref-debug-message "Executing command: %s" command)
+        (async-shell-command command "*Convert to Org*")
+        (with-current-buffer "*Convert to Org*"
+          (org-zettel-ref-debug-message "Python script output:\n%s" (buffer-string))))))))
 
 (provide 'org-zettel-ref-utils)
 

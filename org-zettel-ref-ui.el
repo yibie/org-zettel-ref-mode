@@ -23,7 +23,7 @@
 (defun org-zettel-ref-quick-markup ()
   "Quickly apply org-mode markup to the region or insert at point."
   (interactive)
-  (let* (markup-types '(("Bold" . "*")
+  (let* ((markup-types '(("Bold" . "*")
                          ("Italic" . "/")
                          ("Underline" . "_")
                          ("Code" . "~")
@@ -37,11 +37,16 @@
     (if region-active
         (progn
           (goto-char end)
+          (unless (bolp) (insert "\n"))
           (insert marker)
           (goto-char beg)
-          (insert marker))
+          (insert marker)
+          (unless (bolp) (insert "\n")))
       (insert marker marker)
-      (backward-char))))
+      (backward-char))
+    ;; sync to overview
+    (org-zettel-ref-sync-overview)
+    (message "Marked text synced to overview file")))
 
 (defcustom org-zettel-ref-quick-markup-key "C-c m"
   "Key binding for quick markup function in org-zettel-ref-mode.
@@ -54,48 +59,40 @@ This should be a string that can be passed to `kbd'."
   (local-set-key (kbd org-zettel-ref-quick-markup-key) 'org-zettel-ref-quick-markup))
 
 (defun org-zettel-ref-clean-multiple-targets ()
-  "Remove all <<target>>, **, and == markers from the current buffer after confirmation."
+  "Remove <<target>>, *, =, ~, /, and _ markers from the current buffer, preserving Org-mode links."
   (interactive)
-  (when (yes-or-no-p "Are you sure you want to remove all <<target>>, **, and == markers? This cannot be undone. ")
-    (save-excursion
-      (goto-char (point-min))
+  (when (yes-or-no-p "Are you sure you want to remove all <<target>>, *, =, ~, /, and _ markers? This cannot be undone. ")
+    (let ((content (buffer-substring-no-properties (point-min) (point-max))))
       ;; Remove <<target>> markers
-      (while (re-search-forward "<<\\([^>]+\\)>>" nil t)
-        (replace-match "")
-        (just-one-space))
-      ;; Remove ** markers
-      (goto-char (point-min))
-      (while (re-search-forward "\\*\\([^*]+\\)\\*" nil t)
-        (replace-match "\\1")
-        (just-one-space))
-      ;; Remove == markers
-      (goto-char (point-min))
-      (while (re-search-forward "=\\([^=]+\\)=" nil t)
-        (replace-match "\\1")
-        (just-one-space)))
-      ;; Remove ~code~ markers
-      (goto-char (point-min))
-      (while (re-search-forward "~\\([^~]+\\)~" nil t)
-        (replace-match "\\1")
-        (just-one-space))
-      ;; Remove /Italic/ markers
-      (goto-char (point-min))
-      (while (re-search-forward "/\\([^/]+\\)/" nil t)
-        (replace-match "\\1")
-        (just-one-space))
-      ;; Remove _Underline_ markers
-      (goto-char (point-min))
-      (while (re-search-forward "_\\([^_]+\\)_" nil t)
-        (replace-match "\\1")
-        (just-one-space))
-      (message "All <<target>>, **, ~~, // and == markers have been removed."))))
+      (setq content (replace-regexp-in-string "<<\\([^>]+\\)>>" "" content))
+      
+      ;; Remove formatting markers outside of Org-mode links
+      (setq content
+            (replace-regexp-in-string
+             "\\(\\[\\[[^]]*\\]\\[.*?\\]\\]\\)\\|\\([*=~/_]\\)\\([^*=~/_\n]+?\\)\\2"
+             (lambda (match)
+               (if (match-string 1 match)
+                   ;; If it's an Org-mode link, leave it unchanged
+                   match
+                 ;; Otherwise, remove the formatting
+                 (match-string 3 match)))
+             content
+             t  ; FIXEDCASE
+             nil  ; LITERAL
+             ))
+      
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert content))
+      (message "All <<target>>, *, =, ~, /, and _ markers have been removed while preserving Org-mode links."))))
 
 (defun org-zettel-ref-clean-targets-and-sync ()
-  "Clean all <<target>> markers from the current buffer and then sync the overview."
+  "Clean all markup from the current buffer and then sync the overview."
   (interactive)
-  (org-zettel-ref-clean-targets)
+  (org-zettel-ref-clean-multiple-targets)
   (save-buffer)
-  (org-zettel-ref-sync-overview))
+  (when (fboundp 'org-zettel-ref-sync-overview)
+    (org-zettel-ref-sync-overview)))
 
 (provide 'org-zettel-ref-ui)
 

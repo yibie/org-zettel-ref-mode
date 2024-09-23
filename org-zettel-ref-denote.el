@@ -11,9 +11,9 @@
 (defun org-zettel-ref-get-overview-file-denote (source-buffer)
   "Get or create an overview file for SOURCE-BUFFER using denote mode."
   (let* ((source-file (buffer-file-name source-buffer))
-         (title (format "Overview of %s" (file-name-base source-file)))
+         (title (format "Overview - %s" (file-name-base source-file)))
          (subdir (file-name-as-directory org-zettel-ref-overview-directory))
-         (overview-file (expand-file-name (concat (file-name-base source-file) org-zettel-ref-overview-file-suffix) subdir)))
+         (overview-file (expand-file-name (concat (file-name-base source-file) ollile-suffix) subdir)))
     (unless source-file
       (error "Source buffer is not associated with a file"))
     (unless (and (boundp 'org-zettel-ref-overview-directory)

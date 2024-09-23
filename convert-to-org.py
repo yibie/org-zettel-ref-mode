@@ -10,15 +10,14 @@ import shutil
 import logging
 import venv
 import time
-from PyPDF2 import PdfReader
-
-
+import PyPDF2  # 添加这一行
+from PyPDF2 import PdfReader  # 修改这一行
+from pdf2image import convert_from_path
+import pytesseract
+from PIL import Image
 
 # Setting Log 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-
-
 
 # Setting DEFAULT path
 DEFAULT_TEMP_FOLDER = os.path.expanduser("~/Documents/temp_convert/")
@@ -177,6 +176,38 @@ def convert_epub_to_text(input_file, output_file):
         print("pandoc not found. Please install pandoc.")
     return False
 
+def convert_with_pandoc(input_file, output_file):
+    os.makedirs(IMAGES_FOLDER, exist_ok=True)
+
+    if input_file.lower().endswith('.epub'):
+        input_file = preprocess_epub(input_file)
+
+    cmd = [
+        'pandoc',
+        input_file,
+        '-o', output_file,
+        f'--extract-media={IMAGES_FOLDER}',
+        '--wrap=none',
+        f'--resource-path={IMAGES_FOLDER}'
+    ]
+    result = run_with_timeout(cmd, TIMEOUT_SECONDS)
+
+    if input_file.endswith('.fixed.epub'):
+        os.remove(input_file)
+
+    if result.returncode == 0:
+        print(f"Converted: {input_file} -> {output_file}")
+        print(f"Extracted images (if any) to: {IMAGES_FOLDER}")
+        return True
+    else:
+        print(f"Error converting {input_file}: {result.stderr}")
+        if input_file.lower().endswith('.epub'):
+            print("Attempting fallback conversion for EPUB...")
+            text_file = output_file.rsplit('.', 1)[0] + '.txt'
+            if convert_epub_to_text(input_file, text_file):
+                return convert_with_pandoc(text_file, output_file)
+        return False
+
 def convert_pdf_to_text(input_file, output_file):
     try:
         subprocess.run(['pdftotext', input_file, output_file], check=True, capture_output=True, text=True)
@@ -199,24 +230,20 @@ def is_scanned_pdf(file_path):
     Returns:
     bool: True if the PDF is likely scanned, False if it's likely digital.
     """
-    try:
-        with open(file_path, 'rb') as file:
-            reader = PdfReader(file)
-            page = reader.pages[0]  # Check only the first page
+    with open(file_path, 'rb') as file:
+        reader = PyPDF2.PdfReader(file)
+        page = reader.pages[0]  # Check only the first page
 
-            # If the page has text, it's likely a digital PDF
-            if page.extract_text().strip():
-                return False
+        # If the page has text, it's likely a digital PDF
+        if page.extract_text().strip():
+            return False
 
-            # If the page has images and no text, it's likely a scanned PDF
-            if '/XObject' in page['/Resources']:
-                return True
+        # If the page has images and no text, it's likely a scanned PDF
+        if '/XObject' in page['/Resources']:
+            return True
 
-        # If we can't determine, assume it's digital
-        return False
-    except Exception as e:
-        logging.error(f"Error processing PDF {file_path}: {str(e)}")
-        return False  # Assume digital if we can't process the file
+    # If we can't determine, assume it's digital
+    return False
 
 def ocr_pdf(input_file, output_file):
     try:
@@ -246,25 +273,15 @@ def process_pdf(input_file, output_file):
         temp_txt_file = output_file.rsplit('.', 1)[0] + '.txt'
         success = ocr_pdf(input_file, temp_txt_file)
         if success:
-            return convert_with_ebook_convert(temp_txt_file, output_file)
+            return convert_with_pandoc(temp_txt_file, output_file)
         return False
     else:
         return convert_pdf_to_text(input_file, output_file)
 
-def sanitize_filename(filename):
-    # 将空格替换为下划线
-    filename = filename.replace(' ', '_')
-    
-    # 移除非法字符,但保留中文字符
-    filename = re.sub(r'[^\w\-_\. \u4e00-\u9fff]+', '', filename)
-    
-    # 确保文件名不为空
-    if not filename:
-        filename = "untitled"
-    
-    return filename
-
-def convert_with_ebook_convert(input_file, output_file):
+def convert_mobi_to_text(input_file, output_file):
+    """
+    Convert MOBI file to text using Calibre's ebook-convert tool.
+    """
     if not EBOOK_CONVERT_PATH:
         print("ebook-convert not found. Please install Calibre.")
         return False
@@ -272,23 +289,32 @@ def convert_with_ebook_convert(input_file, output_file):
     try:
         subprocess.run([EBOOK_CONVERT_PATH, input_file, output_file],
                        check=True, capture_output=True, text=True)
-        print(f"Converted using ebook-convert: {input_file} -> {output_file}")
+        print(f"Converted MOBI to text: {input_file} -> {output_file}")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"Error converting with ebook-convert {input_file}: {e.stderr}")
+        print(f"Error converting MOBI to text {input_file}: {e.stderr}")
         return False
 
 def process_file(file, temp_folder, reference_folder, archive_folder):
-    # 处理文件名
-    sanitized_filename = sanitize_filename(os.path.splitext(file)[0])
-    file_extension = os.path.splitext(file)[1].lower()
-    
     input_file = os.path.join(temp_folder, file)
-    output_name = sanitized_filename
-    
+    file_extension = os.path.splitext(file)[1].lower()
+    output_name = os.path.splitext(file)[0]  # No sanitization
+
     if file_extension in ['.md', '.html', '.epub', '.txt', '.mobi']:
-        output_file = os.path.join(reference_folder, f"{output_name}.org")
-        success = convert_with_ebook_convert(input_file, output_file)
+        if file_extension == '.mobi':
+            # First convert MOBI to text
+            text_file = os.path.join(temp_folder, f"{output_name}.txt")
+            success = convert_mobi_to_text(input_file, text_file)
+            if success:
+                # Then convert text to org
+                output_file = os.path.join(reference_folder, f"{output_name}.org")
+                success = convert_with_pandoc(text_file, output_file)
+                os.remove(text_file)  # Remove temporary text file
+            else:
+                return False
+        else:
+            output_file = os.path.join(reference_folder, f"{output_name}.org")
+            success = convert_with_pandoc(input_file, output_file)
     elif file_extension == '.pdf':
         if is_pdf_processable(input_file):
             output_file = os.path.join(reference_folder, f"{output_name}.org")
@@ -398,23 +424,17 @@ def setup_environment():
         print("No requirements.txt file found. Skipping dependency check.")
 
 def main():
-    # 在 main 中导入模块，确保在环境设置和依赖安装之后
-    import PyPDF2
-    from pdf2image import convert_from_path
-    import pytesseract
-    from PIL import Image
-
     parser = argparse.ArgumentParser(description="Convert files to Org format")
-    parser.add_argument("--temp", help="Temporary folder path", default=DEFAULT_TEMP_FOLDER)
-    parser.add_argument("--reference", help="Reference folder path", default=DEFAULT_REFERENCE_FOLDER)
-    parser.add_argument("--archive", help="Archive folder path", default=DEFAULT_ARCHIVE_FOLDER)
+    parser.add_argument("--temp", help="Temporary folder path", required=True)
+    parser.add_argument("--reference", help="Reference folder path", required=True)
+    parser.add_argument("--archive", help="Archive folder path", required=True)
     
     args = parser.parse_args()
     
     # 使用命令行参数或默认值
-    temp_folder = args.temp
-    reference_folder = args.reference
-    archive_folder = args.archive
+    temp_folder = args.temp or DEFAULT_TEMP_FOLDER
+    reference_folder = args.reference or DEFAULT_REFERENCE_FOLDER
+    archive_folder = args.archive or DEFAULT_ARCHIVE_FOLDER
     
     print(f"Using folders:")
     print(f"Temporary folder: {temp_folder}")
@@ -431,6 +451,17 @@ def main():
                 print(f"Error creating folder {folder}: {e}")
                 print("Please manually create the folder or modify the path in the script.")
                 sys.exit(1)
+    
+    # 如果是首次运行或需要修改路径，只打印提示信息
+    if args.temp is None and args.reference is None and args.archive is None:
+        print("\nNote: You're using default folder paths. If you need to change them:")
+        print("1. Open the script file 'convert-to-org.py'")
+        print("2. Locate the following lines near the top of the file:")
+        print("   DEFAULT_TEMP_FOLDER = os.path.expanduser(\"~/Documents/temp_convert/\")")
+        print("   DEFAULT_REFERENCE_FOLDER = os.path.expanduser(\"~/Documents/ref/\")")
+        print("   DEFAULT_ARCHIVE_FOLDER = os.path.expanduser(\"/Volumes/Collect/archives/\")")
+        print("3. Modify these paths as needed")
+        print("4. Save the file and run the script again")
     
     # 处理文件
     logging.info("Starting file processing")

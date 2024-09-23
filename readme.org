@@ -4,6 +4,13 @@
 #+end_center
 
 ** Changlog
+*** Version 0.3.2 (2024-09-16)
+  - Improved compatibility with Org-roam v2: Update the record of literature notes in the overview file to the Org-roam database.
+  - Improved file naming
+  - Fix a bugs that causes Emacs crash
+  - Refined code, modularized
+   
+  
 *** Version 0.3.1 (2024-09-15)
   - Compatible with Emacs 30 and later versions.
   - Overview files now have more elegant names, reducing repetitive occurrences of the word "overview."
