@@ -8,16 +8,35 @@
 
 (require 'org-zettel-ref-core)
 
+
+(defun org-zettel-ref-slugify (title)
+  "Convert TITLE to a slug for generating filenames."
+  (let ((slug (downcase (replace-regexp-in-string "[^[:alnum:][:digit:]\u4e00-\u9fff]+" "-" title))))
+    (string-trim slug "-+")))
+
+(defun org-zettel-ref-sanitize-filename (filename)
+  "Sanitize FILENAME by replacing invalid characters with underscores.
+Preserves alphanumeric characters, Chinese characters, and some common punctuation."
+  (let ((invalid-chars-regexp "[[:cntrl:]\\/:*?\"<>|]"))
+    (replace-regexp-in-string invalid-chars-regexp "_" filename)))
+
+
+
 (defun org-zettel-ref-generate-filename (title)
   "Generate a filename based on TITLE and current mode type."
-  (let ((sanitized-title (replace-regexp-in-string "\\s-" "-" (replace-regexp-in-string "[/\\:*?\"<>|]" "" title))))
-    (cond
-     ((eq org-zettel-ref-mode-type 'org-roam)
-      (concat (org-roam-node-slug (org-roam-node-create :title title)) ".org"))
-     ((eq org-zettel-ref-mode-type 'denote)
-      (concat (format-time-string "%Y%m%dT%H%M%S") "--" sanitized-title ".org"))
-     (t
-      (concat sanitized-title ".org")))))
+  (let* ((sanitized-title (replace-regexp-in-string "[^a-zA-Z0-9\u4e00-\u9fff]+" "-" title))
+         (truncated-title (if (> (length sanitized-title) 50)
+                              (concat (substring sanitized-title 0 47) "...")
+                            sanitized-title))
+         (filename (pcase org-zettel-ref-mode-type
+                     ('normal (concat truncated-title "-overview.org"))
+                     ('denote (let ((date-time (format-time-string "%Y%m%dT%H%M%S")))
+                                (format "%s--%s__overview.org" date-time truncated-title)))
+                     ('org-roam (format "%s-overview.org" truncated-title)))))
+    (if (string-empty-p filename)
+        (error "Generated filename is empty")
+      (message "Debug: Generated filename: %s" filename))
+    filename))
 
 (defun org-zettel-ref-get-overview-buffer-name (source-buffer)
   "Get the name of the overview buffer for the given source buffer."
@@ -32,6 +51,41 @@
   (unless (and org-zettel-ref-current-overview-buffer
                (get-buffer org-zettel-ref-current-overview-buffer))
     (org-zettel-ref-init)))
+
+
+(defun org-zettel-ref-insert-quick-notes (source-buffer overview-buffer)
+  "Insert quick notes from SOURCE-BUFFER into OVERVIEW-BUFFER."
+  (with-current-buffer source-buffer
+    (org-element-map (org-element-parse-buffer) 'target
+      (lambda (target)
+        (let* ((begin (org-element-property :begin target))
+               (end (org-element-property :end target))
+               (name (org-element-property :value target))
+               (content (buffer-substring-no-properties begin end)))
+          (when (string-match "<<\\([^>]+\\)>>\\(.*\\)" content)
+            (let ((note-name (match-string 1 content))
+                  (note-content (string-trim (match-string 2 content))))
+              (with-current-buffer overview-buffer
+                (let ((inhibit-read-only t))
+                  (insert (format "- [[file:%s::%s][%s]]\n"
+                                  (buffer-file-name source-buffer)
+                                  note-name
+                                  (if (string-empty-p note-content)
+                                      note-name
+                                    note-content))))))))))))
+
+(defun org-zettel-ref-insert-marked-text (source-buffer overview-buffer)
+  "Insert marked text from SOURCE-BUFFER into OVERVIEW-BUFFER."
+  (with-current-buffer source-buffer
+    (org-element-map (org-element-parse-buffer) '(bold underline verbatim code)
+      (lambda (element)
+        (let* ((begin (org-element-property :begin element))
+               (end (org-element-property :end element))
+               (raw-text (string-trim (buffer-substring-no-properties begin end))))
+          (when (and raw-text (not (string-empty-p raw-text)))
+            (with-current-buffer overview-buffer
+              (let ((inhibit-read-only t))
+                (insert (format "- %s\n" raw-text))))))))))
 
 (provide 'org-zettel-ref-utils)
 

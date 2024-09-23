@@ -11,49 +11,26 @@
 (declare-function org-roam-node-create "ext:org-roam" t)
 (declare-function org-roam-node-slug "ext:org-roam" t)
 
+(defvar org-zettel-ref-mode-type 'org-roam 
+  "The type of mode to use for org-zettel-ref.
+Can be 'normal, 'denote, or 'org-roam.")
+
+
+
 (defun org-zettel-ref-get-overview-file-org-roam (source-buffer)
-  "Get or create an overview file for SOURCE-BUFFER using org-roam API."
+  "Get or create an overview file for SOURCE-BUFFER using org-roam mode."
   (let* ((source-file (buffer-file-name source-buffer))
-         (title (if source-file
-                    (format "Overview - %s" (file-name-base source-file))
-                  (format "Overview - %s" (buffer-name source-buffer))))
-         file-path)
-    (message "Debug: Starting org-zettel-ref-get-overview-file for %s" title)
-    (condition-case err
-        (progn
-          (message "Debug: org-roam loaded successfully. Version: %s" (org-roam-version))
-          (let ((existing-node (org-roam-node-from-title-or-alias title)))
-            (if existing-node
-                (progn
-                  (setq file-path (org-roam-node-file existing-node))
-                  (message "Debug: Existing node found. File path: %s" file-path))
-              (message "Debug: No existing node found, creating new one")
-              (let* ((id (org-id-new))
-                     (slug (org-roam-node-slug (org-roam-node-create :title title)))
-                     (new-file (expand-file-name (concat slug ".org") org-roam-directory)))
-                (unless (file-exists-p new-file)
-                  (with-temp-file new-file
-                    (insert (format ":PROPERTIES:
-:ID:       %s
-:END:
-#+title: %s
-#+filetags: :overview:
-
-* Overview
-
-This is an overview of the buffer \"%s\".
-
-* Quick Notes
-
-* Marked Text
-
-"
-                                    id title (buffer-name source-buffer)))))
-                (setq file-path new-file)
-                (message "Debug: New node created. File path: %s" file-path)))))
-      (error
-       (message "Error in org-roam operations: %S" err))))
-    file-path)
+         (title (format "Overview of %s" (file-name-base source-file)))
+         (file-path (expand-file-name (concat (replace-regexp-in-string "[^a-zA-Z0-9\u4e00-\u9fa5]" "-" title) (or org-zettel-ref-overview-file-suffix ".org"))
+                                      org-zettel-ref-overview-directory)))
+    (unless source-file
+      (error "Source buffer is not associated with a file"))
+    (unless (file-exists-p file-path)
+      (with-temp-file file-path
+        (insert (format "#+title: %s\n\n* Overview\n\n* Quick Notes\n\n* Marked Text\n" title))))
+    (message "Debug: Org-roam file-path is %s" file-path)
+    (org-roam-db-sync)
+    file-path))
 
 (when (eq org-zettel-ref-mode-type 'org-roam)
   (require 'org-roam))

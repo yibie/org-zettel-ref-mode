@@ -9,9 +9,9 @@
 (require 'org-zettel-ref-core)
 (require 'org-zettel-ref-org-roam)
 
-(defvar org-zettel-ref-mode-type 'org-roam 
-  "The type of mode to use for org-zettel-ref.
-Can be 'normal, 'denote, or 'org-roam.")
+;;;----------------------------------------------------------------------------
+;;; Org-roam Database intergration
+;;;----------------------------------------------------------------------------
 
 (defun org-zettel-ref-update-roam-db (file)
   "Update Org-roam database for FILE using org-roam-db-query."
@@ -53,6 +53,38 @@ Can be 'normal, 'denote, or 'org-roam.")
         (error
          (message "Error checking org-roam database: %S" err)))
     (message "Org-roam is not available")))
+
+;;;----------------------------------------------------------------------------
+;;; Denote&Normal Index Source File
+;;;----------------------------------------------------------------------------
+
+(defvar org-zettel-ref-overview-index (make-hash-table :test 'equal)
+  "Hash table storing the mapping of source files to overview files.")
+
+(defun org-zettel-ref-load-index ()
+  "Load the overview index from a file."
+  (let ((index-file (expand-file-name ".overview-index.el" org-zettel-ref-overview-directory)))
+    (if (file-exists-p index-file)
+        (with-temp-buffer
+          (insert-file-contents index-file)
+          (setq org-zettel-ref-overview-index (read (current-buffer))))
+      (setq org-zettel-ref-overview-index (make-hash-table :test 'equal)))))
+
+(defun org-zettel-ref-save-index ()
+  "Save the overview index to a file."
+  (let ((index-file (expand-file-name ".overview-index.el" org-zettel-ref-overview-directory)))
+    (with-temp-file index-file
+      (prin1 org-zettel-ref-overview-index (current-buffer)))))
+
+(defun org-zettel-ref-update-index (source-file overview-file)
+  "Update the index with a new or existing SOURCE-FILE to OVERVIEW-FILE mapping."
+  (puthash source-file overview-file org-zettel-ref-overview-index)
+  (org-zettel-ref-save-index)
+  (message "Debug: Updated index with %s -> %s" source-file overview-file))
+
+(defun org-zettel-ref-get-overview-from-index (source-file)
+  "Get the overview file for SOURCE-FILE from the index."
+  (gethash source-file org-zettel-ref-overview-index))
 
 
 (provide 'org-zettel-ref-db)

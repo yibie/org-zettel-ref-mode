@@ -12,9 +12,12 @@
          (title (format "Overview of %s" (file-name-base source-file)))
          (file-path (expand-file-name (concat (replace-regexp-in-string "[^a-zA-Z0-9]" "-" title) (or org-zettel-ref-overview-file-suffix ".org"))
                                       org-zettel-ref-overview-directory)))
+    (unless source-file
+      (error "Source buffer is not associated with a file"))
     (unless (file-exists-p file-path)
       (with-temp-file file-path
         (insert (format "#+title: %s\n\n* Overview\n\n* Quick Notes\n\n* Marked Text\n" title))))
+    (message "Debug: Normal file-path is %s" file-path)
     file-path))
 
 (provide 'org-zettel-ref-normal)

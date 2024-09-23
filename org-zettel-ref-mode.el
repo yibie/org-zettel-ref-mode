@@ -20,6 +20,7 @@
 (require 'org-zettel-ref-db)
 (require 'org-zettel-ref-utils)
 
+
 (defun org-zettel-ref-load-backend ()
   "Load the appropriate backend based on org-zettel-ref-mode-type."
   (cond
@@ -32,9 +33,6 @@
 
 
 (org-zettel-ref-load-backend)
-
-
-
 
 
 ;;;###autoload

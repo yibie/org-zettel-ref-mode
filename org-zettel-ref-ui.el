@@ -6,38 +6,42 @@
 
 ;;; Code:
 
+(require 'org-zettel-ref-core)
+
+
+
+(defun org-zettel-ref-add-quick-note ()
+  "Add a quick note to the current buffer."
+  (interactive)
+  (let* ((source-buffer (current-buffer))
+         (note-name (read-string "Enter note: ")))
+    ;; Source buffer insert note
+    (insert (format "<<%s>>" note-name))
+    ;; Sync to overview file
+    (org-zettel-ref-sync-overview)))
+
 (defun org-zettel-ref-quick-markup ()
   "Quickly apply org-mode markup to the region or insert at point."
   (interactive)
-  (let* ((markup-types '(("Bold" . "*")
+  (let* (markup-types '(("Bold" . "*")
                          ("Italic" . "/")
                          ("Underline" . "_")
                          ("Code" . "~")
                          ("Verbatim" . "=")
-                         ("Strikethrough" . "+")
-                         ("Quick Note" . "<<")))
+                         ("Strikethrough" . "+")))
          (markup (completing-read "Choose markup: " markup-types nil t))
          (marker (cdr (assoc markup markup-types)))
-         (is-quick-note (string= marker "<<"))
          (region-active (use-region-p))
          (beg (if region-active (region-beginning) (point)))
          (end (if region-active (region-end) (point))))
-
-    (if is-quick-note
-        (let ((note-name (read-string "Enter quick note name: ")))
-          (if region-active
-              (let ((content (buffer-substring-no-properties beg end)))
-                (delete-region beg end)
-                (insert (format "<<%s>> %s" note-name content)))
-            (insert (format "<<%s>> " note-name))))
-      (if region-active
-          (progn
-            (goto-char end)
-            (insert marker)
-            (goto-char beg)
-            (insert marker))
-        (insert marker marker)
-        (backward-char)))))
+    (if region-active
+        (progn
+          (goto-char end)
+          (insert marker)
+          (goto-char beg)
+          (insert marker))
+      (insert marker marker)
+      (backward-char))))
 
 (defcustom org-zettel-ref-quick-markup-key "C-c m"
   "Key binding for quick markup function in org-zettel-ref-mode.
@@ -61,15 +65,30 @@ This should be a string that can be passed to `kbd'."
         (just-one-space))
       ;; Remove ** markers
       (goto-char (point-min))
-      (while (re-search-forward "\\*\\*\\([^*]+\\)\\*\\*" nil t)
+      (while (re-search-forward "\\*\\([^*]+\\)\\*" nil t)
         (replace-match "\\1")
         (just-one-space))
       ;; Remove == markers
       (goto-char (point-min))
-      (while (re-search-forward "==\\([^=]+\\)==" nil t)
+      (while (re-search-forward "=\\([^=]+\\)=" nil t)
         (replace-match "\\1")
         (just-one-space)))
-    (message "All <<target>>, **, and == markers have been removed.")))
+      ;; Remove ~code~ markers
+      (goto-char (point-min))
+      (while (re-search-forward "~\\([^~]+\\)~" nil t)
+        (replace-match "\\1")
+        (just-one-space))
+      ;; Remove /Italic/ markers
+      (goto-char (point-min))
+      (while (re-search-forward "/\\([^/]+\\)/" nil t)
+        (replace-match "\\1")
+        (just-one-space))
+      ;; Remove _Underline_ markers
+      (goto-char (point-min))
+      (while (re-search-forward "_\\([^_]+\\)_" nil t)
+        (replace-match "\\1")
+        (just-one-space))
+      (message "All <<target>>, **, ~~, // and == markers have been removed."))))
 
 (defun org-zettel-ref-clean-targets-and-sync ()
   "Clean all <<target>> markers from the current buffer and then sync the overview."
