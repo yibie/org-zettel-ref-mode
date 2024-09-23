@@ -9,10 +9,6 @@
 (require 'org)
 (require 'org-element)
 
-(require 'org-zettel-ref-org-roam)
-(require 'org-zettel-ref-denote)
-(require 'org-zettel-ref-normal)
-
 (defgroup org-zettel-ref nil
   "Customization group for org-zettel-ref."
   :group 'org)
@@ -30,7 +26,7 @@ Can be 'normal, 'denote, or 'org-roam."
                  (const :tag "Org-roam" org-roam))
   :group 'org-zettel-ref)
 
-(defcustom org-zettel-ref-overview-file-suffix "__overview"
+(defcustom org-zettel-ref-overview-file-suffix "__overview.org"
   "Suffix to be added to overview files created by org-zettel-ref in Denote mode.
 This suffix will be appended to the filename before the file extension."
   :type 'string
@@ -68,7 +64,8 @@ This suffix will be appended to the filename before the file extension."
           (setq org-zettel-ref-current-overview-buffer (buffer-name))
           (org-zettel-ref-setup-buffers source-buffer (current-buffer))
           (message "Debug: org-zettel-ref-init completed")
-          (run-with-timer 0.5 nil #'org-zettel-ref-update-roam-db overview-file))))))
+          (when (eq org-zettel-ref-mode-type 'org-roam)
+            (run-with-timer 0.5 nil #'org-zettel-ref-update-roam-db overview-file)))))))
 
 (defun org-zettel-ref-get-overview-file (source-buffer)
   "Get or create an overview file for SOURCE-BUFFER."
@@ -176,6 +173,7 @@ Otherwise, it calls the original `org-open-at-point' function."
           (re-search-forward (concat "<<" (regexp-quote target) ">>") nil t)
           (org-reveal))
       (apply orig-fun args))))
+
 
 (provide 'org-zettel-ref-core)
 

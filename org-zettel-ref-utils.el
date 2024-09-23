@@ -10,7 +10,7 @@
 
 (defun org-zettel-ref-generate-filename (title)
   "Generate a filename based on TITLE and current mode type."
-  (let ((sanitized-title (replace-regexp-in-string "[^a-zA-Z0-9]" "-" title)))
+  (let ((sanitized-title (replace-regexp-in-string "\\s-" "-" (replace-regexp-in-string "[/\\:*?\"<>|]" "" title))))
     (cond
      ((eq org-zettel-ref-mode-type 'org-roam)
       (concat (org-roam-node-slug (org-roam-node-create :title title)) ".org"))

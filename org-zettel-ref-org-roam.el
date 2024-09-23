@@ -6,8 +6,10 @@
 
 ;;; Code:
 
-(when (eq org-zettel-ref-mode-type 'org-roam)
-  (require 'org-roam))
+(require 'org-zettel-ref-core)
+
+(declare-function org-roam-node-create "ext:org-roam" t)
+(declare-function org-roam-node-slug "ext:org-roam" t)
 
 (defun org-zettel-ref-get-overview-file-org-roam (source-buffer)
   "Get or create an overview file for SOURCE-BUFFER using org-roam API."
@@ -50,11 +52,11 @@ This is an overview of the buffer \"%s\".
                 (setq file-path new-file)
                 (message "Debug: New node created. File path: %s" file-path)))))
       (error
-       (message "Error in org-roam operations: %S" err)
-       (setq org-zettel-ref-mode-type 'normal)))
-    file-path))
+       (message "Error in org-roam operations: %S" err))))
+    file-path)
 
-
+(when (eq org-zettel-ref-mode-type 'org-roam)
+  (require 'org-roam))
 
 (provide 'org-zettel-ref-org-roam)
 

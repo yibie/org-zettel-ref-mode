@@ -9,6 +9,23 @@
 (require 'org-zettel-ref-core)
 (require 'org-zettel-ref-org-roam)
 
+(defvar org-zettel-ref-mode-type 'org-roam 
+  "The type of mode to use for org-zettel-ref.
+Can be 'normal, 'denote, or 'org-roam.")
+
+(defun org-zettel-ref-update-roam-db (file)
+  "Update Org-roam database for FILE using org-roam-db-query."
+  (let ((node (org-roam-db-query
+               [:select * :from nodes
+                :where (= file $s1)]
+               file)))
+    (if node
+        (progn
+          ;; add update org-roam-db-query here
+          (message "update Org-roam database, node ID: %s, title: %s"
+                   (gethash "id" (car node))
+                   (gethash "title" (car node)))))))
+
 (defun org-zettel-ref-db-update (file)
   "Update database for FILE."
   (cond
@@ -17,21 +34,7 @@
    ;; Add other database update methods here if needed
    (t (message "No database update method for current mode type"))))
 
-(defun org-zettel-ref-update-roam-db (file)
-  "Update org-roam database for FILE."
-  (when (and (eq org-zettel-ref-mode-type 'org-roam)
-             (require 'org-roam nil t))
-    (condition-case err
-        (progn
-          (org-roam-db-update-file file)
-          (message "Debug: org-roam database updated for %s" file)
-          (let ((node (org-roam-node-from-file file)))
-            (when node
-              (message "Debug: Node ID: %s, Title: %s" 
-                       (org-roam-node-id node) 
-                       (org-roam-node-title node)))))
-      (error
-       (message "Error updating org-roam database: %S" err)))))
+
 
 (defun org-zettel-ref-check-roam-db ()
   "Check the status of the org-roam database."
@@ -51,18 +54,6 @@
          (message "Error checking org-roam database: %S" err)))
     (message "Org-roam is not available")))
 
-(defun org-zettel-ref-update-roam-db (file)
-  "Update Org-roam database for FILE using org-roam-db-query."
-  (let ((node (org-roam-db-query
-               [:select * :from nodes
-                :where (= file $s1)]
-               file)))
-    (if node
-        (progn
-          ;; add update org-roam-db-query here
-          (message "update Org-roam database, node ID: %s, title: %s"
-                   (gethash "id" (car node))
-                   (gethash "title" (car node)))))))
 
 (provide 'org-zettel-ref-db)
 

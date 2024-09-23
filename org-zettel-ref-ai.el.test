@@ -1,0 +1,35 @@
+;; (require 'gptel)
+;; (require 'ellama)
+
+(defcustom org-zettel-ref-ai-backend 'gptel
+  "Backend to use for AI operations. Can be 'gptel or 'ellama."
+  :type '(choice (const :tag "GPTel" gptel)
+                 (const :tag "Ellama" ellama))
+  :group 'org-zettel-ref)
+
+(defun org-zettel-ref-ai-generate-summary (file-path)
+  "Generate a summary for the given file using AI."
+  (let* ((file-content (with-temp-buffer
+                         (insert-file-contents file-path)
+                         (buffer-string)))
+         (prompt (format "Summarize the following content in 3 sentences, using symbolic logic and addressing the 5W1H elements:\n\n%s" file-content))
+         (summary (cond
+                   ((eq org-zettel-ref-ai-backend 'gptel)
+                    (gptel-request prompt
+                                   :system "You are a helpful assistant that summarizes text concisely."
+                                   :stream nil))
+                   ((eq org-zettel-ref-ai-backend 'ellama)
+                    (ellama-complete prompt))
+                   (t (error "Invalid AI backend specified")))))
+    (if (stringp summary)
+        summary
+      (error "Failed to generate summary"))))
+
+(defun org-zettel-ref-ai-insert-summary (file-path)
+  "Insert an AI-generated summary for the given file."
+  (let ((summary (org-zettel-ref-ai-generate-summary file-path)))
+    (goto-char (point-min))
+    (unless (re-search-forward "^\\* Summary" nil t)
+      (insert "* Summary\n\n")
+      (insert summary)
+      (insert "\n\n"))))
