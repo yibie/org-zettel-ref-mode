@@ -5,15 +5,19 @@
 ;; This file contains denote integration for org-zettel-ref.
 
 ;;; Code:
+
+(require 'org-zettel-ref-core)
 (when (eq org-zettel-ref-mode-type 'denote)
   (require 'denote))
 
 (defun org-zettel-ref-get-overview-file-denote (source-buffer)
   "Get or create an overview file for SOURCE-BUFFER using denote mode."
   (let* ((source-file (buffer-file-name source-buffer))
-         (title (format "Overview - %s" (file-name-base source-file)))
+         (base-title (file-name-base source-file))
+         (title (format "Overview - %s" base-title))
          (subdir (file-name-as-directory org-zettel-ref-overview-directory))
-         (overview-file (expand-file-name (concat (file-name-base source-file) ollile-suffix) subdir)))
+         (filename (org-zettel-ref-generate-filename title))
+         (overview-file (expand-file-name filename subdir)))
     (unless source-file
       (error "Source buffer is not associated with a file"))
     (unless (and (boundp 'org-zettel-ref-overview-directory)

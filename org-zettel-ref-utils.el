@@ -22,7 +22,8 @@ Preserves alphanumeric characters, Chinese characters, and some common punctuati
 
 (defun org-zettel-ref-generate-filename (title)
   "Generate a filename based on TITLE and current mode type."
-  (let* ((sanitized-title (replace-regexp-in-string "[^a-zA-Z0-9\u4e00-\u9fff]+" "-" title))
+  (let* ((clean-title (replace-regexp-in-string "^Overview - " "" title))
+         (sanitized-title (replace-regexp-in-string "[^a-zA-Z0-9\u4e00-\u9fff]+" "-" clean-title))
          (truncated-title (if (> (length sanitized-title) 50)
                               (concat (substring sanitized-title 0 47) "...")
                             sanitized-title))
