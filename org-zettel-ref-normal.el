@@ -6,21 +6,22 @@
 
 ;;; Code:
 
-(defun org-zettel-ref-get-overview-file-normal (source-buffer)
-  "Get or create an overview file for SOURCE-BUFFER using normal mode."
-  (let* ((source-file (buffer-file-name source-buffer))
-         (base-name (file-name-base source-file))
+(defun org-zettel-ref-get-normal-overview (file-path source-buffer source-file)
+  "Create a normal overview file at FILE-PATH for SOURCE-BUFFER with SOURCE-FILE."
+  (let* ((base-name (file-name-base source-file))
          (title (format "Overview - %s" base-name))
-         (sanitized-name (replace-regexp-in-string "[^a-zA-Z0-9\u4e00-\u9fa5]" "-" base-name))
-         (file-name (concat sanitized-name "-overview.org"))
-         (file-path (expand-file-name file-name org-zettel-ref-overview-directory)))
-    (unless source-file
-      (error "Source buffer is not associated with a file"))
-    (unless (file-exists-p file-path)
-      (with-temp-file file-path
-        (insert (format "#+title: %s\n#+filetags: :overview:\n\n* Overview\n\n* Quick Notes\n\n* Marked Text\n" title))))
-    (message "Debug: Normal file-path is %s" file-path)
-    file-path))
+         (generated-filename (org-zettel-ref-generate-filename title))
+         (overview-file-path (expand-file-name generated-filename org-zettel-ref-overview-directory)))
+    (unless (file-exists-p overview-file-path)
+      (with-temp-file overview-file-path
+        (insert (format "#+title: %s\n" title))
+        (insert (format "#+SOURCE_FILE: %s\n" source-file))
+        (insert "#+filetags: :overview:\n\n")
+        (insert "* Quick Notes\n\n* Marked Text\n")))
+    (message "Debug: Normal file-path is %s" overview-file-path)
+    overview-file-path))
+
+
 (provide 'org-zettel-ref-normal)
 
 ;;; org-zettel-ref-normal.el ends here

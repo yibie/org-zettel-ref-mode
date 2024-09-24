@@ -78,7 +78,7 @@ This suffix will be appended to the filename before the file extension."
              (file-path (expand-file-name file-name org-zettel-ref-overview-directory))
              (new-overview
               (pcase org-zettel-ref-mode-type
-                ('normal (org-zettel-ref-get-normal-overview file-path (org-zettel-ref-generate-file-content source-buffer title) source-file))
+                ('normal (org-zettel-ref-get-normal-overview nil source-buffer  source-file))
                 ('denote (org-zettel-ref-get-overview-file-denote source-buffer))
                 ('org-roam (org-zettel-ref-get-overview-file-org-roam source-buffer))
                 (_ (error "Unsupported org-zettel-ref-mode-type: %s" org-zettel-ref-mode-type)))))
