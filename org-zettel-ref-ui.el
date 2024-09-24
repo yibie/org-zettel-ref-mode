@@ -37,16 +37,12 @@
     (if region-active
         (progn
           (goto-char end)
-          (unless (bolp) (insert "\n"))
           (insert marker)
           (goto-char beg)
-          (insert marker)
-          (unless (bolp) (insert "\n")))
+          (insert marker))
       (insert marker marker)
-      (backward-char))
-    ;; sync to overview
-    (org-zettel-ref-sync-overview)
-    (message "Marked text synced to overview file")))
+      (backward-char))))
+
 
 (defcustom org-zettel-ref-quick-markup-key "C-c m"
   "Key binding for quick markup function in org-zettel-ref-mode.
