@@ -7,11 +7,15 @@
 ;;; Code:
 
 (require 'org-zettel-ref-core)
-(require 'org-zettel-ref-org-roam)
+(require 'org-roam nil t)  ; Safely attempt to load org-roam
+(require 'denote nil t)  ; Safely attempt to load denote
 
 ;;;----------------------------------------------------------------------------
 ;;; Org-roam Database intergration
 ;;;----------------------------------------------------------------------------
+
+(declare-function org-zettel-ref-refresh-index "org-zettel-ref-core")
+
 
 (defun org-zettel-ref-update-roam-db (file)
   "Update Org-roam database for FILE using org-roam-db-query."
@@ -24,7 +28,8 @@
           ;; add update org-roam-db-query here
           (message "update Org-roam database, node ID: %s, title: %s"
                    (gethash "id" (car node))
-                   (gethash "title" (car node)))))))
+                   (gethash "title" (car node))))
+        (message "Node not found in Org-roam database: %s" file))))
 
 (defun org-zettel-ref-db-update (file)
   "Update database for FILE."
@@ -91,13 +96,20 @@
   (interactive)
   (let ((repaired 0))
     (maphash (lambda (source-file overview-file)
-                (unless (file-exists-p source-file)
-                  (remhash source-file org-zettel-ref-overview-index)
-                  (setq repaired (1+ repaired)))
-                (unless (file-exists-p overview-file)
-                  (org-zettel-ref-ensure-overview-file source-file)
-                  (setq repaired (1+ repaired))))
-              org-zettel-ref-overview-index)
+               ;; check source file if exists
+               (unless (file-exists-p source-file)
+                 (remhash source-file org-zettel-ref-overview-index)
+                 (setq repaired (1+ repaired)))
+               ;; check overview file if exists
+               (unless (file-exists-p overview-file)
+                 ;; create missing overview file using `org-zettel-ref-get-overview-file`
+                 ;; since `org-zettel-ref-get-overview-file` needs a buffer, we can temporarily create a buffer
+                 (with-temp-buffer
+                   (insert-file-contents source-file)
+                   (let ((source-buffer (current-buffer)))
+                     (org-zettel-ref-get-overview-file source-buffer)))
+                 (setq repaired (1+ repaired))))
+             org-zettel-ref-overview-index)
     (org-zettel-ref-save-index)
     (message "Checked and repaired %d links." repaired)))
 
@@ -133,6 +145,17 @@ Your choice: "
      ((eq choice ?s) (org-zettel-ref-status))
      ((eq choice ?q) (message "Quit")))))
 
+
+
+(defun org-zettel-ref-refresh-index ()
+  "Refresh the org-zettel-ref index."
+  (interactive)
+  (let ((index-file (expand-file-name ".overview-index.el" org-zettel-ref-overview-directory)))
+    (when (file-exists-p index-file)
+      (delete-file index-file))
+    (setq org-zettel-ref-overview-index (make-hash-table :test 'equal))
+    (org-zettel-ref-save-index)
+    (message "Index refreshed and saved to %s" index-file)))
 
 (provide 'org-zettel-ref-db)
 

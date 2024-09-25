@@ -6,9 +6,9 @@
 
 ;;; Code:
 
-(require 'org-zettel-ref-core)
-
-
+;;----------------------------------------------------------------
+;; START: File namming
+;;----------------------------------------------------------------
 (defun org-zettel-ref-slugify (title)
   "Convert TITLE to a slug for generating filenames."
   (let ((slug (downcase (replace-regexp-in-string "[^[:alnum:][:digit:]\u4e00-\u9fff]+" "-" title))))
@@ -22,8 +22,7 @@ Preserves alphanumeric characters, Chinese characters, and some common punctuati
 
 (defun org-zettel-ref-generate-filename (title)
   "Generate a filename based on TITLE and current mode type."
-  (let* ((clean-title (replace-regexp-in-string "^Overview - " "" title))
-         (sanitized-title (replace-regexp-in-string "[^a-zA-Z0-9\u4e00-\u9fff]+" "-" clean-title))
+  (let* ((sanitized-title (replace-regexp-in-string "[^a-zA-Z0-9\u4e00-\u9fff]+" "-" title))
          (truncated-title (if (> (length sanitized-title) 50)
                               (concat (substring sanitized-title 0 47) "...")
                             sanitized-title))
@@ -31,27 +30,25 @@ Preserves alphanumeric characters, Chinese characters, and some common punctuati
                      ('normal (concat truncated-title "-overview.org"))
                      ('denote (let ((date-time (format-time-string "%Y%m%dT%H%M%S")))
                                 (format "%s--%s__overview.org" date-time truncated-title)))
-                     ('org-roam (format "%s__overview.org" truncated-title)))))
+                     ('org-roam (format "%s-overview.org" truncated-title)))))
     (if (string-empty-p filename)
         (error "Generated filename is empty")
       (message "Debug: Generated filename: %s" filename))
     filename))
 
-(defun org-zettel-ref-get-overview-buffer-name (source-buffer)
-  "Get the name of the overview buffer for the given source buffer."
-  (let* ((source-file-name (buffer-file-name source-buffer))
-         (overview-file-name (org-zettel-ref-generate-filename
-                              (file-name-base source-file-name)))
-         (buffer-name (format "*Org Zettel Ref: %s*" overview-file-name)))
-    (generate-new-buffer-name buffer-name)))
-
 (defun org-zettel-ref-ensure-overview-buffer ()
   "Ensure that the overview buffer exists, creating it if necessary."
   (unless (and org-zettel-ref-current-overview-buffer
-               (get-buffer org-zettel-ref-current-overview-buffer))
+               (buffer-live-p org-zettel-ref-current-overview-buffer))
     (org-zettel-ref-init)))
 
+;;----------------------------------------------------------------
+;; END:  File namming
+;;----------------------------------------------------------------
 
+;;----------------------------------------------------------------
+;; START: org-zettel-ref-insert-quick-notes and marked-text
+;;----------------------------------------------------------------  
 (defun org-zettel-ref-insert-quick-notes (source-buffer overview-buffer)
   "Insert quick notes from SOURCE-BUFFER into OVERVIEW-BUFFER."
   (with-current-buffer source-buffer
@@ -59,7 +56,6 @@ Preserves alphanumeric characters, Chinese characters, and some common punctuati
       (lambda (target)
         (let* ((begin (org-element-property :begin target))
                (end (org-element-property :end target))
-               (name (org-element-property :value target))
                (content (buffer-substring-no-properties begin end)))
           (when (string-match "<<\\([^>]+\\)>>\\(.*\\)" content)
             (let ((note-name (match-string 1 content))
@@ -86,8 +82,9 @@ Preserves alphanumeric characters, Chinese characters, and some common punctuati
               (let ((inhibit-read-only t))
                 (insert (format "- %s\n" raw-text))))))))))
 
-
-;;org-zettel-ref-run-python-script
+;;----------------------------------------------------------------
+;; START: org-zettel-ref-run-python-script
+;;---------------------------------------------------------------- 
 
 (defcustom org-zettel-ref-python-file "~/Documents/emacs/package/org-zettel-ref-mode/document_convert_to_org.py"
   "Python script file path."
@@ -120,7 +117,7 @@ Preserves alphanumeric characters, Chinese characters, and some common punctuati
   (interactive)
   (let* ((script-path (expand-file-name org-zettel-ref-python-file))
          (default-directory (file-name-directory script-path))
-         (python-path (executable-find "python"))
+         (python-path (executable-find "python3"))
          (temp-folder (expand-file-name org-zettel-ref-temp-folder))
          (reference-folder (expand-file-name org-zettel-ref-reference-folder))
          (archive-folder (expand-file-name org-zettel-ref-archive-folder)))
@@ -146,6 +143,10 @@ Preserves alphanumeric characters, Chinese characters, and some common punctuati
         (async-shell-command command "*Convert to Org*")
         (with-current-buffer "*Convert to Org*"
           (org-zettel-ref-debug-message "Python script output:\n%s" (buffer-string))))))))
+
+;;----------------------------------------------------------------
+;; END: org-zettel-ref-run-python-script
+;;----------------------------------------------------------------
 
 (provide 'org-zettel-ref-utils)
 

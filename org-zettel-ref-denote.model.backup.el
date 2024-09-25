@@ -6,18 +6,37 @@
 
 ;;; Code:
 
-(require 'org-zettel-ref-core)
-(when (eq org-zettel-ref-mode-type 'denote)
-  (require 'denote))
+;; 预声明来自 org-zettel-ref-core 的函数和变量
+(declare-function org-zettel-ref-update-index "org-zettel-ref-core")
+(declare-function org-zettel-ref-sanitize-filename "org-zettel-ref-core")
+(defvar org-zettel-ref-overview-directory)
+(defvar org-zettel-ref-mode-type)
+(defvar org-zettel-ref-overview-file-suffix)
+
+(require 'denote nil t)  ; 安全地尝试加载 denote
+
+(defun org-zettel-ref-denote-title (title)
+  "Generate a title for Denote by directly using the source file name."
+  (org-zettel-ref-sanitize-filename title))
+
+(defun org-zettel-ref-denote-slug-title (title)
+  "Generate a slug from TITLE for Denote."
+  (replace-regexp-in-string "[^a-zA-Z0-9-]" "-" (downcase title)))
+
+(defun org-zettel-ref-find-denote-overview-file (slug-title)
+  "Find an existing Denote overview file matching SLUG-TITLE."
+  (let ((files (directory-files org-zettel-ref-overview-directory t "__overview\\.org$")))
+    (cl-find-if
+     (lambda (file)
+       (string-match-p (regexp-quote slug-title) (file-name-nondirectory file)))
+     files)))
 
 (defun org-zettel-ref-get-overview-file-denote (source-buffer)
   "Get or create an overview file for SOURCE-BUFFER using denote mode."
   (let* ((source-file (buffer-file-name source-buffer))
-         (base-title (file-name-base source-file))
-         (title (format "Overview - %s" base-title))
+         (title (format "Overview - %s" (file-name-base source-file)))
          (subdir (file-name-as-directory org-zettel-ref-overview-directory))
-         (filename (org-zettel-ref-generate-filename title))
-         (overview-file (expand-file-name filename subdir)))
+         (overview-file (expand-file-name (concat (file-name-base source-file) org-zettel-ref-overview-file-suffix) subdir)))
     (unless source-file
       (error "Source buffer is not associated with a file"))
     (unless (and (boundp 'org-zettel-ref-overview-directory)
@@ -41,10 +60,13 @@
     (message "Returning new file path: %s" overview-file)
     overview-file))
 
-(defun org-zettel-ref-get-overview-file-denote-path (source-buffer)
-  "Get the path for the overview file for SOURCE-BUFFER using denote API."
-  (org-zettel-ref-get-overview-file-denote source-buffer))
+
+;; Load more functions from org-zettel-ref-core
+
+;(with-eval-after-load 'org-zettel-ref-core
+;)
 
 (provide 'org-zettel-ref-denote)
+
 
 ;;; org-zettel-ref-denote.el ends here

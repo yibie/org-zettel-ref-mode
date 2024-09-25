@@ -6,8 +6,13 @@
 
 ;;; Code:
 
-(defun org-zettel-ref-get-normal-overview (file-path source-buffer source-file)
-  "Create a normal overview file at FILE-PATH for SOURCE-BUFFER with SOURCE-FILE."
+(require 'org-zettel-ref-core)
+(require 'org-zettel-ref-utils)
+
+(defvar org-zettel-ref-overview-directory)
+
+(defun org-zettel-ref-get-normal-overview (source-buffer source-file)
+  "Create a normal overview file for SOURCE-BUFFER with SOURCE-FILE."
   (let* ((base-name (file-name-base source-file))
          (title (format "Overview - %s" base-name))
          (generated-filename (org-zettel-ref-generate-filename title))
@@ -20,7 +25,6 @@
         (insert "* Quick Notes\n\n* Marked Text\n")))
     (message "Debug: Normal file-path is %s" overview-file-path)
     overview-file-path))
-
 
 (provide 'org-zettel-ref-normal)
 

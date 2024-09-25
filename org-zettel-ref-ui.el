@@ -13,8 +13,7 @@
 (defun org-zettel-ref-add-quick-note ()
   "Add a quick note to the current buffer."
   (interactive)
-  (let* ((source-buffer (current-buffer))
-         (note-name (read-string "Enter note: ")))
+  (let* ((note-name (read-string "Enter note: ")))
     ;; Source buffer insert note
     (insert (format "<<%s>>" note-name))
     ;; Sync to overview file

@@ -20,23 +20,6 @@
 (require 'org-zettel-ref-db)
 (require 'org-zettel-ref-utils)
 
-(defun org-zettel-ref-load-backend ()
-  "Load the appropriate backend based on org-zettel-ref-mode-type."
-  (cond
-   ((eq org-zettel-ref-mode-type 'org-roam)
-    (require 'org-zettel-ref-org-roam))
-   ((eq org-zettel-ref-mode-type 'denote)
-    (require 'org-zettel-ref-denote))
-   (t
-    (require 'org-zettel-ref-normal))))
-
-
-(org-zettel-ref-load-backend)
-
-
-
-
-
 ;;;###autoload
 (define-minor-mode org-zettel-ref-mode
   "Minor mode for managing reference notes in Org mode."

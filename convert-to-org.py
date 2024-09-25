@@ -83,10 +83,10 @@ def is_pdf_processable(file_path):
     return os.path.getsize(file_path) / (1024 * 1024) <= MAX_PDF_SIZE_MB
 
 def run_with_timeout(cmd, timeout_sec):
-    if platform.system() != 'Windows':
+    if platform.system() != 'Darwin':  # 不是 macOS
         full_cmd = ['timeout', str(timeout_sec)] + cmd
         return subprocess.run(full_cmd, capture_output=True, text=True)
-    else:
+    else:  # macOS
         try:
             return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_sec)
         except subprocess.TimeoutExpired:
