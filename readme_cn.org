@@ -177,6 +177,11 @@ Luhmann 有一个习惯, 是一边读, 一边记文献笔记. 他的书或者资
 *** ⚠️注意事项
 1. 不要随便修改笔记文件名. 如果修改了, 在源文件上再次添加快速笔记/标记, 在同步时, 会生成重复的笔记.
 ** 高级功能
+*** 改善中文下 org-mode 处理标记的体验
+无需在标记两旁添加空格，即可让标记生效。该配置来自 @lijigang 和 @Eli 的贡献。
+
+见：https://github.com/yibie/org-zettel-ref-mode/issues/8#issuecomment-2380661446
+
 *** 文件关联机制
 org-zettel-ref-mode 现在支持多种文件关联机制，不再完全依赖于文件名中的 "-overview" 后缀：
 
