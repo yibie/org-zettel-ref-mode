@@ -8,8 +8,6 @@
 
 (require 'org-zettel-ref-core)
 
-
-
 (defun org-zettel-ref-add-quick-note ()
   "Add a quick note to the current buffer."
   (interactive)
@@ -54,32 +52,31 @@ This should be a string that can be passed to `kbd'."
   (local-set-key (kbd org-zettel-ref-quick-markup-key) 'org-zettel-ref-quick-markup))
 
 (defun org-zettel-ref-clean-multiple-targets ()
-  "Remove <<target>>, *, =, ~, /, and _ markers from the current buffer, preserving Org-mode links."
+  "Remove <<target>>, *Bold*, and _Underline_ markers from the current buffer, preserving Org-mode links."
   (interactive)
-  (when (yes-or-no-p "Are you sure you want to remove all <<target>>, *, =, ~, /, and _ markers? This cannot be undone. ")
-    (let ((content (buffer-substring-no-properties (point-min) (point-max))))
-      ;; Remove <<target>> markers
-      (setq content (replace-regexp-in-string "<<\\([^>]+\\)>>" "" content))
-      
-      ;; Remove formatting markers outside of Org-mode links
-      (setq content
-            (replace-regexp-in-string
-             "\\(\\[\\[[^]]*\\]\\[.*?\\]\\]\\)\\|\\([*=~/_]\\)\\([^*=~/_\n]+?\\)\\2"
-             (lambda (match)
-               (if (match-string 1 match)
-                   ;; If it's an Org-mode link, leave it unchanged
-                   match
-                 ;; Otherwise, remove the formatting
-                 (match-string 3 match)))
-             content
-             t  ; FIXEDCASE
-             nil  ; LITERAL
-             ))
-      
-      (let ((inhibit-read-only t))
-        (erase-buffer)
-        (insert content))
-      (message "All <<target>>, *, =, ~, /, and _ markers have been removed while preserving Org-mode links."))))
+  (let ((content (buffer-substring-no-properties (point-min) (point-max))))
+    ;; Remove <<target>> markers
+    (setq content (replace-regexp-in-string "<<\\([^>]+\\)>>" "" content))
+    
+    ;; Remove *Bold* and _Underline_ markers outside of Org-mode links
+    (setq content
+          (replace-regexp-in-string
+           "\\(\\[\\[[^]]*\\]\\[.*?\\]\\]\\)\\|\\([*_]\\)\\([^*_\n]+?\\)\\2"
+           (lambda (match)
+             (if (match-string 1 match)
+                 ;; If it's an Org-mode link, leave it unchanged
+                 match
+               ;; Otherwise, remove the formatting
+               (match-string 3 match)))
+           content
+           t  ; FIXEDCASE
+           nil  ; LITERAL
+           ))
+    
+    (let ((inhibit-read-only t))
+      (erase-buffer)
+      (insert content))
+    (message "All <<target>>, *Bold*, and _Underline_ markers have been removed while preserving Org-mode links.")))
 
 (defun org-zettel-ref-clean-targets-and-sync ()
   "Clean all markup from the current buffer and then sync the overview."

@@ -4,7 +4,7 @@
 
 ;; Author: Yibie <yibie@outlook.com>
 ;; Version: 0.2.1
-;; Package-Requires: ((emacs "29.4"))
+;; Package-Requires: ((emacs "29.1") (org "9.3"))
 ;; Keywords: outlines
 ;; URL: https://github.com/yibie/org-zettel-ref-mode
 

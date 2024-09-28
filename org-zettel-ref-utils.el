@@ -9,16 +9,11 @@
 ;;----------------------------------------------------------------
 ;; START: File namming
 ;;----------------------------------------------------------------
+
 (defun org-zettel-ref-slugify (title)
   "Convert TITLE to a slug for generating filenames."
   (let ((slug (downcase (replace-regexp-in-string "[^[:alnum:][:digit:]\u4e00-\u9fff]+" "-" title))))
     (string-trim slug "-+")))
-
-(defun org-zettel-ref-sanitize-filename (filename)
-  "Sanitize FILENAME by replacing invalid characters with underscores.
-Preserves alphanumeric characters, Chinese characters, and some common punctuation."
-  (let ((invalid-chars-regexp "[[:cntrl:]\\/:*?\"<>|]"))
-    (replace-regexp-in-string invalid-chars-regexp "_" filename)))
 
 (defun org-zettel-ref-generate-filename (title)
   "Generate a filename based on TITLE and current mode type."
@@ -28,8 +23,7 @@ Preserves alphanumeric characters, Chinese characters, and some common punctuati
                             sanitized-title))
          (filename (pcase org-zettel-ref-mode-type
                      ('normal (concat truncated-title "-overview.org"))
-                     ('denote (let ((date-time (format-time-string "%Y%m%dT%H%M%S")))
-                                (format "%s--%s__overview.org" date-time truncated-title)))
+                     ('denote (concat (format-time-string "%Y%m%dT%H%M%S--") truncated-title org-zettel-ref-overview-file-suffix))
                      ('org-roam (format "%s-overview.org" truncated-title)))))
     (if (string-empty-p filename)
         (error "Generated filename is empty")
@@ -49,38 +43,80 @@ Preserves alphanumeric characters, Chinese characters, and some common punctuati
 ;;----------------------------------------------------------------
 ;; START: org-zettel-ref-insert-quick-notes and marked-text
 ;;----------------------------------------------------------------  
-(defun org-zettel-ref-insert-quick-notes (source-buffer overview-buffer)
-  "Insert quick notes from SOURCE-BUFFER into OVERVIEW-BUFFER."
-  (with-current-buffer source-buffer
-    (org-element-map (org-element-parse-buffer) 'target
-      (lambda (target)
-        (let* ((begin (org-element-property :begin target))
-               (end (org-element-property :end target))
-               (content (buffer-substring-no-properties begin end)))
-          (when (string-match "<<\\([^>]+\\)>>\\(.*\\)" content)
-            (let ((note-name (match-string 1 content))
-                  (note-content (string-trim (match-string 2 content))))
-              (with-current-buffer overview-buffer
-                (let ((inhibit-read-only t))
-                  (insert (format "- [[file:%s::%s][%s]]\n"
-                                  (buffer-file-name source-buffer)
-                                  note-name
-                                  (if (string-empty-p note-content)
-                                      note-name
-                                    note-content))))))))))))
+(defun org-zettel-ref-insert-notes-and-text (source-buffer overview-buffer)
+  "Insert quick notes and marked text from SOURCE-BUFFER into OVERVIEW-BUFFER."
+  (with-current-buffer overview-buffer
+    (let ((inhibit-read-only t)
+          (quick-notes '())
+          (existing-texts (org-zettel-ref-get-existing-marked-texts))
+          (new-texts '()))
+      ;; Collect quick notes
+      (with-current-buffer source-buffer
+        (org-element-map (org-element-parse-buffer) 'target
+          (lambda (target)
+            (let* ((begin (org-element-property :begin target))
+                   (end (org-element-property :end target))
+                   (content (buffer-substring-no-properties begin end)))
+              (when (string-match "<<\\([^>]+\\)>>\\(.*\\)" content)
+                (let ((note-name (match-string 1 content))
+                      (note-content (string-trim (match-string 2 content))))
+                  (push (cons note-name note-content) quick-notes)))))))
+      
+      ;; Collect marked text
+      (with-current-buffer source-buffer
+        (org-element-map (org-element-parse-buffer) '(bold underline)
+          (lambda (element)
+            (let* ((begin (org-element-property :begin element))
+                   (end (org-element-property :end element))
+                   (raw-text (string-trim (buffer-substring-no-properties begin end))))
+              (when (and raw-text (not (string-empty-p raw-text))
+                         (not (member raw-text existing-texts)))
+                (push raw-text new-texts))))))
+      
+      ;; 插入快速笔记
+      (when quick-notes
+        ;; 定位到 * Quick Notes 部分
+        (goto-char (point-min))
+        (re-search-forward "^\\* Quick Notes\n")
+        (goto-char (match-end 0))
+        (dolist (note (nreverse quick-notes))
+          (insert (format "- [[file:%s::%s][%s]]\n"
+                          (buffer-file-name source-buffer)
+                          (car note)
+                          (if (string-empty-p (cdr note))
+                              (car note)
+                            (cdr note)))))
+        (insert "\n"))
+      
+      ;; 插入标记文本
+      (when new-texts
+        ;; 定位到 * Marked Text 部分
+        (goto-char (point-min))
+        (re-search-forward "^\\* Marked Text\n")
+        (goto-char (match-end 0))
+        (dolist (text (delete-dups (nreverse new-texts)))
+          (insert (format "- %s\n" text)))
+        (insert "\n")))))
 
-(defun org-zettel-ref-insert-marked-text (source-buffer overview-buffer)
-  "Insert marked text from SOURCE-BUFFER into OVERVIEW-BUFFER."
-  (with-current-buffer source-buffer
-    (org-element-map (org-element-parse-buffer) '(bold underline verbatim code)
-      (lambda (element)
-        (let* ((begin (org-element-property :begin element))
-               (end (org-element-property :end element))
-               (raw-text (string-trim (buffer-substring-no-properties begin end))))
-          (when (and raw-text (not (string-empty-p raw-text)))
-            (with-current-buffer overview-buffer
-              (let ((inhibit-read-only t))
-                (insert (format "- %s\n" raw-text))))))))))
+(defun org-zettel-ref-get-existing-marked-texts ()
+  "Get existing marked texts from the current buffer."
+  (let ((texts '()))
+    (save-excursion
+      (goto-char (point-min))
+      (when (re-search-forward "^\\* Marked Text\n" nil t)
+        (while (re-search-forward "^- \\(.+\\)$" nil t)
+          (push (match-string 1) texts))))
+    texts))
+
+(defun org-zettel-ref-get-existing-marked-texts ()
+  "Get existing marked texts from the current buffer."
+  (let ((texts '()))
+    (save-excursion
+      (goto-char (point-min))
+      (when (re-search-forward "^\\* Marked Text\n" nil t)
+        (while (re-search-forward "^- \\(.+\\)$" nil t)
+          (push (match-string 1) texts))))
+    texts))
 
 ;;----------------------------------------------------------------
 ;; START: org-zettel-ref-run-python-script
@@ -147,6 +183,44 @@ Preserves alphanumeric characters, Chinese characters, and some common punctuati
 ;;----------------------------------------------------------------
 ;; END: org-zettel-ref-run-python-script
 ;;----------------------------------------------------------------
+
+;;----------------------------------------------------------------
+;; START: Other components
+;;----------------------------------------------------------------
+
+(defun org-zettel-ref-mode-enable ()
+  "Enable org-zettel-ref-mode."
+  (org-zettel-ref-init)
+  (org-zettel-ref-setup-quick-markup)
+  (advice-add 'org-open-at-point :around #'org-zettel-ref-advice-open-at-point))
+
+(defun org-zettel-ref-mode-disable ()
+  "Disable org-zettel-ref-mode."
+  (advice-remove 'org-open-at-point #'org-zettel-ref-advice-open-at-point)
+  (local-unset-key (kbd org-zettel-ref-quick-markup-key)))
+
+(defun org-zettel-ref-advice-open-at-point (orig-fun &rest args)
+  "Advice function for `org-open-at-point'.
+This function checks if the link at point is a quick note link,
+and if so, it jumps to the corresponding quick note in the source buffer.
+Otherwise, it calls the original `org-open-at-point' function."
+  (let ((context (org-element-context)))
+    (if (and (eq (org-element-type context) 'link)
+             (string-equal (org-element-property :type context) "file")
+             (string-match "::\\(.+\\)" (org-element-property :path context)))
+        (let* ((target (match-string 1 (org-element-property :path context)))
+               (source-file (org-element-property :path context))
+               (source-buffer (find-file-noselect (substring source-file 0 (string-match "::" source-file)))))
+          (switch-to-buffer source-buffer)
+          (goto-char (point-min))
+          (re-search-forward (concat "<<" (regexp-quote target) ">>") nil t)
+          (org-reveal))
+      (apply orig-fun args))))
+
+;;----------------------------------------------------------------
+;; END: Other components
+;;----------------------------------------------------------------  
+
 
 (provide 'org-zettel-ref-utils)
 

@@ -4,6 +4,14 @@
 #+end_center
 
 ** Changlog
+*** Version 0.3.3 Stable release (2024-09-28)
+  - Backend optimizations to further enhance code robustness, modularity, and improve plugin stability.
+  - Fixed an issue in version 0.3.2 where rapid updates to the overview file caused synchronization errors with quick notes and marked text.
+  - Fixed an issue in version 0.3.2 where the file naming strategy led to frequent re-creation of overview files in Denote mode.
+  - Fixed an issue in version 0.3.2 where the overview file failed to synchronize correctly due to improper index file retrieval.
+
+After this period of development, the code for org-zettel-ref-mode has finally become modular and robust. No new features will be introduced before version 0.4. Instead, the focus will be on further componentization of the code and providing more customization options.
+
 *** Version 0.3.2 (2024-09-24)
   - Improved compatibility with Org-roam v2: Update the record of literature notes in the overview file to the Org-roam database.
   - Improved file naming

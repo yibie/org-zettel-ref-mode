@@ -1,5 +1,14 @@
 * org-zettel-ref-mode
 ** 版本历史
+- v0.3.3 Stable release (2024-09-28)
+  - 后端优化，继续提高代码的健壮性，模块化，改善插件的稳定性
+  - 修复 0.3.2 版本中，由于更新概览文件过快，导致快速笔记和标记文本同步时产生错乱的问题
+  - 修复 0.3.2 版本中，因为文件名创建策略的原因，导致 Denote 模式下，概览文件经常重复创建的问题
+  - 修复 0.3.2 版本中，因为索引文件未能正确检索，导致概览文件未能正确同步的问题
+
+经过这段时间的开发，org-zettel-ref-mode 的代码终于变得模块化，开始具备一定的健壮性，在 0.4 版本之前将不会推出新功能，转而对代码进一步的组件化，提供更多自定义选项。
+  
+
 - v0.3.2 (2024-09-24)
   - 改善 Org-roam v2 兼容性：可以将文献笔记的记录更新到 Org-roam 的数据库
   - 文件命名的细微改善
@@ -235,7 +244,7 @@ org-zettel-ref-mode 在 0.3 版本中对概览文件的同步机制进行了重�
 
 org-zettel-ref-mode 现在支持直接通过 Emacs 调用外部 Python 脚本，用于将多种不同格式的电子文档转换成 org 文件。
 
-**** 主要特性
+*** Convert to Org 主要特性
 
 1. 多格式支持：
    - 支持将 PDF、EPUB、HTML、Markdown 和 TXT 等格式转换为 Org 格式。
@@ -311,7 +320,7 @@ org-zettel-ref-mode 现在支持直接通过 Emacs 调用外部 Python 脚本，
 - =setq org-zettel-ref-overview-directory "~/org-zettel-ref-overviews/"=: 设置概览文件存储目录
 - =setq org-zettel-ref-mode-type 'normal=: 设置模式类型（可选：'normal, 'denote, 'org-roam）
 - =setq org-zettel-ref-include-empty-notes nil=: 设置是否包含空的快速笔记
-- =setq org-zettel-ref-include-context nil=: 设置是否在概览中包含更多上下文
+- +setq org-zettel-ref-include-context nil: 设置是否在概览中包含更多上下文+
 - =setq org-zettel-ref-quick-markup-key "C-c m"=: 设置快速标记的快捷键
 - =setq org-zettel-ref-python-environment 'system=: 设置 Python 环境类型（可选：'system, 'conda, 'venv）
 - =setq org-zettel-ref-python-env-name nil=: 设置 Python 环境名称

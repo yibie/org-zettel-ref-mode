@@ -6,30 +6,29 @@
 
 ;;; Code:
 
-(require 'org-zettel-ref-core)
 (require 'org-roam nil t)  ; Safely attempt to load org-roam
 (require 'denote nil t)  ; Safely attempt to load denote
 
 ;;;----------------------------------------------------------------------------
-;;; Org-roam Database intergration
+;;; Org-roam Database integration
 ;;;----------------------------------------------------------------------------
 
-(declare-function org-zettel-ref-refresh-index "org-zettel-ref-core")
 
 
 (defun org-zettel-ref-update-roam-db (file)
   "Update Org-roam database for FILE using org-roam-db-query."
-  (let ((node (org-roam-db-query
-               [:select * :from nodes
-                :where (= file $s1)]
-               file)))
-    (if node
-        (progn
-          ;; add update org-roam-db-query here
-          (message "update Org-roam database, node ID: %s, title: %s"
-                   (gethash "id" (car node))
-                   (gethash "title" (car node))))
-        (message "Node not found in Org-roam database: %s" file))))
+  (when (featurep 'org-roam)
+    (let ((node (org-roam-db-query
+                 [:select * :from nodes
+                  :where (= file $s1)]
+                 file)))
+      (if node
+          (progn
+            ;; add update org-roam-db-query here
+            (message "update Org-roam database, node ID: %s, title: %s"
+                     (gethash "id" (car node))
+                     (gethash "title" (car node))))
+        (message "Node not found in Org-roam database: %s" file)))))
 
 (defun org-zettel-ref-db-update (file)
   "Update database for FILE."
@@ -38,26 +37,6 @@
     (org-zettel-ref-update-roam-db file))
    ;; Add other database update methods here if needed
    (t (message "No database update method for current mode type"))))
-
-
-
-(defun org-zettel-ref-check-roam-db ()
-  "Check the status of the org-roam database."
-  (interactive)
-  (if (require 'org-roam nil t)
-      (condition-case err
-          (progn
-            (message "Org-roam version: %s" (org-roam-version))
-            (message "Org-roam directory: %s" org-roam-directory)
-            (message "Org-roam database file: %s" org-roam-db-location)
-            (if (file-exists-p org-roam-db-location)
-                (message "Database file exists")
-              (message "Database file does not exist"))
-            (let ((node-count (caar (org-roam-db-query [:select (funcall count *) :from nodes]))))
-              (message "Number of nodes in database: %d" node-count)))
-        (error
-         (message "Error checking org-roam database: %S" err)))
-    (message "Org-roam is not available")))
 
 ;;;----------------------------------------------------------------------------
 ;;; Denote&Normal Index Source File
@@ -75,6 +54,18 @@
           (setq org-zettel-ref-overview-index (read (current-buffer))))
       (setq org-zettel-ref-overview-index (make-hash-table :test 'equal)))))
 
+(defun org-zettel-ref-query-index (source-file)
+  "Query the overview index for the given SOURCE-FILE.
+Return the associated overview file name if it exists, otherwise return nil."
+  (let ((overview-file (gethash source-file org-zettel-ref-overview-index)))
+    (if overview-file
+        (progn
+          (message "Found overview file: %s" overview-file)
+          overview-file)
+      (progn
+        (message "No overview file found for source file: %s" source-file)
+        nil))))
+
 (defun org-zettel-ref-save-index ()
   "Save the overview index to a file."
   (let ((index-file (expand-file-name ".overview-index.el" org-zettel-ref-overview-directory)))
@@ -87,9 +78,9 @@
   (org-zettel-ref-save-index)
   (message "Debug: Updated index with %s -> %s" source-file overview-file))
 
-(defun org-zettel-ref-get-overview-from-index (source-file)
-  "Get the overview file for SOURCE-FILE from the index."
-  (gethash source-file org-zettel-ref-overview-index))
+(defun org-zettel-ref-get-overview-from-index (id)
+  "Get the overview file for ID from the index."
+  (gethash (concat id "__overview") org-zettel-ref-overview-index))
 
 (defun org-zettel-ref-check-and-repair-links ()
   "Check and repair links between source files and overview files."
@@ -113,49 +104,36 @@
     (org-zettel-ref-save-index)
     (message "Checked and repaired %d links." repaired)))
 
+(defun org-zettel-ref-rescan-overview-files ()
+  "Rescan the overview directory and update the index."
+  (interactive)
+  (let ((old-index org-zettel-ref-overview-index))
+    (setq org-zettel-ref-overview-index (make-hash-table :test 'equal))
+    (org-zettel-ref-load-index)
+    (org-zettel-ref-check-and-repair-links)
+    (message "Rescaned overview files and updated index.")))
+
 (defun org-zettel-ref-status ()
   "Display the current status of org-zettel-ref-mode."
   (interactive)
-  (let ((index-size (hash-table-count org-zettel-ref-overview-index))
-        (current-overview (org-zettel-ref-get-overview-from-index (buffer-file-name))))
-    (message "org-zettel-ref-mode status:
-- Index size: %d entries
+  (message "org-zettel-ref-mode status:
 - Current file: %s
-- Associated overview: %s
 - Overview directory: %s"
-             index-size
-             (buffer-file-name)
-             (or current-overview "None")
-             org-zettel-ref-overview-directory)))
+           (buffer-file-name)
+           org-zettel-ref-overview-directory))
 
 (defun org-zettel-ref-maintenance-menu ()
   "Display a menu for org-zettel-ref-mode maintenance operations."
   (interactive)
   (let ((choice (read-char-choice
                  "Org-zettel-ref maintenance:
-r: Refresh index
-c: Check and repair links
 s: Show status
 q: Quit
 Your choice: "
-                 '(?r ?c ?s ?q))))
+                 '(?s ?q))))
     (cond
-     ((eq choice ?r) (org-zettel-ref-refresh-index))
-     ((eq choice ?c) (org-zettel-ref-check-and-repair-links))
      ((eq choice ?s) (org-zettel-ref-status))
      ((eq choice ?q) (message "Quit")))))
-
-
-
-(defun org-zettel-ref-refresh-index ()
-  "Refresh the org-zettel-ref index."
-  (interactive)
-  (let ((index-file (expand-file-name ".overview-index.el" org-zettel-ref-overview-directory)))
-    (when (file-exists-p index-file)
-      (delete-file index-file))
-    (setq org-zettel-ref-overview-index (make-hash-table :test 'equal))
-    (org-zettel-ref-save-index)
-    (message "Index refreshed and saved to %s" index-file)))
 
 (provide 'org-zettel-ref-db)
 
