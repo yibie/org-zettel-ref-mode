@@ -108,15 +108,7 @@
           (push (match-string 1) texts))))
     texts))
 
-(defun org-zettel-ref-get-existing-marked-texts ()
-  "Get existing marked texts from the current buffer."
-  (let ((texts '()))
-    (save-excursion
-      (goto-char (point-min))
-      (when (re-search-forward "^\\* Marked Text\n" nil t)
-        (while (re-search-forward "^- \\(.+\\)$" nil t)
-          (push (match-string 1) texts))))
-    texts))
+
 
 ;;----------------------------------------------------------------
 ;; START: org-zettel-ref-run-python-script

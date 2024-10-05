@@ -18,7 +18,7 @@
     (org-zettel-ref-sync-overview)))
 
 (defun org-zettel-ref-quick-markup ()
-  "Quickly apply org-mode markup to the region or insert at point."
+  "Quickly apply org-mode markup to the region or insert at point, adding spaces for Chinese text."
   (interactive)
   (let* ((markup-types '(("Bold" . "*")
                          ("Italic" . "/")
@@ -32,11 +32,14 @@
          (beg (if region-active (region-beginning) (point)))
          (end (if region-active (region-end) (point))))
     (if region-active
-        (progn
+        (let* ((text (buffer-substring-no-properties beg end))
+               (chinese-p (string-match-p "\\cC" text))
+               (space-before (if (and chinese-p (not (string-match-p "^\\s-" text))) " " ""))
+               (space-after (if (and chinese-p (not (string-match-p "\\s-$" text))) " " "")))
           (goto-char end)
-          (insert marker)
+          (insert marker space-after)
           (goto-char beg)
-          (insert marker))
+          (insert space-before marker))
       (insert marker marker)
       (backward-char))))
 
@@ -52,31 +55,31 @@ This should be a string that can be passed to `kbd'."
   (local-set-key (kbd org-zettel-ref-quick-markup-key) 'org-zettel-ref-quick-markup))
 
 (defun org-zettel-ref-clean-multiple-targets ()
-  "Remove <<target>>, *Bold*, and _Underline_ markers from the current buffer, preserving Org-mode links."
+  "Remove <<target>>, *Bold*, and _Underline_ markers from the current buffer, preserving Org-mode structure and links."
   (interactive)
-  (let ((content (buffer-substring-no-properties (point-min) (point-max))))
+  (let* ((case-fold-search nil)
+         (pre (car org-emphasis-regexp-components))
+         (post (nth 1 org-emphasis-regexp-components))
+         (border (nth 2 org-emphasis-regexp-components))
+         (body-regexp (nth 3 org-emphasis-regexp-components))
+         (emphasis-regexp (concat "\\([" pre "]\\|^\\)"
+                                  "\\(\\([*_]\\)\\("
+                                  "[^" border "\n]\\|"
+                                  "[^" border "\n]*"
+                                  "[^" border "\n]\\)"
+                                  "\\3\\)"
+                                  "\\([" post "]\\|$\\)")))
     ;; Remove <<target>> markers
-    (setq content (replace-regexp-in-string "<<\\([^>]+\\)>>" "" content))
+    (goto-char (point-min))
+    (while (re-search-forward "<<\\([^>]+\\)>>" nil t)
+      (replace-match "\\1"))
     
-    ;; Remove *Bold* and _Underline_ markers outside of Org-mode links
-    (setq content
-          (replace-regexp-in-string
-           "\\(\\[\\[[^]]*\\]\\[.*?\\]\\]\\)\\|\\([*_]\\)\\([^*_\n]+?\\)\\2"
-           (lambda (match)
-             (if (match-string 1 match)
-                 ;; If it's an Org-mode link, leave it unchanged
-                 match
-               ;; Otherwise, remove the formatting
-               (match-string 3 match)))
-           content
-           t  ; FIXEDCASE
-           nil  ; LITERAL
-           ))
+    ;; Remove *Bold* and _Underline_ markers
+    (goto-char (point-min))
+    (while (re-search-forward emphasis-regexp nil t)
+      (replace-match "\\1\\4\\5"))
     
-    (let ((inhibit-read-only t))
-      (erase-buffer)
-      (insert content))
-    (message "All <<target>>, *Bold*, and _Underline_ markers have been removed while preserving Org-mode links.")))
+    (message "All <<target>>, *Bold*, and _Underline_ markers have been removed while preserving Org-mode structure and links.")))
 
 (defun org-zettel-ref-clean-targets-and-sync ()
   "Clean all markup from the current buffer and then sync the overview."

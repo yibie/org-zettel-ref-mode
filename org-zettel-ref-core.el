@@ -163,17 +163,6 @@ This suffix will be appended to the filename before the file extension."
 ;;-------------------------
 
 ;;-------------------------
-;; START: Mode Configuration
-;;-------------------------
-
-
-
-
-;;-------------------------
-;; END: Mode Configuration
-;;-------------------------
-
-;;-------------------------
 ;; START: Initialization
 ;;-------------------------
 
@@ -280,13 +269,7 @@ This suffix will be appended to the filename before the file extension."
   "Generate a slug from TITLE for Denote."
   (replace-regexp-in-string "[^a-zA-Z0-9\u4e00-\u9fff-]" "-" (downcase title)))
 
-(defun org-zettel-ref-get-overview-file (source-buffer)
-  "Generate the overview file name without timestamp and return its path."
-  (let* ((source-file (buffer-file-name source-buffer))
-         (base-name (file-name-base source-file))
-         (overview-file (concat org-zettel-ref-overview-directory
-                                "/" base-name "__overview.org")))
-    overview-file))
+
 
 (defun org-zettel-ref-get-overview-file-denote (source-buffer overview-file)
   "Get or create an overview file for SOURCE-BUFFER using Denote mode."
