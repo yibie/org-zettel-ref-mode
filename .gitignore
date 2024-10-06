@@ -7,3 +7,4 @@ backup2
 org-zettel-ref-mode.el.backup2
 org-zettel-ref-mode.el.backup
 *.zip
+.aider*
