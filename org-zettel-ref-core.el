@@ -120,8 +120,8 @@ This suffix will be appended to the filename before the file extension."
     (if (not source-file)
         (message "Error: Current buffer is not associated with a file")
       (condition-case err
-          (let* ((overview-file (org-zettel-ref-get-overview-file source-buffer))
-                 (overview-buffer (get-buffer (org-zettel-ref-get-overview-buffer-name source-buffer))))
+          (let* ((overview-file org-zettel-ref-overview-file)
+                 (overview-buffer org-zettel-ref-current-overview-buffer))
             (if (not (file-writable-p overview-file))
                 (message "Error: Overview file is not writable: %s" overview-file)
               (with-current-buffer (or overview-buffer (find-file-noselect overview-file))
@@ -195,19 +195,27 @@ This suffix will be appended to the filename before the file extension."
     (if (and existing-overview-buffer (get-buffer-window existing-overview-buffer))
         (progn
           (message "Debug: Using existing overview buffer and window")
-          (select-window (get-buffer-window existing-overview-buffer)))
+          (select-window (get-buffer-window existing-overview-buffer))
+          (setq org-zettel-ref-overview-file (buffer-file-name existing-overview-buffer))
+          (setq org-zettel-ref-current-overview-buffer existing-overview-buffer))
       (if existing-overview-buffer
           (progn
             (message "Debug: Using existing overview buffer")
-            (org-zettel-ref-setup-overview-window (buffer-file-name existing-overview-buffer) overview-buffer-name))
+            (org-zettel-ref-setup-overview-window (buffer-file-name existing-overview-buffer) overview-buffer-name)
+            (setq org-zettel-ref-overview-file (buffer-file-name existing-overview-buffer))
+            (setq org-zettel-ref-current-overview-buffer existing-overview-buffer))
         (if overview-file
             (progn
               (message "Debug: Opening existing overview file: %s" overview-file)
-              (org-zettel-ref-setup-overview-window overview-file overview-buffer-name))
+              (org-zettel-ref-setup-overview-window overview-file overview-buffer-name)
+              (setq org-zettel-ref-overview-file overview-file)
+              (setq org-zettel-ref-current-overview-buffer (find-file-noselect overview-file)))
           (progn
             (setq overview-file (org-zettel-ref-get-overview-file source-buffer))
             (message "Debug: Creating new overview file: %s" overview-file)
-            (org-zettel-ref-setup-overview-window overview-file overview-buffer-name)))))
+            (org-zettel-ref-setup-overview-window overview-file overview-buffer-name)
+            (setq org-zettel-ref-overview-file overview-file)
+            (setq org-zettel-ref-current-overview-buffer (find-file-noselect overview-file))))))
     (message "Debug: org-zettel-ref-init completed")))
 
 (defun org-zettel-ref-setup-overview-buffer (buffer)
