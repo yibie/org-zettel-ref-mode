@@ -78,7 +78,7 @@ This suffix will be appended to the filename before the file extension."
                    ('denote (org-zettel-ref-get-overview-file-denote source-buffer overview-file))
                    ('org-roam (org-zettel-ref-get-overview-file-org-roam source-buffer overview-file))
                    (_ (error "Unsupported org-zettel-ref-mode-type: %s" org-zettel-ref-mode-type)))))
-        (org-zettel-ref-update-index source-file new-overview)
+            (org-zettel-ref-update-index source-file new-overview)
             (message "Debug: Created new overview file: %s" new-overview)
             (setq org-zettel-ref-current-overview-buffer (find-file-noselect new-overview))
             new-overview))
