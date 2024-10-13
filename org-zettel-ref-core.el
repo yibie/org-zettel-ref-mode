@@ -137,6 +137,7 @@ This suffix will be appended to the filename before the file extension."
 (defun org-zettel-ref-clean-sections (buffer)
   "Clean the Quick Notes and Marked Text sections in BUFFER."
   (with-current-buffer buffer
+    ;; Temporarily disable read-only mode to allow modifications in the buffer
     (let ((inhibit-read-only t))
       (save-excursion
         (goto-char (point-min))
@@ -161,6 +162,54 @@ This suffix will be appended to the filename before the file extension."
 ;;-------------------------
 ;; END: Synchronization
 ;;-------------------------
+
+
+;;-------------------------
+;; START: Copy Selection to Overview with Interactive Positioning
+;;-------------------------
+
+(defun org-zettel-ref-copy-selection-to-overview ()
+  "Copy the selected region from the source buffer to the specified position in the overview buffer, and return to the source buffer after pasting."
+  (interactive)
+  ;; Check if there is a selected region
+  (if (use-region-p)
+      (let* ((selected-text (buffer-substring-no-properties (region-beginning) (region-end)))
+             (source-buffer (current-buffer))
+             (overview-buffer org-zettel-ref-current-overview-buffer))
+        ;; Check if the overview buffer exists
+        (if (not overview-buffer)
+            (message "Error: Overview buffer not found.")
+          (let ((target-buffer (get-buffer overview-buffer)))
+            (if (not target-buffer)
+                (message "Error: Overview buffer not found.")
+              (progn
+                ;; Temporarily disable read-only mode to allow modifications in the buffer
+                (with-current-buffer target-buffer
+                  (let ((inhibit-read-only t))
+                    (read-only-mode -1)))
+                ;; Switch to the overview buffer
+                (pop-to-buffer target-buffer)
+                (message "Move the cursor to the desired paste position and press `C-c C-p` to execute the paste.")
+                ;; Set the context for the paste function
+                (let ((paste-text selected-text)
+                      (source-buf source-buffer))
+                    ;; Define the paste command
+                  (local-set-key (kbd "C-c C-p")
+                                 (lambda ()
+                                   (interactive)
+                                   (insert paste-text)
+                                   (save-buffer)
+                                   ;; Reset read-only mode
+                                   (read-only-mode 1)
+                                   (select-window (get-buffer-window source-buf))
+                                   (message "Selected text has been copied to the overview file and returned to the source file."))))))
+    ;; If no region is selected, prompt the user
+    (message "No region selected for copying."))))))
+
+;;-------------------------
+;; END: Copy Selection to Overview with Interactive Positioning
+;;-------------------------
+
 
 ;;-------------------------
 ;; START: Initialization
