@@ -99,7 +99,7 @@
   "Status column definition."
   (list "Status" 10 t
         (lambda (entry)
-          (let ((info (org-zettel-ref-db-get-entry 
+          (let ((info (org-zettel-ref-db-get 
                       (org-zettel-ref-db-get-id-by-path (car entry)))))
             (org-zettel-ref-state-string info)))))
 

@@ -319,3 +319,6 @@
 
 (provide 'org-zettel-ref-db)
 ;;; org-zettel-ref-db.el ends here
+(defun org-zettel-ref-db-get (id)
+  "Get entry by ID."
+  (gethash id (org-zettel-ref-db-entries (org-zettel-ref-db-ensure))))
