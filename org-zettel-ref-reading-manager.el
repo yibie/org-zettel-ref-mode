@@ -1097,9 +1097,15 @@ OPERATION 是操作类型，SOURCE 是错误来源，ERR 是错误详情。"
       (org-zettel-ref-list-mode)
       (add-hook 'org-zettel-ref-db-state-change-hook
                 #'org-zettel-ref-list-refresh)
+      (org-zettel-ref-scan-directory)
       (org-zettel-ref-list-refresh))
     (switch-to-buffer buffer)
     (message "Type ? for help")))
 
 
 (provide 'org-zettel-ref-reading-manager)
+(defun org-zettel-ref-scan-directory ()
+  "Scan the org-zettel-ref-directory for org files and create entries in the database."
+  (let ((files (directory-files org-zettel-ref-directory t "\\.org$")))
+    (dolist (file files)
+      (org-zettel-ref-db-create-entry file))))
