@@ -8,6 +8,7 @@
 ;;; Code:
 
 (require 'org-zettel-ref-db)
+(require 'org-zettel-ref-reading-manager)
 (require 'transient)
 
 ;;;----------------------------------------------------------------------------

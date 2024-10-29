@@ -322,3 +322,6 @@
 (defun org-zettel-ref-db-get (id)
   "Get entry by ID."
   (gethash id (org-zettel-ref-db-entries (org-zettel-ref-db-ensure))))
+(defun org-zettel-ref-get-overview-dir ()
+  "Get the directory where overview files are stored."
+  (expand-file-name "overviews" org-zettel-ref-directory))
