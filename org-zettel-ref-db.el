@@ -73,7 +73,8 @@
   (unless org-zettel-ref--db
     (setq org-zettel-ref--db
           (or (org-zettel-ref-db-load)
-              (org-zettel-ref-make-db))))
+              (org-zettel-ref-make-db)))
+    (message "Database initialized: %s" org-zettel-ref--db))
   org-zettel-ref--db)
 
 ;;;----------------------------------------------------------------------------
@@ -118,7 +119,11 @@
 (defun org-zettel-ref-db-get-entry (id)
   "获取条目。如果不存在返回nil。"
   (when id
-    (gethash id (org-zettel-ref-db-entries (org-zettel-ref-db-ensure)))))
+    (let ((entry (gethash id (org-zettel-ref-db-entries (org-zettel-ref-db-ensure)))))
+      (if entry
+          (message "Entry found for ID: %s" id)
+        (message "No entry found for ID: %s" id))
+      entry)))
 
 (defun org-zettel-ref-db-update-metadata (id key value)
   "Update entry metadata."
