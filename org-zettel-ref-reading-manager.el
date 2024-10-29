@@ -949,9 +949,11 @@ STATUS 可以是 'read 或 'unread。"
 
 (defun org-zettel-ref-state-string (entry)
   "返回条目的状态显示字符串。"
-  (if (org-zettel-ref-db-entry-read-p entry)
-      (propertize "Read" 'face 'success)
-    (propertize "Unread" 'face 'warning)))
+  (if entry
+      (if (org-zettel-ref-db-entry-read-p entry)
+          (propertize "Read" 'face 'success)
+        (propertize "Unread" 'face 'warning))
+    (propertize "Unknown" 'face 'error)))
 
 ;;;----------------------------------------------------------------------------
 ;;; State Display Functions
