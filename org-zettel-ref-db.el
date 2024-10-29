@@ -291,6 +291,23 @@
   "判断条目是否未读。"
   (not (org-zettel-ref-db-entry-read-p entry)))
 
+(defun org-zettel-ref-db-mark-entry-read (id)
+  "将条目标记为已读。"
+  (when-let ((entry (org-zettel-ref-db-get-entry id)))
+    (setf (org-zettel-ref-entry-overview-file entry)
+          (org-zettel-ref-db-create-overview (org-zettel-ref-entry-source-file entry)))
+    (org-zettel-ref-db-notify-state-change entry)))
+
+(defun org-zettel-ref-db-mark-entry-unread (id)
+  "将条目标记为未读。"
+  (when-let ((entry (org-zettel-ref-db-get-entry id)))
+    (setf (org-zettel-ref-entry-overview-file entry) nil)
+    (org-zettel-ref-db-notify-state-change entry)))
+
+(defun org-zettel-ref-db-notify-state-change (entry)
+  "通知条目状态变化。"
+  (run-hook-with-args 'org-zettel-ref-db-state-change-hook entry))
+
 (defun org-zettel-ref-db-notify-state-change (entry)
   "通知条目状态变化。"
   (run-hook-with-args 'org-zettel-ref-db-state-change-hook entry))
