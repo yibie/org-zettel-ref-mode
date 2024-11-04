@@ -3,8 +3,14 @@
 *.log
 tmp/
 venv/
-backup2
+*.backup
+*.test
 org-zettel-ref-mode.el.backup2
 org-zettel-ref-mode.el.backup
 *.zip
 .aider*
+.env
+.vscode/
+org-zettel-ref-test
+org-zettel-ref-list-tests.el
+*.test

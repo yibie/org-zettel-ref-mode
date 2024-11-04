@@ -21,11 +21,11 @@
   "Quickly apply org-mode markup to the region or insert at point, adding spaces for Chinese text."
   (interactive)
   (let* ((markup-types '(("Bold" . "*")
-                         ("Italic" . "/")
                          ("Underline" . "_")
-                         ("Code" . "~")
-                         ("Verbatim" . "=")
-                         ("Strikethrough" . "+")))
+                         ("Italic(only markup, don't sync)" . "/")
+                         ("Code(only markup, don't sync)" . "~")
+                         ("Verbatim(only markup, don't sync)" . "=")
+                         ("Strikethrough(only markup, don't sync)" . "+")))
          (markup (completing-read "Choose markup: " markup-types nil t))
          (marker (cdr (assoc markup markup-types)))
          (region-active (use-region-p))
@@ -55,31 +55,56 @@ This should be a string that can be passed to `kbd'."
   (local-set-key (kbd org-zettel-ref-quick-markup-key) 'org-zettel-ref-quick-markup))
 
 (defun org-zettel-ref-clean-multiple-targets ()
-  "Remove <<target>>, *Bold*, and _Underline_ markers from the current buffer, preserving Org-mode structure and links."
+  "Remove various markup and unnecessary elements from the current buffer.
+Cleans:
+1. <<target>> markers completely (including empty ones)
+2. #+begin_html...#+end_html blocks
+3. :PROPERTIES: blocks under headers
+4. *Bold* and _Underline_ markers (preserving heading stars)"
   (interactive)
   (let* ((case-fold-search nil)
          (pre (car org-emphasis-regexp-components))
          (post (nth 1 org-emphasis-regexp-components))
          (border (nth 2 org-emphasis-regexp-components))
-         (body-regexp (nth 3 org-emphasis-regexp-components))
          (emphasis-regexp (concat "\\([" pre "]\\|^\\)"
-                                  "\\(\\([*_]\\)\\("
-                                  "[^" border "\n]\\|"
-                                  "[^" border "\n]*"
-                                  "[^" border "\n]\\)"
-                                  "\\3\\)"
-                                  "\\([" post "]\\|$\\)")))
-    ;; Remove <<target>> markers
+                                "\\(\\([*_]\\)"
+                                "\\([^*\n]\\|"
+                                "[^*\n]*"
+                                "[^*\n]\\)"
+                                "\\3\\)"
+                                "\\([" post "]\\|$\\)")))
+    ;; Remove <<target>> markers completely (including empty ones)
     (goto-char (point-min))
-    (while (re-search-forward "<<\\([^>]+\\)>>" nil t)
-      (replace-match "\\1"))
+    (while (re-search-forward "<<[^>]*>>" nil t)
+      (replace-match ""))
     
-    ;; Remove *Bold* and _Underline_ markers
+    ;; Remove #+begin_html...#+end_html blocks
+    (goto-char (point-min))
+    (let ((case-fold-search t))
+      (while (re-search-forward "^[ \t]*#\\+begin_html[ \t]*\n\\(\\(?:[^\n]*\n\\)*?\\)[ \t]*#\\+end_html[ \t]*\n" nil t)
+        (replace-match ""))
+      (goto-char (point-min))
+      (while (re-search-forward "^[ \t]*#\\+begin_html[ \t]*\n" nil t)
+        (replace-match ""))
+      (goto-char (point-min))
+      (while (re-search-forward "^[ \t]*#\\+end_html[ \t]*\n" nil t)
+        (replace-match "")))
+    
+    ;; Remove :PROPERTIES: blocks
+    (goto-char (point-min))
+    (while (re-search-forward "^[ \t]*:PROPERTIES:\n\\(?:^[ \t]*:\\(?:\\w\\|-\\)+:.*\n\\)*^[ \t]*:END:\n" nil t)
+      (replace-match ""))
+    
+    ;; Remove *Bold* and _Underline_ markers, but preserve heading stars
     (goto-char (point-min))
     (while (re-search-forward emphasis-regexp nil t)
-      (replace-match "\\1\\4\\5"))
+      (unless (save-match-data
+                (string-match-p "^\\*+[ \t]" 
+                              (buffer-substring (line-beginning-position) 
+                                              (match-beginning 0))))
+        (replace-match "\\1\\4\\5")))
     
-    (message "All <<target>>, *Bold*, and _Underline_ markers have been removed while preserving Org-mode structure and links.")))
+    (message "Cleaned up markers, HTML blocks, properties blocks, and emphasis markers.")))
 
 (defun org-zettel-ref-clean-targets-and-sync ()
   "Clean all markup from the current buffer and then sync the overview."

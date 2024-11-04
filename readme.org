@@ -4,6 +4,22 @@
 #+end_center
 
 ** Changlog
+*** Version 0.4 (2024-11-04)
+  - Note! When running the new version for the first time, be sure to execute ~M-x org-zettel-ref-migrate~ to upgrade the data structure in the hash table.
+  - New Feature: Provides a visual management panel for source files
+    - ~org-zettel-ref-list~ (see Basic Usage -> Manage Source Files for details):
+      - Visualization: Provides a reference management panel
+      - Multi-column list: Displays the current references in a list format, with key columns such as Title, Author, and Keywords
+      - Rename: Allows renaming files in the format AUTHOR__TITLE==KEYWORDS.org within the panel
+      - Sorting: Click on the column name to sort the list alphabetically
+      - Filtering: Filter source file entries by conditions, such as Author, Title, or Keywords. Currently, only one condition can be filtered at a time.
+  - Upgraded the data structure of the hash table in ~org-zettel-ref-db.el~
+  - Upgraded ~org-zettel-ref-clean-multiple-targets~
+  - Fixes:
+    - Restored the accidentally deleted custom configuration item ~org-zettel-ref-debug~
+  - Reminder:
+    - Due to the upgrade of the hash table storing the mapping between source files and overview files to version 2.0, the following functions are deprecated:
+      - org-zettel-ref-check-and-repair-links, org-zettel-ref-maintenance-menu,  org-zettel-ref-refresh-index, org-zettel-ref-rescan-overview-files,  org-zettel-ref-status. 
 *** Version 0.3.3 Stable release (2024-09-28)
   - Backend optimizations to further enhance code robustness, modularity, and improve plugin stability.
   - Fixed an issue in version 0.3.2 where rapid updates to the overview file caused synchronization errors with quick notes and marked text.
@@ -182,6 +198,54 @@ Before annotating or marking text in the org file for the first time, you can us
 *** Sync Overview Files
 Automatic sync by default: Automatically runs when saving the source file.
 Manual sync: `M-x org-zettel-ref-sync-overview`
+
+*** Manage Source Files
+1. Launch Panel
+
+[[file:demo/org-zettel-ref-list.gif]]
+
+~M-x org-zettel-ref-list~
+
+Reminder: The following commands are all executed within the panel interface.
+
+2. Rename Source File ("r")
+
+[[file:demo/org-zettel-ref-list-rename-file.gif]]
+
+~M-x org-zettel-ref-list-rename-file~
+
+Rename according to the fixed format AUTHOR__TITLE==KEYWORDS.org.
+
+3. Edit/Add Keywords ("k")
+
+[[file:demo/org-zettel-ref-list-edit-keywords.gif]]
+
+~M-x org-zettel-ref-list-edit-keywords~
+
+Independently add one or more keywords to the source file.
+
+4. Delete Source File
+
+[[file:demo/org-zettel-ref-list-delete-file.gif]]
+
+Delete a single file ("d")
+~M-x org-zettel-ref-list-delete-file~
+
+[[file:demo/org-zettel-ref-list-delete-marked-files.gif]]
+
+Delete multiple files ("D")
+Press "m" in the list to mark multiple files, then execute ~M-x org-zettel-ref-list-delete-marked-files~
+
+If the marked files are incorrect, press "u" to clear the marked status, and press "U" to clear all marked statuses.
+
+5. Use Filters
+
+[[file:demo/org-zettel-ref-list-filter-by-regexp.gif]]
+
+Simple Filter ("/ r"): Use Author, Title, Keywords as filter conditions, only one filter condition can be applied at a time
+~M-x org-zettel-ref-filter-by-regexp~
+
+Complex Filter ("/ m"): Multiple filter conditions can be applied using Author, Title, Keywords as conditions
 
 *** ⚠️ Caution
 1. Do not casually change the filename of note files. If you do, adding quick notes/markups again in the source file will generate duplicate notes during sync.
@@ -390,10 +454,10 @@ org-zettel-ref-mode was inspired by my friend [[https://github.com/lijigang][@li
   - Provided custom options
 
 ** Future Plans
-✅ Improve performance, optimizing handling of large files
-✅ Integrate with other knowledge management packages, such as org-roam and denote
+- ✅ Improve performance, optimizing handling of large files
+- ✅ Integrate with other knowledge management packages, such as org-roam and denote
 - Support more file formats (possibly)
-- Further optimize Python script integration
+- ✅ Further optimize Python script integration
 - Add more customization options
 - Optimize file association mechanisms, reducing reliance on specific filename suffixes
 

@@ -1,5 +1,22 @@
 * org-zettel-ref-mode
 ** 版本历史
+- v0.4 (2024-11-04)
+  - 注意! 新版本第一次运行时, 一定要执行 ~M-x org-zettel-ref-migrate~ 升级哈希表里的数据结构
+  - 新功能: 为源文件提供可视化管理面板
+    - ~org-zettel-ref-list~ (详细见 基本用法 -> 管理源文件) :
+      - 可视化: 提供参考文献管理面板
+      - 多栏目列表: 以列表的方式展示当前的参考文献, 目前有 Title, Author, Keywords 等关键栏目
+      - 重命名: 在该面板上可按照 AUTHOR__TITILE==KEYWORDS.org 的格式重命名文件
+      - 排序: 点击栏目名, 可以按照以字母顺序为列表里的内容排序
+      - 过滤: 按照条件过滤源文件条目, 可以按照 Author, Title 或 Keywords 来过滤. 当前只能过滤 1 个条件.
+  - 升级 ~org-zettel-ref-db.el~ 哈希表的数据结构  
+  - 升级 ~org-zettel-ref-clean-multiple-targets~ 
+  - 修复:
+    - 恢复不小心删除的自定义配置项 ~org-zettel-ref-debug~
+  - 提醒
+    - 由于存储源文件和概览文件之间映射关系的哈希表升级到 2.0, 以下函数废弃:
+      - org-zettel-ref-check-and-repair-links, org-zettel-ref-maintenance-menu,  org-zettel-ref-refresh-index, org-zettel-ref-rescan-overview-files,  org-zettel-ref-status. 
+
 - v0.3.3 Stable release (2024-09-28)
   - 后端优化，继续提高代码的健壮性，模块化，改善插件的稳定性
   - 修复 0.3.2 版本中，由于更新概览文件过快，导致快速笔记和标记文本同步时产生错乱的问题
@@ -24,11 +41,11 @@
     - 使用哈希表记录源文件与概览文件之间的映射关系，有一点很棒，你不必手动设置哈希表文件的位置
     - 为此概览文件的文件头增加了新的属性块： ~#+SOURCE-FILE:~ 以确认映射关系
     - 新增命令：
-      - ~org-zettel-ref-check-and-repair-links~ - Check and repair links between source files and overview files.
-      - ~org-zettel-ref-maintenance-menu~	- Display a menu for org-zettel-ref-mode maintenance operations.
-      - ~org-zettel-ref-refresh-index~ - Manually refresh the overview index.
-      - ~org-zettel-ref-rescan-overview-files~ - Rescan the overview directory and update the index.
-      - ~org-zettel-ref-status~ - Display the current status of org-zettel-ref-mode.
+      - +org-zettel-ref-check-and-repair-links - Check and repair links between source files and overview files.+
+      - +org-zettel-ref-maintenance-menu	- Display a menu for org-zettel-ref-mode maintenance operations.+
+      - +org-zettel-ref-refresh-index - Manually refresh the overview index.+
+      - +org-zettel-ref-rescan-overview-files - Rescan the overview directory and update the index.+
+      - +org-zettel-ref-status - Display the current status of org-zettel-ref-mode.+
 
       
 - v0.3 (2024-09-03)
@@ -149,12 +166,11 @@ Luhmann 有一个习惯, 是一边读, 一边记文献笔记. 他的书或者资
 4. 重新启动 Emacs 或评估刚添加的代码。
 
 ** 基本用法
-
 *** 启用模式
 在任何 org-mode 缓冲区中，运行：
 =M-x org-zettel-ref-init=
 
-*** 清理源文件中的 <<>>
+*** 清理源文件中的多余格式
 
 由于添加笔记的核心功能是在原文里添加 <<>> 目标链接(target link)，但很多资料转换成 org 格式之后, 会自带很多 <<>> 的文本。
 
@@ -173,6 +189,56 @@ Luhmann 有一个习惯, 是一边读, 一边记文献笔记. 他的书或者资
 *** 同步概览文件
 默认自动同步：默认在保存源文件时自动执行。
 手动同步：=M-x org-zettel-ref-sync-overview=
+
+*** 管理源文件
+1. 启动面板
+
+[[file:demo/org-zettel-ref-list.gif]]
+
+~M-x org-zettel-ref-list~
+
+提醒: 以下命令, 均在面板界面中执行.
+
+2. 重命名源文件 ("r")
+
+[[file:demo/org-zettel-ref-list-rename-file.gif]]
+
+~M-x org-zettel-ref-list-rename-file~
+
+按照 AUTHOR__TITLE==KEYWORDS.org 的固定格式进行重命名.
+
+3. 编辑/添加关键词 ("k")
+
+[[file:demo/org-zettel-ref-list-edit-keywords.gif]]
+
+~M-x org-zettel-ref-list-edite-keywords~
+
+可独立为源文件添加一个或多个关键词.
+
+4. 删除源文件
+
+[[file:demo/org-zettel-ref-list-delete-file.gif]]
+
+删除单个文件 ("d")
+~M-x org-zettel-ref-list-delete-file~
+
+
+[[file:demo/org-zettel-ref-list-delete-marked-files.gif]]
+删除多个文件 ("D")
+
+在列表里按下 "m" 标记多个文件, 然后执行 ~M-x org-zettel-ref-list-delete-marked-files~
+
+如果标记的文件不对, 按下 "u" 即可清除标记状态, 按下 "U" 可以直接清除所有标记状态
+
+5. 使用过滤器
+
+[[file:demo/org-zettel-ref-list-filter-by-regexp.gif]]
+简单过滤 ("/ r"): 使用 Author, Title, Keywords 作为过滤条件, 每次只能应用一个过滤条件
+~M-x org-zettel-filter-by-regexp~
+
+复杂过滤 ("/ m"): 可应用多个 Author, Title, Keyowrds 的过滤条件作为条件
+
+
 
 *** ⚠️注意事项
 1. 不要随便修改笔记文件名. 如果修改了, 在源文件上再次添加快速笔记/标记, 在同步时, 会生成重复的笔记.
@@ -223,8 +289,7 @@ org-zettel-ref-mode 在 0.3 版本中对概览文件的同步机制进行了重�
 (setq org-zettel-ref-overview-directory "~/my-notes/overviews/")
 #+END_SRC
 
-
-*** 调整自动同步行为
++*** 调整自动同步行为+
 禁用自动同步：
 #+BEGIN_SRC emacs-lisp
 (org-zettel-ref-disable-auto-sync)
@@ -324,8 +389,7 @@ org-zettel-ref-mode 现在支持直接通过 Emacs 调用外部 Python 脚本，
 
 - =setq org-zettel-ref-overview-directory "~/org-zettel-ref-overviews/"=: 设置概览文件存储目录
 - =setq org-zettel-ref-mode-type 'normal=: 设置模式类型（可选：'normal, 'denote, 'org-roam）
-- =setq org-zettel-ref-include-empty-notes nil=: 设置是否包含空的快速笔记
-- +setq org-zettel-ref-include-context nil: 设置是否在概览中包含更多上下文+
++- =setq org-zettel-ref-include-empty-notes nil=: 设置是否包含空的快速笔记+
 - =setq org-zettel-ref-quick-markup-key "C-c m"=: 设置快速标记的快捷键
 - =setq org-zettel-ref-python-environment 'system=: 设置 Python 环境类型（可选：'system, 'conda, 'venv）
 - =setq org-zettel-ref-python-env-name nil=: 设置 Python 环境名称
@@ -376,10 +440,17 @@ org-zettel-ref-mode 的灵感借鉴了朋友 [[https://github.com/lijigang][@lij
 
 ** 未来计划
 ✅ 改进性能，优化大型文件的处理
+
 ✅ 与其他知识管理 Package 的集成, 比如 org-roam, denote
+
+✅ 提供源文件管理面板
+
 - 支持更多文件格式(可能)
+
 - 进一步优化Python脚本集成
+
 - 增加更多自定义选项
+
 - 优化文件关联机制，减少对特定文件名后缀的依赖
 
 如果喜欢, 请 Star.

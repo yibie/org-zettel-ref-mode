@@ -6,112 +6,9 @@
 
 ;;; Code:
 
-;;----------------------------------------------------------------
-;; START: File namming
-;;----------------------------------------------------------------
-
-(defun org-zettel-ref-slugify (title)
-  "Convert TITLE to a slug for generating filenames."
-  (let ((slug (downcase (replace-regexp-in-string "[^[:alnum:][:digit:]\u4e00-\u9fff]+" "-" title))))
-    (string-trim slug "-+")))
-
-(defun org-zettel-ref-generate-filename (title)
-  "Generate a filename based on TITLE and current mode type."
-  (let* ((sanitized-title (replace-regexp-in-string "[^a-zA-Z0-9\u4e00-\u9fff]+" "-" title))
-         (truncated-title (if (> (length sanitized-title) 50)
-                              (concat (substring sanitized-title 0 47) "...")
-                            sanitized-title))
-         (filename (pcase org-zettel-ref-mode-type
-                     ('normal (concat truncated-title "-overview.org"))
-                     ('denote (concat (format-time-string "%Y%m%dT%H%M%S--") truncated-title org-zettel-ref-overview-file-suffix))
-                     ('org-roam (format "%s-overview.org" truncated-title)))))
-    (if (string-empty-p filename)
-        (error "Generated filename is empty")
-      (message "Debug: Generated filename: %s" filename))
-    filename))
-
-(defun org-zettel-ref-ensure-overview-buffer ()
-  "Ensure that the overview buffer exists, creating it if necessary."
-  (unless (and org-zettel-ref-current-overview-buffer
-               (buffer-live-p org-zettel-ref-current-overview-buffer))
-    (org-zettel-ref-init)))
 
 ;;----------------------------------------------------------------
-;; END:  File namming
-;;----------------------------------------------------------------
-
-;;----------------------------------------------------------------
-;; START: org-zettel-ref-insert-quick-notes and marked-text
-;;----------------------------------------------------------------  
-(defun org-zettel-ref-insert-notes-and-text (source-buffer overview-buffer)
-  "Insert quick notes and marked text from SOURCE-BUFFER into OVERVIEW-BUFFER."
-  (with-current-buffer overview-buffer
-    (let ((inhibit-read-only t)
-          (quick-notes '())
-          (existing-texts (org-zettel-ref-get-existing-marked-texts))
-          (new-texts '()))
-      ;; Collect quick notes
-      (with-current-buffer source-buffer
-        (org-element-map (org-element-parse-buffer) 'target
-          (lambda (target)
-            (let* ((begin (org-element-property :begin target))
-                   (end (org-element-property :end target))
-                   (content (buffer-substring-no-properties begin end)))
-              (when (string-match "<<\\([^>]+\\)>>\\(.*\\)" content)
-                (let ((note-name (match-string 1 content))
-                      (note-content (string-trim (match-string 2 content))))
-                  (push (cons note-name note-content) quick-notes)))))))
-      
-      ;; Collect marked text
-      (with-current-buffer source-buffer
-        (org-element-map (org-element-parse-buffer) '(bold underline)
-          (lambda (element)
-            (let* ((begin (org-element-property :begin element))
-                   (end (org-element-property :end element))
-                   (raw-text (string-trim (buffer-substring-no-properties begin end))))
-              (when (and raw-text (not (string-empty-p raw-text))
-                         (not (member raw-text existing-texts)))
-                (push raw-text new-texts))))))
-      
-      ;; 插入快速笔记
-      (when quick-notes
-        ;; 定位到 * Quick Notes 部分
-        (goto-char (point-min))
-        (re-search-forward "^\\* Quick Notes\n")
-        (goto-char (match-end 0))
-        (dolist (note (nreverse quick-notes))
-          (insert (format "- [[file:%s::%s][%s]]\n"
-                          (buffer-file-name source-buffer)
-                          (car note)
-                          (if (string-empty-p (cdr note))
-                              (car note)
-                            (cdr note)))))
-        (insert "\n"))
-      
-      ;; 插入标记文本
-      (when new-texts
-        ;; 定位到 * Marked Text 部分
-        (goto-char (point-min))
-        (re-search-forward "^\\* Marked Text\n")
-        (goto-char (match-end 0))
-        (dolist (text (delete-dups (nreverse new-texts)))
-          (insert (format "- %s\n" text)))
-        (insert "\n")))))
-
-(defun org-zettel-ref-get-existing-marked-texts ()
-  "Get existing marked texts from the current buffer."
-  (let ((texts '()))
-    (save-excursion
-      (goto-char (point-min))
-      (when (re-search-forward "^\\* Marked Text\n" nil t)
-        (while (re-search-forward "^- \\(.+\\)$" nil t)
-          (push (match-string 1) texts))))
-    texts))
-
-
-
-;;----------------------------------------------------------------
-;; START: org-zettel-ref-run-python-script
+;; org-zettel-ref-run-python-script
 ;;---------------------------------------------------------------- 
 
 (defcustom org-zettel-ref-python-file "~/Documents/emacs/package/org-zettel-ref-mode/document_convert_to_org.py"
@@ -145,7 +42,7 @@
   (interactive)
   (let* ((script-path (expand-file-name org-zettel-ref-python-file))
          (default-directory (file-name-directory script-path))
-         (python-path (executable-find "python3"))
+         (python-path (executable-find "python"))
          (temp-folder (expand-file-name org-zettel-ref-temp-folder))
          (reference-folder (expand-file-name org-zettel-ref-reference-folder))
          (archive-folder (expand-file-name org-zettel-ref-archive-folder)))
@@ -172,12 +69,10 @@
         (with-current-buffer "*Convert to Org*"
           (org-zettel-ref-debug-message "Python script output:\n%s" (buffer-string))))))))
 
-;;----------------------------------------------------------------
-;; END: org-zettel-ref-run-python-script
-;;----------------------------------------------------------------
+
 
 ;;----------------------------------------------------------------
-;; START: Other components
+;; Other components
 ;;----------------------------------------------------------------
 
 (defun org-zettel-ref-mode-enable ()
@@ -209,10 +104,16 @@ Otherwise, it calls the original `org-open-at-point' function."
           (org-reveal))
       (apply orig-fun args))))
 
-;;----------------------------------------------------------------
-;; END: Other components
-;;----------------------------------------------------------------  
+;; 其他实用函数
+(defun org-zettel-ref-get-overview-buffer-name (source-buffer)
+  "获取SOURCE-BUFFER对应的概览缓冲区名称。"
+  (format "*Org Zettel Ref: %s*" 
+          (file-name-base (buffer-file-name source-buffer))))
 
+(defun org-zettel-ref-extract-id-from-filename (filename)
+  "从文件名中提取ID。"
+  (when (string-match "\\([0-9]\\{8\\}T[0-9]\\{6\\}\\)" filename)
+    (match-string 1 filename)))
 
 (provide 'org-zettel-ref-utils)
 
