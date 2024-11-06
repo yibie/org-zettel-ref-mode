@@ -1,483 +1,410 @@
 import os
 import sys
 import re
-import argparse
-import subprocess
-import platform
-import zipfile
-import tempfile
-import shutil
 import logging
-import venv
+import shutil
+import argparse
 import time
-import PyPDF2  # 添加这一行
-from PyPDF2 import PdfReader  # 修改这一行
-from pdf2image import convert_from_path
-import pytesseract
-from PIL import Image
+import subprocess
+from typing import Tuple, List, Optional
+from pathlib import Path
+from shutil import which
 
-# Setting Log 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Setting DEFAULT path
-DEFAULT_TEMP_FOLDER = os.path.expanduser("~/Documents/temp_convert/")
-DEFAULT_REFERENCE_FOLDER = os.path.expanduser("~/Documents/ref/")
-DEFAULT_ARCHIVE_FOLDER = os.path.expanduser("/Volumes/Collect/archives/")
+EBOOK_CONVERT_PATH = which('ebook-convert')
 
-def find_conda():
-    conda_path = shutil.which('conda')
-    if conda_path:
-        return conda_path
-    common_paths = [
-        os.path.expanduser('~/miniconda3/bin/conda'),
-        os.path.expanduser('~/anaconda3/bin/conda'),
-        '/usr/local/bin/conda',
-        '/opt/conda/bin/conda'
-    ]
-    for path in common_paths:
-        if os.path.exists(path):
-            return path
-    return None
-
-def is_venv():
-    return (hasattr(sys, 'real_prefix') or
-            (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix))
-
-def activate_environment():
-    if 'CONDA_PREFIX' in os.environ:
-        conda_path = find_conda()
-        if conda_path:
-            # First run conda init
-            init_command = f"{conda_path} init bash"
-            subprocess.run(init_command, shell=True, capture_output=True, text=True)
-            
-            # Try to active env
-            activate_command = f"source $(dirname $(dirname {conda_path}))/etc/profile.d/conda.sh && conda activate {os.environ.get('CONDA_DEFAULT_ENV', 'base')}"
-            result = subprocess.run(activate_command, shell=True, capture_output=True, text=True, executable='/bin/bash')
-            print(f"Activation command output: {result.stdout}")
-            print(f"Activation command error: {result.stderr}")
-            if result.returncode == 0:
-                print(f"Activated Conda environment: {os.environ.get('CONDA_DEFAULT_ENV', 'base')}")
-            else:
-                print(f"Failed to activate Conda environment. Return code: {result.returncode}")
-        else:
-            print("Conda not found, but CONDA_PREFIX is set. Using current environment.")
-    elif is_venv():
-        print(f"Using venv: {sys.prefix}")
-    else:
-        print("No virtual environment detected. Using system Python.")
-
-    # 打印 Python 路径和版本信息，以便调试
-    print(f"Python executable: {sys.executable}")
-    print(f"Python version: {sys.version}")
-
-# 在脚本开始时调用此函数
-activate_environment()
-
-# Constants
-MAX_PDF_SIZE_MB = 100
-IMAGES_FOLDER = os.path.expanduser("~/Documents/ref/images")
-TIMEOUT_SECONDS = 300  # 5 minutes timeout
-
-def is_pdf_processable(file_path):
-    return os.path.getsize(file_path) / (1024 * 1024) <= MAX_PDF_SIZE_MB
-
-def run_with_timeout(cmd, timeout_sec):
-    if platform.system() != 'Darwin':  # 不是 macOS
-        full_cmd = ['timeout', str(timeout_sec)] + cmd
-        return subprocess.run(full_cmd, capture_output=True, text=True)
-    else:  # macOS
+def install_dependencies():
+    """安装必要的依赖包"""
+    required_packages = {
+        'PyMuPDF': 'pymupdf',
+        'pdfplumber': 'pdfplumber',
+        'PyPDF2': 'PyPDF2',
+        'html2text': 'html2text',
+        'ebooklib': 'ebooklib',
+        'beautifulsoup4': 'beautifulsoup4'
+    }
+    
+    logger.info("Checking and installing required packages...")
+    
+    for package_name, pip_name in required_packages.items():
         try:
-            return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_sec)
-        except subprocess.TimeoutExpired:
-            return subprocess.CompletedProcess(cmd, -1, "", "Process timed out")
-
-def is_valid_epub(epub_path):
-    try:
-        with zipfile.ZipFile(epub_path, 'r') as zip_ref:
-            return True
-    except zipfile.BadZipFile:
-        return False
-
-def preprocess_epub(epub_path):
-    if not is_valid_epub(epub_path):
-        print(f"Warning: {epub_path} is not a valid EPUB file. Skipping preprocessing.")
-        return epub_path
-
-    temp_dir = tempfile.mkdtemp()
-    try:
-        with zipfile.ZipFile(epub_path, 'r') as zip_ref:
-            zip_ref.extractall(temp_dir)
-
-        container_path = os.path.join(temp_dir, 'META-INF', 'container.xml')
-        if os.path.exists(container_path):
-            with open(container_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            content = content.replace('../', '')
-            with open(container_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-
-        new_epub_path = epub_path + '.fixed.epub'
-        with zipfile.ZipFile(new_epub_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for root, _, files in os.walk(temp_dir):
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    arcname = os.path.relpath(file_path, temp_dir)
-                    zipf.write(file_path, arcname)
-        return new_epub_path
-    except Exception as e:
-        print(f"Error preprocessing EPUB {epub_path}: {str(e)}")
-        return epub_path
-    finally:
-        shutil.rmtree(temp_dir)
-
-def find_calibre_ebook_convert():
-    """Attempt to find the ebook-convert executable from Calibre"""
-    possible_paths = [
-        "/Applications/calibre.app/Contents/MacOS/ebook-convert",  # macOS
-        "C:\\Program Files\\Calibre2\\ebook-convert.exe",          # Windows
-        "C:\\Program Files (x86)\\Calibre2\\ebook-convert.exe",    # Windows 32-bit on 64-bit
-        "/usr/bin/ebook-convert",                                  # Linux
-    ]
-
-    for path in possible_paths:
-        if os.path.isfile(path):
-            return path
-
-    # If not found in common locations, try to find it in PATH
-    try:
-        return shutil.which("ebook-convert")
-    except:
-        return None
-
-EBOOK_CONVERT_PATH = find_calibre_ebook_convert()
-
-def convert_epub_to_text(input_file, output_file):
-    try:
-        # First, try using pandoc
-        subprocess.run(['pandoc', '-f', 'epub', '-t', 'plain', '-o', output_file, input_file],
-                       check=True, capture_output=True, text=True)
-        print(f"Converted EPUB to text using pandoc: {input_file} -> {output_file}")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"Error converting EPUB to text with pandoc {input_file}: {e.stderr}")
-        # If pandoc fails, try using ebook-convert from Calibre
-        if EBOOK_CONVERT_PATH:
+            __import__(package_name.lower())
+            logger.info(f"{package_name} is already installed")
+        except ImportError:
+            logger.info(f"Installing {package_name}...")
             try:
-                subprocess.run([EBOOK_CONVERT_PATH, input_file, output_file],
-                               check=True, capture_output=True, text=True)
-                print(f"Converted EPUB to text using ebook-convert: {input_file} -> {output_file}")
-                return True
+                subprocess.check_call([sys.executable, "-m", "pip", "install", pip_name])
+                logger.info(f"Successfully installed {package_name}")
             except subprocess.CalledProcessError as e:
-                print(f"Error converting EPUB to text with ebook-convert {input_file}: {e.stderr}")
-        else:
-            print("ebook-convert not found. Please make sure Calibre is installed and added to PATH.")
-    except FileNotFoundError:
-        print("pandoc not found. Please install pandoc.")
-    return False
+                logger.error(f"Failed to install {package_name}: {e}")
 
-def convert_with_pandoc(input_file, output_file):
-    os.makedirs(IMAGES_FOLDER, exist_ok=True)
 
-    if input_file.lower().endswith('.epub'):
-        input_file = preprocess_epub(input_file)
+install_dependencies()
 
-    cmd = [
-        'pandoc',
-        input_file,
-        '-o', output_file,
-        f'--extract-media={IMAGES_FOLDER}',
-        '--wrap=none',
-        f'--resource-path={IMAGES_FOLDER}'
-    ]
-    result = run_with_timeout(cmd, TIMEOUT_SECONDS)
 
-    if input_file.endswith('.fixed.epub'):
-        os.remove(input_file)
+AVAILABLE_PDF_PROCESSORS = []
 
-    if result.returncode == 0:
-        print(f"Converted: {input_file} -> {output_file}")
-        print(f"Extracted images (if any) to: {IMAGES_FOLDER}")
-        return True
-    else:
-        print(f"Error converting {input_file}: {result.stderr}")
-        if input_file.lower().endswith('.epub'):
-            print("Attempting fallback conversion for EPUB...")
-            text_file = output_file.rsplit('.', 1)[0] + '.txt'
-            if convert_epub_to_text(input_file, text_file):
-                return convert_with_pandoc(text_file, output_file)
-        return False
+try:
+    import fitz  # PyMuPDF
+    AVAILABLE_PDF_PROCESSORS.append('pymupdf')
+except ImportError:
+    logger.warning("PyMuPDF (fitz) not found. Some PDF processing features may be limited.")
 
-def convert_pdf_to_text(input_file, output_file):
+try:
+    import pdfplumber
+    AVAILABLE_PDF_PROCESSORS.append('pdfplumber')
+except ImportError:
+    logger.warning("pdfplumber not found. Some PDF processing features may be limited.")
+
+try:
+    from PyPDF2 import PdfReader
+except ImportError:
+    logger.warning("PyPDF2 not found. PDF processing may be limited.")
+
+def sanitize_filename(filename: str) -> str:
+    """Clean up unsafe characters in filenames"""
+    # Replace Windows/Unix unsupported characters
+    invalid_chars = r'[<>:"/\\|?*\[\]]'
+    filename = re.sub(invalid_chars, '_', filename)
+    # Handle consecutive underscores
+    filename = re.sub(r'_+', '_', filename)
+    return filename.strip('_')
+
+def convert_markdown_to_org(input_file: str, output_file: str) -> Tuple[bool, List[str]]:
+    """Convert Markdown to Org format"""
     try:
-        subprocess.run(['pdftotext', input_file, output_file], check=True, capture_output=True, text=True)
-        print(f"Converted PDF to text: {input_file} -> {output_file}")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"Error converting PDF to text {input_file}: {e.stderr}")
-        return False
-    except FileNotFoundError:
-        print("pdftotext not found. Please install poppler-utils.")
-        return False
-
-def is_scanned_pdf(file_path):
-    """
-    Determines if a PDF file is scanned or digital.
-
-    Args:
-    file_path (str): Path to the PDF file.
-
-    Returns:
-    bool: True if the PDF is likely scanned, False if it's likely digital.
-    """
-    with open(file_path, 'rb') as file:
-        reader = PyPDF2.PdfReader(file)
-        page = reader.pages[0]  # Check only the first page
-
-        # If the page has text, it's likely a digital PDF
-        if page.extract_text().strip():
-            return False
-
-        # If the page has images and no text, it's likely a scanned PDF
-        if '/XObject' in page['/Resources']:
-            return True
-
-    # If we can't determine, assume it's digital
-    return False
-
-def ocr_pdf(input_file, output_file):
-    try:
-        # Convert PDF to images
-        images = convert_from_path(input_file)
-
-        # Perform OCR on each image
-        text = ""
-        for i, image in enumerate(images):
-            print(f"Processing page {i+1}/{len(images)}...")
-            # Use both English and Chinese (simplified and traditional) for OCR
-            page_text = pytesseract.image_to_string(image, lang='eng+chi_sim+chi_tra')
-            text += f"\n\n--- Page {i+1} ---\n\n" + page_text
-
-        # Write the extracted text to the output file
+        with open(input_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Basic Markdown to Org format conversion
+        # Convert titles
+        content = re.sub(r'^#{1,6}\s+', '*' * 1, content, flags=re.MULTILINE)
+        # Convert lists
+        content = re.sub(r'^\s*[-*+]\s+', '- ', content, flags=re.MULTILINE)
+        # Convert code blocks
+        content = re.sub(r'```(\w*)\n', '#+BEGIN_SRC \\1\n', content)
+        content = re.sub(r'```', '#+END_SRC', content)
+        
         with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(text)
-
-        print(f"OCR processing complete for scanned PDF: {input_file} -> {output_file}")
-        return True
+            f.write(content)
+        return True, []
     except Exception as e:
-        print(f"Error during OCR processing of PDF {input_file}: {str(e)}")
-        return False
+        return False, [f"Error converting markdown: {str(e)}"]
 
-def process_pdf(input_file, output_file):
-    if is_scanned_pdf(input_file):
-        temp_txt_file = output_file.rsplit('.', 1)[0] + '.txt'
-        success = ocr_pdf(input_file, temp_txt_file)
-        if success:
-            return convert_with_pandoc(temp_txt_file, output_file)
-        return False
-    else:
-        return convert_pdf_to_text(input_file, output_file)
-
-def convert_mobi_to_text(input_file, output_file):
-    """
-    Convert MOBI file to text using Calibre's ebook-convert tool.
-    """
-    if not EBOOK_CONVERT_PATH:
-        print("ebook-convert not found. Please install Calibre.")
-        return False
-
+def convert_html_to_org(input_file: str, output_file: str) -> Tuple[bool, List[str]]:
+    """Convert HTML to Org format"""
     try:
-        subprocess.run([EBOOK_CONVERT_PATH, input_file, output_file],
-                       check=True, capture_output=True, text=True)
-        print(f"Converted MOBI to text: {input_file} -> {output_file}")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"Error converting MOBI to text {input_file}: {e.stderr}")
-        return False
+        import html2text
+        h = html2text.HTML2Text()
+        h.body_width = 0  
+        
+        with open(input_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # 转换为 markdown
+        md_content = h.handle(content)
+        
+        # 然后转换为 org
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(md_content)
+        return True, []
+    except ImportError:
+        return False, ["html2text module not installed"]
+    except Exception as e:
+        return False, [f"Error converting HTML: {str(e)}"]
 
-def process_file(file, temp_folder, reference_folder, archive_folder):
-    input_file = os.path.join(temp_folder, file)
-    file_extension = os.path.splitext(file)[1].lower()
-    output_name = os.path.splitext(file)[0]  # No sanitization
+def convert_epub_to_org(input_file: str, output_file: str) -> Tuple[bool, List[str]]:
+    """
+    将 EPUB 转换为 org 格式，使用多种方法尝试转换
+    """
+    errors = []
+    
+    # 1. 首先尝试使用 Calibre（如果已安装）
+    if EBOOK_CONVERT_PATH:
+        try:
+            temp_txt = input_file + '.txt'
+            result = subprocess.run(
+                [EBOOK_CONVERT_PATH, input_file, temp_txt],
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            
+            with open(temp_txt, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            os.remove(temp_txt)  # 清理临时文件
+            return True, []
+            
+        except subprocess.CalledProcessError as e:
+            errors.append(f"Calibre conversion failed: {e.stderr}")
+        except Exception as e:
+            errors.append(f"Calibre processing error: {str(e)}")
+    
+    # 2. 如果 Calibre 失败，尝试使用 ebooklib
+    try:
+        import ebooklib
+        from ebooklib import epub
+        from bs4 import BeautifulSoup
+        import warnings
+        
+        # 忽略 ebooklib 的警告
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            
+            book = epub.read_epub(input_file, options={'ignore_ncx': True})
+            
+            content = []
+            
+            if book.title:
+                content.append(f"#+TITLE: {book.title}\n")
+            
+            
+            metadata = []
+            if book.metadata:
+                for meta in book.metadata:
+                    if meta:
+                        metadata.append(f"#+{meta[0].upper()}: {meta[1]}")
+            if metadata:
+                content.extend(metadata)
+                content.append("")  # 添加空行
+        
+            
+            for item in book.get_items():
+                if item.get_type() == ebooklib.ITEM_DOCUMENT:
+                    try:
+                        soup = BeautifulSoup(item.get_content(), 'html.parser')
+                        
+                        
+                        for h in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
+                            level = int(h.name[1])
+                            h.replace_with(f"{'*' * level} {h.get_text()}\n")
+                        
+                        
+                        for p in soup.find_all('p'):
+                            p.replace_with(f"{p.get_text()}\n\n")
+                        
+                        text = soup.get_text()
+                        if text.strip():
+                            content.append(text)
+                    except Exception as e:
+                        errors.append(f"Error processing EPUB item: {str(e)}")
+                        continue
+            
+            
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(content))
+            
+            return True, []
+            
+    except ImportError:
+        errors.append("ebooklib or beautifulsoup4 not installed")
+    except Exception as e:
+        errors.append(f"EPUB processing error: {str(e)}")
+    
 
-    if file_extension in ['.md', '.html', '.epub', '.txt', '.mobi']:
-        if file_extension == '.mobi':
-            # First convert MOBI to text
-            text_file = os.path.join(temp_folder, f"{output_name}.txt")
-            success = convert_mobi_to_text(input_file, text_file)
-            if success:
-                # Then convert text to org
-                output_file = os.path.join(reference_folder, f"{output_name}.org")
-                success = convert_with_pandoc(text_file, output_file)
-                os.remove(text_file)  # Remove temporary text file
-            else:
-                return False
-        else:
-            output_file = os.path.join(reference_folder, f"{output_name}.org")
-            success = convert_with_pandoc(input_file, output_file)
-    elif file_extension == '.pdf':
-        if is_pdf_processable(input_file):
-            output_file = os.path.join(reference_folder, f"{output_name}.org")
-            success = process_pdf(input_file, output_file)
-        else:
-            print(f"Skipping oversized PDF file: {file}")
+    if errors:
+        logger.error(f"All EPUB conversion methods failed for {input_file}")
+        for error in errors:
+            logger.error(f"  - {error}")
+    
+    return False, errors
+
+def convert_text_to_org(input_file: str, output_file: str) -> Tuple[bool, List[str]]:
+    """
+    Convert text files (including .txt and .rst) to org format
+    """
+    try:
+        with open(input_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+            
+        # Add basic conversion for .rst files   
+        if input_file.lower().endswith('.rst'):
+            # Convert RST title format
+            content = re.sub(r'={3,}', lambda m: '*' * len(m.group()), content)
+            content = re.sub(r'-{3,}', lambda m: '*' * len(m.group()), content)
+            
+            # Convert RST reference format
+            content = re.sub(r'^\.\. code-block::', '#+BEGIN_SRC', content, flags=re.MULTILINE)
+            content = re.sub(r'^\.\. note::', '#+BEGIN_NOTE', content, flags=re.MULTILINE)
+
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return True, []
+    except Exception as e:
+        return False, [f"Error converting text file: {str(e)}"]
+
+def process_pdf(input_file: str) -> Tuple[Optional[str], List[str]]:
+    """Process PDF file content"""
+    text = ""
+    errors = []
+
+    # PyMuPDF processing method
+    if 'pymupdf' in AVAILABLE_PDF_PROCESSORS:
+        try:
+            with fitz.open(input_file) as doc:
+                text = ""
+                for page in doc:
+                    text += page.get_text()
+                if text.strip():
+                    return text, []
+        except Exception as e:
+            errors.append(f"PyMuPDF error: {str(e)}")
+
+    # PyPDF2 processing method
+    try:
+        from PyPDF2 import PdfReader
+        reader = PdfReader(input_file)
+        if reader.is_encrypted:
+            try:
+                reader.decrypt('')
+            except:
+                errors.append("PDF is encrypted")
+                return None, errors
+
+        text = ""
+        for page in reader.pages:
+            try:
+                text += page.extract_text() or ""
+            except Exception as e:
+                errors.append(f"Error extracting text: {str(e)}")
+                continue
+
+        if text.strip():
+            return text, []
+    except Exception as e:
+        errors.append(f"PyPDF2 error: {str(e)}")
+
+    return None, errors
+
+def convert_pdf_to_org(input_file: str, output_file: str) -> Tuple[bool, List[str]]:
+    """Convert PDF to Org format"""
+    try:
+        text, errors = process_pdf(input_file)
+        if text:
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(text)
+            return True, []
+        return False, errors
+    except Exception as e:
+        return False, [f"Error converting PDF: {str(e)}"]
+
+def process_file(file: str, temp_folder: str, reference_folder: str, archive_folder: str) -> bool:
+    """Process a single file"""
+    try:
+        input_file = os.path.join(temp_folder, file)
+        safe_filename = sanitize_filename(os.path.splitext(file)[0])
+        output_file = os.path.join(reference_folder, safe_filename + '.org')
+        
+        success = False
+        errors = []
+        
+        # 检查文件类型
+        if file.lower().endswith('.mobi'):
+            logger.warning(f"MOBI format is not supported: {file}")
+            logger.warning("Please use Calibre to convert MOBI to EPUB first:")
+            logger.warning("1. Install Calibre from https://calibre-ebook.com/")
+            logger.warning("2. Convert using: ebook-convert input.mobi output.epub")
+            logger.warning("3. Then try processing the EPUB file")
             return False
-    else:
-        print(f"Skipping unsupported file: {file}")
+        
+        # 处理支持的文件类型
+        if file.lower().endswith('.pdf'):
+            success, errors = convert_pdf_to_org(input_file, output_file)
+        elif file.lower().endswith('.md'):
+            success, errors = convert_markdown_to_org(input_file, output_file)
+        elif file.lower().endswith('.html'):
+            success, errors = convert_html_to_org(input_file, output_file)
+        elif file.lower().endswith('.epub'):
+            success, errors = convert_epub_to_org(input_file, output_file)
+        elif file.lower().endswith(('.txt', '.rst')):
+            success, errors = convert_text_to_org(input_file, output_file)
+        else:
+            logger.warning(f"Unsupported file format: {file}")
+            return False
+        
+        if success:
+            logger.info(f"Converted: {input_file} -> {output_file}")
+            try:
+                archive_path = os.path.join(archive_folder, file)
+                shutil.move(input_file, archive_path)
+                logger.info(f"Archived: {input_file} -> {archive_path}")
+            except Exception as e:
+                logger.error(f"Error archiving file: {e}")
+            return True
+        else:
+            logger.error(f"Failed to process {file}: {', '.join(errors)}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error processing {file}: {str(e)}")
         return False
 
-    if success:
-        archive_path = os.path.join(archive_folder, file)
-        shutil.move(input_file, archive_path)
-        print(f"Archived: {input_file} -> {archive_path}")
-        return True
-    else:
-        print(f"Failed to process: {file}")
-        return False
-
-def process_files_by_type(temp_folder, reference_folder, archive_folder):
-    unprocessed_files = []
-
-    file_types = ['.md', '.html', '.epub', '.pdf', '.txt', '.mobi']
-
-    for file_type in file_types:
-        print(f"\nProcessing {file_type.upper()} files...")
-        files = [f for f in os.listdir(temp_folder) if f.lower().endswith(file_type)]
-
-        for file in files:
-            start_time = time.time()
-            success = process_file(file, temp_folder, reference_folder, archive_folder)
-            end_time = time.time()
-
-            if not success or (end_time - start_time) >= TIMEOUT_SECONDS:
-                unprocessed_files.append(file)
-
-        print(f"Finished processing {file_type.upper()} files.")
-
-    return unprocessed_files
-
-def check_folders(temp_folder, reference_folder, archive_folder):
-    for folder in [temp_folder, reference_folder, archive_folder]:
-        if not os.path.exists(folder):
-            os.makedirs(folder)
-            logging.info(f"Created folder: {folder}")
-        elif not os.access(folder, os.W_OK):
-            logging.error(f"No write permission for folder: {folder}")
-            sys.exit(1)
-
-def create_venv(venv_dir):
-    print(f"Creating virtual environment in {venv_dir}")
-    venv.create(venv_dir, with_pip=True)
-
-def activate_venv(venv_dir):
-    if platform.system() == 'Windows':
-        activate_python = os.path.join(venv_dir, 'Scripts', 'python.exe')
-    else:
-        activate_python = os.path.join(venv_dir, 'bin', 'python')
+def check_calibre_installation():
+    """Check if Calibre is installed"""
+    global EBOOK_CONVERT_PATH
     
-    if not os.path.exists(activate_python):
-        print(f"Python executable not found in venv: {activate_python}")
+    if not EBOOK_CONVERT_PATH:
+        logger.warning("Calibre's ebook-convert tool not found.")
+        logger.warning("To process MOBI files, please install Calibre:")
+        logger.warning("- macOS: brew install calibre")
+        logger.warning("- Linux: sudo apt-get install calibre")
+        logger.warning("- Windows: Download from https://calibre-ebook.com/download")
         return False
-    
-    print(f"Re-running script with venv Python: {activate_python}")
-    os.execl(activate_python, activate_python, *sys.argv)
     return True
 
-def install_dependencies(requirements_file):
-    print("Installing dependencies...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", requirements_file])
-
-def setup_environment():
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    venv_dir = os.path.join(script_dir, 'venv')
-    requirements_file = os.path.join(script_dir, 'requirements.txt')
-
-    # 检查环境设置
-    env_setting = os.environ.get('ORG_ZETTEL_REF_PYTHON_ENVIRONMENT', 'system')
-
-    if env_setting == 'system':
-        print("Using system Python as specified in settings.")
-        return
-
-    # 检查是否在 Conda 环境中
-    if 'CONDA_PREFIX' in os.environ:
-        print("Running in Conda environment:", os.environ['CONDA_PREFIX'])
-        return
-
-    # 检查是否有 venv 或 virtualenv
-    if hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix):
-        print("Running in virtualenv or venv")
-        return
-
-    # 如果设置为 'venv' 且没有虚拟环境，创建并激活一个
-    if env_setting == 'venv':
-        if not os.path.exists(venv_dir):
-            create_venv(venv_dir)
-        if not activate_venv(venv_dir):
-            print("Failed to activate venv. Using system Python.")
-            return
-
-    # 检查并安装依赖
-    if os.path.exists(requirements_file):
-        install_dependencies(requirements_file)
-    else:
-        print("No requirements.txt file found. Skipping dependency check.")
-
 def main():
-    parser = argparse.ArgumentParser(description="Convert files to Org format")
-    parser.add_argument("--temp", help="Temporary folder path", required=True)
-    parser.add_argument("--reference", help="Reference folder path", required=True)
-    parser.add_argument("--archive", help="Archive folder path", required=True)
+    """Main function"""
+    parser = argparse.ArgumentParser(description='Convert documents to org format')
+    parser.add_argument('--temp', required=True, help='Temporary folder path')
+    parser.add_argument('--reference', required=True, help='Reference folder path')
+    parser.add_argument('--archive', required=True, help='Archive folder path')
     
     args = parser.parse_args()
     
-    # 使用命令行参数或默认值
-    temp_folder = args.temp or DEFAULT_TEMP_FOLDER
-    reference_folder = args.reference or DEFAULT_REFERENCE_FOLDER
-    archive_folder = args.archive or DEFAULT_ARCHIVE_FOLDER
+    for path in [args.temp, args.reference, args.archive]:
+        os.makedirs(path, exist_ok=True)
     
-    print(f"Using folders:")
-    print(f"Temporary folder: {temp_folder}")
-    print(f"Reference folder: {reference_folder}")
-    print(f"Archive folder: {archive_folder}")
-    
-    # 检查文件夹是否存在，如果不存在则创建
-    for folder in [temp_folder, reference_folder, archive_folder]:
-        if not os.path.exists(folder):
-            try:
-                os.makedirs(folder)
-                print(f"Created folder: {folder}")
-            except OSError as e:
-                print(f"Error creating folder {folder}: {e}")
-                print("Please manually create the folder or modify the path in the script.")
-                sys.exit(1)
-    
-    # 如果是首次运行或需要修改路径，只打印提示信息
-    if args.temp is None and args.reference is None and args.archive is None:
-        print("\nNote: You're using default folder paths. If you need to change them:")
-        print("1. Open the script file 'convert-to-org.py'")
-        print("2. Locate the following lines near the top of the file:")
-        print("   DEFAULT_TEMP_FOLDER = os.path.expanduser(\"~/Documents/temp_convert/\")")
-        print("   DEFAULT_REFERENCE_FOLDER = os.path.expanduser(\"~/Documents/ref/\")")
-        print("   DEFAULT_ARCHIVE_FOLDER = os.path.expanduser(\"/Volumes/Collect/archives/\")")
-        print("3. Modify these paths as needed")
-        print("4. Save the file and run the script again")
-    
-    # 处理文件
-    logging.info("Starting file processing")
-    unprocessed_files = process_files_by_type(temp_folder, reference_folder, archive_folder)
-    logging.info("File processing completed")
 
-    print("\nProcessing complete.")
+    file_types = ['.md', '.html', '.epub', '.pdf', '.txt', '.rst']  # 移除 .mobi
+    unprocessed_files = []
+    
+    for file_type in file_types:
+        logger.info(f"\nProcessing {file_type.upper()} files...")
+        files = [f for f in os.listdir(args.temp) if f.lower().endswith(file_type)]
+        
+        for file in files:
+            if not process_file(file, args.temp, args.reference, args.archive):
+                unprocessed_files.append(file)
 
+    mobi_files = [f for f in os.listdir(args.temp) if f.lower().endswith('.mobi')]
+    if mobi_files:
+        logger.warning("\nFound MOBI files that need conversion:")
+        for mobi_file in mobi_files:
+            logger.warning(f"- {mobi_file}")
+        logger.warning("\nPlease convert MOBI files to EPUB using Calibre:")
+        logger.warning("1. Install Calibre from https://calibre-ebook.com/")
+        logger.warning("2. Convert using: ebook-convert input.mobi output.epub")
+        logger.warning("3. Then run this script again with the EPUB files")
+    
     if unprocessed_files:
-        print("\nUnprocessed files report:")
+        logger.warning("\nUnprocessed files:")
         for file in unprocessed_files:
-            print(f"- {file}")
-        print(f"\nTotal unprocessed files: {len(unprocessed_files)}")
+            logger.warning(f"- {file}")
     else:
-        print("\nAll files processed successfully.")
+        logger.info("\nAll supported files processed successfully.")
 
 if __name__ == "__main__":
-    setup_environment()
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        logger.info("\nProcess interrupted by user")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"An unexpected error occurred: {e}")
+        sys.exit(1)

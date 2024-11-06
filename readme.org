@@ -4,6 +4,10 @@
 #+end_center
 
 ** Changlog
+*** Version 0.4.1 (2024-11-06)
+  - Optimized convert_to_pdf.py
+    - Dropped using OCR to convert PDF  
+
 *** Version 0.4 (2024-11-04)
   - Note! When running the new version for the first time, be sure to execute ~M-x org-zettel-ref-migrate~ to upgrade the data structure in the hash table.
   - New Feature: Provides a visual management panel for source files

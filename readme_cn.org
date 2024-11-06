@@ -1,5 +1,9 @@
 * org-zettel-ref-mode
 ** 版本历史
+- v0.4.1 (2024-11-06)
+  - 优化 conver_to_pdf.py
+    - 放弃使用 OCR 转换 PDF
+
 - v0.4 (2024-11-04)
   - 注意! 新版本第一次运行时, 一定要执行 ~M-x org-zettel-ref-migrate~ 升级哈希表里的数据结构
   - 新功能: 为源文件提供可视化管理面板
@@ -445,9 +449,9 @@ org-zettel-ref-mode 的灵感借鉴了朋友 [[https://github.com/lijigang][@lij
 
 ✅ 提供源文件管理面板
 
-- 支持更多文件格式(可能)
+- 持续优化 conver_to_org.py 脚本
 
-- 进一步优化Python脚本集成
+- 支持更多文件格式(可能)
 
 - 增加更多自定义选项
 

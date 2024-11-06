@@ -144,7 +144,6 @@
   "Refresh the reference list display."
   (interactive)
   (when (eq major-mode 'org-zettel-ref-list-mode)
-    ;; Save marked files and position
     (let* ((marked-files org-zettel-ref-marked-files)
            (current-pos (point))
            (inhibit-read-only t))
@@ -153,16 +152,23 @@
         (dolist (ov org-zettel-ref-mark-overlays)
           (delete-overlay ov))
         (setq org-zettel-ref-mark-overlays nil))
+      
       ;; Clear buffer
       (erase-buffer)
+      
       ;; Get and filter entries
-      (let ((entries (org-zettel-ref-list--get-entries)))
-        (when (fboundp 'org-zettel-ref-apply-filters)
-          (setq entries (org-zettel-ref-apply-filters entries)))
-        (setq tabulated-list-entries entries))
-      ;; Print list
-      (tabulated-list-print t)
-      ;; If marking is enabled, restore marks
+      (condition-case err
+          (progn
+            (let ((entries (org-zettel-ref-list--get-entries)))
+              (when (fboundp 'org-zettel-ref-apply-filters)
+                (setq entries (org-zettel-ref-apply-filters entries)))
+              (setq tabulated-list-entries entries))
+            ;; Print list
+            (tabulated-list-print t))
+        (error
+         (message "Error refreshing list: %s" (error-message-string err))))
+      
+      ;; Restore marks if needed
       (when (and (boundp 'org-zettel-ref-marked-files)
                  marked-files)
         (save-excursion
@@ -177,6 +183,7 @@
                   (overlay-put ov 'org-zettel-ref-marked t)
                   (push ov org-zettel-ref-mark-overlays))))
             (forward-line 1))))
+      
       ;; Restore cursor position or move to beginning
       (if (< current-pos (point-max))
           (goto-char current-pos)
@@ -845,56 +852,56 @@ Return a list of file paths."
 ;;; File Monitoring
 ;;;----------------------------------------------------------------------------
 
-;; (defvar org-zettel-ref-file-watch-descriptor nil
-;;   "File monitoring descriptor.")
+(defvar org-zettel-ref-file-watch-descriptor nil
+  "File monitoring descriptor.")
 
-;; (defun org-zettel-ref-handle-file-change (event)
-;;   "Handle file change EVENT from file monitoring system."
-;;   (let ((event-type (nth 1 event))
-;;         (file (nth 2 event)))
-;;     ;; 确保文件存在且是.org文件
-;;     (when (and file
-;;                (stringp file)
-;;                (string-match-p "\\.org$" file)
-;;                (not (string-match-p "^\\." (file-name-nondirectory file))))
-;;       ;; 根据事件类型处理
-;;       (pcase event-type
-;;         ((or 'created 'deleted 'modified 'renamed 'changed 'attribute-changed)
-;;          (run-with-timer 
-;;           0.5 nil
-;;           (lambda ()
-;;             (when (get-buffer "*Org Zettel Ref List*")
-;;               (with-current-buffer "*Org Zettel Ref List*"
-;;                 (when (eq major-mode 'org-zettel-ref-list-mode)
-;;                   (org-zettel-ref-list-refresh)
-;;                   (message "Refreshed due to file change: %s" 
-;;                           (file-name-nondirectory file))))))))))))
+(defun org-zettel-ref-handle-file-change (event)
+  "Handle file change EVENT from file monitoring system."
+  (let ((event-type (nth 1 event))
+        (file (nth 2 event)))
+    ;; 确保文件存在且是.org文件
+    (when (and file
+               (stringp file)
+               (string-match-p "\\.org$" file)
+               (not (string-match-p "^\\." (file-name-nondirectory file))))
+      ;; 根据事件类型处理
+      (pcase event-type
+        ((or 'created 'deleted 'modified 'renamed 'changed 'attribute-changed)
+         (run-with-timer 
+          0.5 nil
+          (lambda ()
+            (when (get-buffer "*Org Zettel Ref List*")
+              (with-current-buffer "*Org Zettel Ref List*"
+                (when (eq major-mode 'org-zettel-ref-list-mode)
+                  (org-zettel-ref-list-refresh)
+                  (message "Refreshed due to file change: %s" 
+                          (file-name-nondirectory file))))))))))))
 
-;; (defun org-zettel-ref-watch-directory ()
-;;   "Start monitoring changes in the reference file directory."
-;;   (when (and (not org-zettel-ref-file-watch-descriptor)
-;;              (file-exists-p org-zettel-ref-directory)))
-;;     (when org-zettel-ref-file-watch-descriptor
-;;       (file-notify-rm-watch org-zettel-ref-file-watch-descriptor))
+(defun org-zettel-ref-watch-directory ()
+  "Start monitoring changes in the reference file directory."
+  (when (and (not org-zettel-ref-file-watch-descriptor)
+             (file-exists-p org-zettel-ref-directory)) 
+    (when org-zettel-ref-file-watch-descriptor
+      (file-notify-rm-watch org-zettel-ref-file-watch-descriptor))
     
-;;     (let ((descriptor (file-notify-add-watch
-;;                       org-zettel-ref-directory
-;;                       '(change attribute-change)
-;;                       #'org-zettel-ref-handle-file-change)))
-;;       (setq org-zettel-ref-file-watch-descriptor descriptor)
-;;       (message "Started monitoring directory: %s" org-zettel-ref-directory))))
+    (let ((descriptor (file-notify-add-watch
+                      org-zettel-ref-directory
+                      '(change attribute-change)
+                      #'org-zettel-ref-handle-file-change)))
+      (setq org-zettel-ref-file-watch-descriptor descriptor)
+      (message "Started monitoring directory: %s" org-zettel-ref-directory))))
 
-;; (defun org-zettel-ref-unwatch-directory ()
-;;   "Stop monitoring the reference file directory."
-;;   (when org-zettel-ref-file-watch-descriptor
-;;     (condition-case err
-;;         (progn
-;;           (file-notify-rm-watch org-zettel-ref-file-watch-descriptor)
-;;           (setq org-zettel-ref-file-watch-descriptor nil)
-;;           (message "Stopped monitoring directory"))
-;;       (error
-;;        (message "Error removing file watch: %s" (error-message-string err))
-;;        (setq org-zettel-ref-file-watch-descriptor nil)))))
+(defun org-zettel-ref-unwatch-directory ()
+  "Stop monitoring the reference file directory."
+  (when org-zettel-ref-file-watch-descriptor
+    (condition-case err
+        (progn
+          (file-notify-rm-watch org-zettel-ref-file-watch-descriptor)
+          (setq org-zettel-ref-file-watch-descriptor nil)
+          (message "Stopped monitoring directory"))
+      (error
+       (message "Error removing file watch: %s" (error-message-string err))
+       (setq org-zettel-ref-file-watch-descriptor nil)))))
 
 
 (provide 'org-zettel-ref-list)
