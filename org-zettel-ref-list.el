@@ -247,7 +247,7 @@ ENTRY is the org-zettel-ref-entry struct."
        (or (org-zettel-ref-ref-entry-author entry) "")
        (format-time-string "%Y-%m-%d %H:%M:%S"
                           (org-zettel-ref-ref-entry-modified entry))
-       (if-let ((keywords (org-zettel-ref-ref-entry-keywords entry)))
+       (if-let* ((keywords (org-zettel-ref-ref-entry-keywords entry)))
            (string-join keywords ", ")
          "")))))
 
@@ -323,7 +323,7 @@ ENTRY is the org-zettel-ref-entry struct."
 (defun org-zettel-ref-unmark-file ()
   "Unmark the current file."
   (interactive)
-  (when-let ((file (org-zettel-ref-list-get-file-at-point)))
+  (when-let* ((file (org-zettel-ref-list-get-file-at-point)))
     ;; Remove current line overlay
     (let ((overlays (overlays-in (line-beginning-position)
                                 (1+ (line-end-position)))))
@@ -357,7 +357,7 @@ ENTRY is the org-zettel-ref-entry struct."
   (let ((authors '()))
     (maphash
      (lambda (_id entry)
-       (when-let ((author (org-zettel-ref-ref-entry-author entry)))
+       (when-let* ((author (org-zettel-ref-ref-entry-author entry)))
          (push author authors)))
      (org-zettel-ref-db-refs db))
     (delete-dups authors)))
@@ -367,7 +367,7 @@ ENTRY is the org-zettel-ref-entry struct."
   (let ((titles '()))
     (maphash
      (lambda (_id entry)
-       (when-let ((title (org-zettel-ref-ref-entry-title entry)))
+       (when-let* ((title (org-zettel-ref-ref-entry-title entry)))
          (push title titles)))
      (org-zettel-ref-db-refs db))
     (delete-dups titles)))
@@ -377,7 +377,7 @@ ENTRY is the org-zettel-ref-entry struct."
   (let ((keywords '()))
     (maphash
      (lambda (_id entry)
-       (when-let ((entry-keywords (org-zettel-ref-ref-entry-keywords entry)))
+       (when-let* ((entry-keywords (org-zettel-ref-ref-entry-keywords entry)))
          (setq keywords (append keywords entry-keywords))))
      (org-zettel-ref-db-refs db))
     (delete-dups keywords)))
@@ -535,7 +535,7 @@ ENTRY is the org-zettel-ref-entry struct."
                  (message "Error renaming file: %s" (error-message-string err))
                  (signal (car err) (cdr err))))
               ;; Update database
-              (when-let ((ref-id (org-zettel-ref-db-get-ref-id-by-path db file))
+              (when-let* ((ref-id (org-zettel-ref-db-get-ref-id-by-path db file))
                         (ref-entry (org-zettel-ref-db-get-ref-entry db ref-id)))
                 (remhash file (org-zettel-ref-db-ref-paths db))
                 (puthash new-filepath ref-id (org-zettel-ref-db-ref-paths db))
@@ -543,7 +543,7 @@ ENTRY is the org-zettel-ref-entry struct."
                       (org-zettel-ref-ref-entry-keywords ref-entry) new-keywords-list
                       (org-zettel-ref-ref-entry-modified ref-entry) (current-time)))
               ;; Update opened buffer
-              (when-let ((buf (get-file-buffer file)))
+              (when-let* ((buf (get-file-buffer file)))
                 (with-current-buffer buf
                   (set-visited-file-name new-filepath)
                   (set-buffer-modified-p nil))))))))
@@ -578,7 +578,7 @@ ENTRY is the org-zettel-ref-entry struct."
     (when (and file ref-id
                (yes-or-no-p (format "Delete file %s? " file)))
       ;; Delete mapping relationship
-      (when-let ((overview-id (org-zettel-ref-db-get-maps db ref-id)))
+      (when-let* ((overview-id (org-zettel-ref-db-get-maps db ref-id)))
         (remhash ref-id (org-zettel-ref-db-map db))
         (remhash overview-id (org-zettel-ref-db-overviews db)))
       ;; Delete reference entry
@@ -609,9 +609,9 @@ ENTRY is the org-zettel-ref-entry struct."
                         file-count
                         (if (= file-count 1) "" "s"))))
       (dolist (file files)
-        (when-let ((ref-id (org-zettel-ref-db-get-ref-id-by-path db file)))
+        (when-let* ((ref-id (org-zettel-ref-db-get-ref-id-by-path db file)))
           ;; Delete mapping relationship
-          (when-let ((overview-id (org-zettel-ref-db-get-maps db ref-id)))
+          (when-let* ((overview-id (org-zettel-ref-db-get-maps db ref-id)))
             (remhash ref-id (org-zettel-ref-db-map db))
             (remhash overview-id (org-zettel-ref-db-overviews db)))
           ;; Delete reference entry
@@ -779,7 +779,7 @@ Return t if deletion is successful, nil if entry does not exist."
              (sort items #'string>)))
           (selection (completing-read "Select entry to delete: " candidates nil t)))
      (list db (substring selection 1 (string-match "]" selection)))))
-  (when-let ((entry (org-zettel-ref-db-get-ref-entry db id)))
+  (when-let* ((entry (org-zettel-ref-db-get-ref-entry db id)))
     ;; Delete entry
     (remhash id (org-zettel-ref-db-refs db))
     ;; Save database
@@ -820,7 +820,7 @@ IDS is a list of entry IDs. Return number of deleted entries."
                   selections))))
   (let ((removed 0))
     (dolist (id ids)
-      (when-let ((entry (org-zettel-ref-db-get-ref-entry db id)))
+      (when-let* ((entry (org-zettel-ref-db-get-ref-entry db id)))
         ;; Delete entry
         (remhash id (org-zettel-ref-db-refs db))
         (cl-incf removed)

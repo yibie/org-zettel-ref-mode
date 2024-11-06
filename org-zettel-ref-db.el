@@ -211,7 +211,7 @@ DB is the database object, ENTRY is the reference entry."
   (let ((id (org-zettel-ref-ref-entry-id entry))
         (file-path (org-zettel-ref-ref-entry-file-path entry)))
     ;; Check if there is already an entry with the same file path
-    (when-let ((existing-id (gethash file-path (org-zettel-ref-db-ref-paths db))))
+    (when-let* ((existing-id (gethash file-path (org-zettel-ref-db-ref-paths db))))
       (remhash existing-id (org-zettel-ref-db-refs db)))
     ;; Add the new entry
     (puthash id entry (org-zettel-ref-db-refs db))
@@ -306,7 +306,7 @@ Return the overview entry object."
               overview)))
         
         ;; 2. Try to get the overview entry by file path
-        (when-let ((path-overview-id (gethash file-path 
+        (when-let* ((path-overview-id (gethash file-path 
                                              (org-zettel-ref-db-overview-paths db))))
           (let ((overview (gethash path-overview-id 
                                   (org-zettel-ref-db-overviews db))))
@@ -334,7 +334,7 @@ Return the overview entry object."
 (defun org-zettel-ref-db-get-ref-by-path (db file-path)
   "DB is the database object, FILE-PATH is the file path.
 Return the corresponding reference entry, or nil if it doesn't exist."
-  (when-let ((ref-id (org-zettel-ref-db-get-ref-id-by-path db file-path)))
+  (when-let* ((ref-id (org-zettel-ref-db-get-ref-id-by-path db file-path)))
     (org-zettel-ref-db-get-ref-entry db ref-id)))
 
 (defun org-zettel-ref-db-get-ref-by-title (db title)
@@ -353,7 +353,7 @@ Return the corresponding reference entry, or nil if it doesn't exist."
   "Get the overview entry by reference ID.
 DB is the database object, REF-ID is the reference ID.
 Return the overview entry object."
-  (when-let ((overview-id (org-zettel-ref-db-get-maps db ref-id)))
+  (when-let* ((overview-id (org-zettel-ref-db-get-maps db ref-id)))
     (let ((entry (gethash overview-id (org-zettel-ref-db-overviews db))))
       ;; ensure return is a single entry instead of a list
       (if (org-zettel-ref-overview-entry-p entry)
@@ -423,7 +423,7 @@ Return the updated reference entry object."
   "Update the file path of the reference entry, keeping the ref-id unchanged.
 DB is the database object, OLD-PATH is the old file path, NEW-PATH is the new file path.
 Return the updated reference entry object."
-  (when-let ((ref-id (org-zettel-ref-db-get-ref-id-by-path db old-path)))
+  (when-let* ((ref-id (org-zettel-ref-db-get-ref-id-by-path db old-path)))
     (remhash old-path (org-zettel-ref-db-ref-paths db))
     (puthash new-path ref-id (org-zettel-ref-db-ref-paths db))
     ref-id))
@@ -551,7 +551,7 @@ Return the updated reference entry object."
     (maphash (lambda (file-path ref-id)
                (unless (file-exists-p file-path)
                  (remhash file-path (org-zettel-ref-db-ref-paths db))
-                 (when-let ((entry (gethash ref-id (org-zettel-ref-db-refs db))))
+                 (when-let* ((entry (gethash ref-id (org-zettel-ref-db-refs db))))
                    (remhash ref-id (org-zettel-ref-db-refs db)))
                  (setq modified t)))
              (org-zettel-ref-db-ref-paths db))
@@ -560,7 +560,7 @@ Return the updated reference entry object."
     (maphash (lambda (file-path overview-id)
                (unless (file-exists-p file-path)
                  (remhash file-path (org-zettel-ref-db-overview-paths db))
-                 (when-let ((entry (gethash overview-id (org-zettel-ref-db-overviews db))))
+                 (when-let* ((entry (gethash overview-id (org-zettel-ref-db-overviews db))))
                    (remhash overview-id (org-zettel-ref-db-overviews db)))
                  (setq modified t)))
              (org-zettel-ref-db-overview-paths db))
@@ -778,7 +778,7 @@ Return the property value."
 (defun org-zettel-ref-core-extract-keywords ()
   "Extract keywords from the current buffer.
 Return the keywords list."
-  (when-let ((keywords-str (org-zettel-ref-core-extract-property "KEYWORDS")))
+  (when-let* ((keywords-str (org-zettel-ref-core-extract-property "KEYWORDS")))
     (mapcar #'string-trim
             (split-string keywords-str ","))))
 
@@ -807,7 +807,7 @@ Return the statistics result."
        (message "DEBUG: Processing ref - ID: %s, Title: %s" 
                 id (org-zettel-ref-ref-entry-title entry))
        ;; Author statistics
-       (when-let ((author (org-zettel-ref-ref-entry-author entry)))
+       (when-let* ((author (org-zettel-ref-ref-entry-author entry)))
          (puthash author 
                  (1+ (gethash author author-stats 0))
                  author-stats))

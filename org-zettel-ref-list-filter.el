@@ -322,7 +322,7 @@ FILTER-SPEC is (column . pattern)."
    (list (completing-read "Apply filter preset: "
                          (mapcar #'car org-zettel-ref-filter-presets)
                          nil t)))
-  (when-let ((preset (assoc name org-zettel-ref-filter-presets)))
+  (when-let* ((preset (assoc name org-zettel-ref-filter-presets)))
     (setq org-zettel-ref-active-filters
           (delq nil
                 (mapcar #'org-zettel-ref-filter-deserialize
@@ -649,7 +649,7 @@ FILTER-SPEC is (column . pattern)."
 (defun org-zettel-ref-preset-delete ()
   "Delete preset at point."
   (interactive)
-  (when-let ((name (tabulated-list-get-id)))
+  (when-let* ((name (tabulated-list-get-id)))
     (when (yes-or-no-p (format "Delete preset '%s'? " name))
       (setq org-zettel-ref-filter-presets
             (assoc-delete-all name org-zettel-ref-filter-presets))

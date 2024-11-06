@@ -413,10 +413,10 @@ ARG is the prefix argument."
                do (progn
                     ;; Process only files in the ref directory
                     (when (string-prefix-p ref-dir (expand-file-name old-file))
-                      (when-let ((ref-id (gethash old-file (org-zettel-ref-db-ref-paths db))))
+                      (when-let* ((ref-id (gethash old-file (org-zettel-ref-db-ref-paths db))))
                         (condition-case err
                             (org-zettel-ref-with-transaction
-                             (when-let ((ref-entry (gethash ref-id (org-zettel-ref-db-refs db))))
+                             (when-let* ((ref-entry (gethash ref-id (org-zettel-ref-db-refs db))))
                                ;; Update file path
                                (setf (org-zettel-ref-ref-entry-file-path ref-entry) new-file)
                                ;; Update path mapping
@@ -432,10 +432,10 @@ ARG is the prefix argument."
                     
                     ;; Process only files in the overview directory
                     (when (string-prefix-p overview-dir (expand-file-name old-file))
-                      (when-let ((overview-id (gethash old-file (org-zettel-ref-db-overview-paths db))))
+                      (when-let* ((overview-id (gethash old-file (org-zettel-ref-db-overview-paths db))))
                         (condition-case err
                             (org-zettel-ref-with-transaction
-                             (when-let ((overview-entry (gethash overview-id 
+                             (when-let* ((overview-entry (gethash overview-id 
                                                                (org-zettel-ref-db-overviews db))))
                                ;; Update file path
                                (setf (org-zettel-ref-overview-entry-file-path overview-entry) new-file)
@@ -465,7 +465,7 @@ ARG is the prefix argument."
         (cond
          ;; Process reference files
          ((string-prefix-p ref-dir full-path)
-          (when-let ((ref-id (gethash full-path (org-zettel-ref-db-ref-paths db))))
+          (when-let* ((ref-id (gethash full-path (org-zettel-ref-db-ref-paths db))))
             (condition-case err
                 (org-zettel-ref-with-transaction
                  ;; Delete reference entry
@@ -473,7 +473,7 @@ ARG is the prefix argument."
                  ;; Delete path mapping
                  (remhash full-path (org-zettel-ref-db-ref-paths db))
                  ;; Delete related overview mapping
-                 (when-let ((overview-id (gethash ref-id (org-zettel-ref-db-map db))))
+                 (when-let* ((overview-id (gethash ref-id (org-zettel-ref-db-map db))))
                    (remhash ref-id (org-zettel-ref-db-map db))
                    (message "Removed ref entry and related mappings for: %s" file))
                  ;; Set database to modified state
@@ -485,7 +485,7 @@ ARG is the prefix argument."
          
          ;; Process overview files
          ((string-prefix-p overview-dir full-path)
-          (when-let ((overview-id (gethash full-path (org-zettel-ref-db-overview-paths db))))
+          (when-let* ((overview-id (gethash full-path (org-zettel-ref-db-overview-paths db))))
             (condition-case err
                 (org-zettel-ref-with-transaction
                  ;; Delete overview entry
