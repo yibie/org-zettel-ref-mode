@@ -12,6 +12,7 @@
 (require 'org-zettel-ref-utils)
 (require 'org-zettel-ref-db) 
 (require 'org-zettel-ref-list)
+(require 'org-zettel-ref-migrate)
 
 ;;-----------------------
 ;; Minor Mode

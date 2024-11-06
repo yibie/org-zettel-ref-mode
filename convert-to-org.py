@@ -146,14 +146,12 @@ def convert_epub_to_org(input_file: str, output_file: str) -> Tuple[bool, List[s
         except Exception as e:
             errors.append(f"Calibre processing error: {str(e)}")
     
-    # 2. 如果 Calibre 失败，尝试使用 ebooklib
     try:
         import ebooklib
         from ebooklib import epub
         from bs4 import BeautifulSoup
         import warnings
         
-        # 忽略 ebooklib 的警告
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             
