@@ -2,23 +2,29 @@
 
 (require 'org-zettel-ref-db)
 
-
-
 ;;;###autoload
 (defun org-zettel-ref-migrate ()
   "Interactive command to migrate from old database format to new structure."
   (interactive)
-  ;; Ask user for confirmation
-  (when (yes-or-no-p "This will migrate your old database to the new format. Continue? ")
-    (let ((old-data (org-zettel-ref-load-data)))
-      (if (not old-data)
-          (message "No old database found to migrate.")
-        (let ((new-db (org-zettel-ref-migrate-from-old-format--internal old-data)))
-          ;; Save the new database
-          (org-zettel-ref-db-save new-db)
-          (message "Migration completed successfully. New database has been saved."))))))
+  ;; Define the hash table file path
+  (let ((hash-table-file org-zettel-ref-db-file))
+    ;; Check if the hash table file exists  
+    (if (not (file-exists-p hash-table-file))
+        (message "Hash table file does not exist, cannot perform migration. Path: %s" hash-table-file)
+      ;; If it exists, continue with migration
+      (when (yes-or-no-p "This will migrate your old database to the new format. Continue? ")
+        (let ((old-data (org-zettel-ref-load-data)))
+          (if (not old-data)
+              (message "Old database not found or invalid, cannot perform migration.")
+            (condition-case err
+                (let ((new-db (org-zettel-ref-migrate-from-old-format--internal old-data)))
+                  ;; Save the new database
+                  (org-zettel-ref-db-save new-db)
+                  (message "Migration completed successfully. New database has been saved."))
+              (error
+               (message "Error during migration: %S" err)))))))))
 
-;; Keep the original function but rename it to indicate it's internal
+;; Keep the original function but rename it to indicate its internal use
 (defun org-zettel-ref-migrate-from-old-format--internal (old-data)
   "Internal function to migrate from old database format to new structure.
 OLD-DATA is the old database data structure."
@@ -27,7 +33,7 @@ OLD-DATA is the old database data structure."
   ;; Create a new database instance
   (let ((new-db (make-org-zettel-ref-db)))
     
-    ;; Extract mapping relationships from old data
+    ;; Extract the mapping relationship from the old data
     (let ((overview-index (cdr (assq 'overview-index old-data))))
       (message "DEBUG: Old overview-index size: %d" (hash-table-count overview-index))
       (message "DEBUG: Old overview-index content:")
@@ -47,7 +53,7 @@ OLD-DATA is the old database data structure."
                            nil)) ; keywords
                 (ref-id (org-zettel-ref-ref-entry-id ref-entry)))
            
-           (message "DEBUG: Created ref entry with ID: %s" ref-id)
+           (message "DEBUG: Create reference entry, ID: %s" ref-id)
            
            ;; Add reference entry
            (org-zettel-ref-db-add-ref-entry new-db ref-entry)
@@ -71,7 +77,7 @@ OLD-DATA is the old database data structure."
                                   :created (current-time)
                                   :modified (current-time))))
                
-               (message "DEBUG: Created overview entry with ID: %s" overview-id)
+               (message "DEBUG: Create overview entry, ID: %s" overview-id)
                
                ;; Add overview entry
                (org-zettel-ref-db-add-overview-entry new-db overview-entry)
@@ -79,7 +85,8 @@ OLD-DATA is the old database data structure."
                ;; Establish mapping relationship
                (org-zettel-ref-db-add-map new-db ref-id overview-id)))))
        overview-index))
-    
+  
+    ;; Migration completed  
     (message "Migration completed.")
     (message "DEBUG: Final refs count: %d" 
              (hash-table-count (org-zettel-ref-db-refs new-db)))
@@ -89,6 +96,18 @@ OLD-DATA is the old database data structure."
              (hash-table-count (org-zettel-ref-db-map new-db)))
     
     new-db))
+
+;; Keep the original function but rename it to indicate its internal use
+(defun org-zettel-ref-load-data ()
+  "Load old database data for migration."
+  (when (file-exists-p org-zettel-ref-db-file)
+    (condition-case err
+        (with-temp-buffer
+          (insert-file-contents org-zettel-ref-db-file)
+          (read (current-buffer)))
+      (error
+       (message "Error loading old database: %S" err)
+       nil))))
 
 (provide 'org-zettel-ref-migrate)
 ;;; org-zettel-ref-migrate.el ends here 

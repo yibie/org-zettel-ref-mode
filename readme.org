@@ -9,7 +9,8 @@
     - Dropped using OCR to convert PDF  
 
 *** Version 0.4 (2024-11-04)
-  - Note! When running the new version for the first time, be sure to execute ~M-x org-zettel-ref-migrate~ to upgrade the data structure in the hash table.
+  - Attention!
+    - If you’ve previously used org-zettel-ref-mode, you need to run ~M-x org-zettel-ref-migrate~ the first time you use the new version to upgrade the data structure in the hash table.
   - New Feature: Provides a visual management panel for source files
     - ~org-zettel-ref-list~ (see Basic Usage -> Manage Source Files for details):
       - Visualization: Provides a reference management panel

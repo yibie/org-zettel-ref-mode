@@ -3,9 +3,9 @@
 - v0.4.1 (2024-11-06)
   - 优化 conver_to_pdf.py
     - 放弃使用 OCR 转换 PDF
-
+      
 - v0.4 (2024-11-04)
-  - 注意! 新版本第一次运行时, 一定要执行 ~M-x org-zettel-ref-migrate~ 升级哈希表里的数据结构
+  - 注意! 如果是之前使用过 org-zettel-ref-mode 的用户，新版本第一次运行时, 需执行 ~M-x org-zettel-ref-migrate~ 升级哈希表里的数据结构。
   - 新功能: 为源文件提供可视化管理面板
     - ~org-zettel-ref-list~ (详细见 基本用法 -> 管理源文件) :
       - 可视化: 提供参考文献管理面板
