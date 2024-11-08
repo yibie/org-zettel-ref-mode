@@ -4,6 +4,11 @@
 #+end_center
 
 ** Changlog
+*** Version 0.4.3 (2024-11-08)
+  - Optimized:
+    - The display method of the overview file window. 
+      - Added a configuration item to define the width of the overview window: ~org-zettel-ref-overview-width-ratio~, default 0.3 
+      - Added a configuration item to define the minimum width of the overview window: ~org-zettel-ref-overview-min-width~, default 30
 *** Version 0.4.2 (2024-11-08)
   - Fixed:
     - The error in org-zettel-ref-db-init #15

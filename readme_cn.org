@@ -1,6 +1,11 @@
 * org-zettel-ref-mode
 ** 版本历史
 
+- v0.4.3 (2024-11-08)
+  - 优化
+    - 概览文件窗口的显示方式。新增定义概览窗口宽度的配置项： ~org-zettel-ref-overview-width-ratio~ 依照源文件窗口的比例设置概览窗口的宽度，默认 0.3
+    - 新增定义概览窗口最小宽度的配置项： ~org-zettel-ref-overview-min-width~ 设置概览窗口的最小宽度，默认 30
+
 - v0.4.2 (2024-11-08)
   - 修复
     - 在 org-zettel-ref-db-init 中的错误 #15
@@ -408,6 +413,8 @@ org-zettel-ref-mode 现在支持直接通过 Emacs 调用外部 Python 脚本，
 - =setq org-zettel-ref-reference-folder "~/Documents/ref/"=: 设置参考资料文件夹路径
 - =setq org-zettel-ref-archive-folder "/Volumes/Collect/archives/"=: 设置归档文件夹路径
 - =setq org-zettel-ref-debug nil=: 设置是否启用调试模式
+- =setq org-zettel-ref-overview-width-ratio 0.3=: 设置概览窗口宽度比例
+- =setq org-zettel-ref-overview-min-width 30=: 设置概览窗口最小宽度
 
 ** 常见问题解答
 

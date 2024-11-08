@@ -66,6 +66,18 @@ Users who prefer to manage save-place-mode themselves can set this to nil."
   :type 'boolean
   :group 'org-zettel-ref)
 
+(defcustom org-zettel-ref-overview-width-ratio 0.3
+  "Ratio of overview window width relative to source window width.
+Should be a float between 0.0 and 1.0.
+For example, 0.3 means the overview window will take 30% of the source window width."
+  :type 'float
+  :group 'org-zettel-ref)
+
+(defcustom org-zettel-ref-overview-min-width 30
+  "Minimum width in characters for the overview window."
+  :type 'integer
+  :group 'org-zettel-ref)
+
 ;;-------------------------
 ;; END: Customization
 ;;-------------------------
@@ -314,25 +326,27 @@ Return (ref-entry . overview-file) pair."
     (org-zettel-ref-db-save db)
     (cons ref-entry overview-file)))
 
-(defun org-zettel-ref-setup-overview-window (overview-file overview-buffer-name)
-  "Setup the overview window with OVERVIEW-FILE and BUFFER-NAME on the right side of the source file."
-  (let* ((buffer (find-file-noselect overview-file))
-         (source-window (selected-window))
-         (overview-window (split-window-right)))
-    (with-current-buffer buffer
-      (unless (eq major-mode 'org-mode)
-        (org-mode))
-      (setq buffer-read-only t))
-    (set-window-buffer overview-window buffer)
+(defun org-zettel-ref-setup-overview-window (overview-file buffer-name)
+  "Setup a window for OVERVIEW-FILE with BUFFER-NAME.
+Returns the overview buffer."
+  (let* ((source-window (selected-window))
+         (source-width (window-width source-window))
+         ;; calculate target windows width
+         (target-width (max org-zettel-ref-overview-min-width
+                           (round (* source-width org-zettel-ref-overview-width-ratio))))
+         (overview-window (split-window-right))
+         ;; display overview file in new window
+         (overview-buffer (find-file-noselect overview-file)))
+    ;; switch to overview window and display buffer
     (select-window overview-window)
-    (rename-buffer overview-buffer-name t)
+    (switch-to-buffer overview-buffer)
+    ;; adjust window size
+    (let ((width-delta (- target-width (window-width))))
+      (when (not (zerop width-delta))
+        (window-resize overview-window width-delta t)))
+    ;; switch back to source window
     (select-window source-window)
-    buffer))
-
-     
-;;-------------------------
-;; END: Initialization
-;;-------------------------
+    overview-buffer))
 
 ;;-------------------------
 ;; START: Overview File Creation
@@ -349,8 +363,6 @@ Return (ref-entry . overview-file) pair."
         (insert (format "#+TITLE: Overview - %s\n#+SOURCE_FILE: %s\n#+filetags: :overview:\n#+startup: showall\n\n* Quick Notes\n\n* Marked Text\n" 
                        title source-file))))
     overview-file))
-
-
 
 (defun org-zettel-ref-get-overview-file-org-roam (source-buffer overview-file)
   "Use org-roam mode to get or create an overview file for SOURCE-BUFFER."
