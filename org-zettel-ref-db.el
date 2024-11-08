@@ -142,7 +142,7 @@ Can be 'org-roam, 'denote, or nil for standalone mode.")
     
     ;; If the database file does not exist, save the newly created database
     (unless (file-exists-p org-zettel-ref-db-file)
-      (org-zettel-ref-db-save db org-zettel-ref-db-file))
+      (org-zettel-ref-db-save db))
     
     db))
 
@@ -721,9 +721,7 @@ Return the search results."
        (when (or (null title)
                  (string-match-p title (org-zettel-ref-ref-entry-title entry)))
          (push entry results)))
-     (org-zettel-ref-db-refs db))
-
-    results))
+     (org-zettel-ref-db-refs db))))
 
 
 (defun org-zettel-ref-extract-org-property (file property)

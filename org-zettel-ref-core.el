@@ -32,17 +32,6 @@ This mode indicates that the buffer is part of an org-zettel-ref pair."
   :keymap org-zettel-ref-minor-mode-map
   :group 'org-zettel-ref)
 
-(defun org-zettel-ref-setup-buffers (source-buffer overview-buffer)
-  "Setup SOURCE-BUFFER and OVERVIEW-BUFFER for org-zettel-ref."
-  (with-current-buffer source-buffer
-    (org-zettel-ref-minor-mode 1))
-  (with-current-buffer overview-buffer
-    (org-zettel-ref-minor-mode 1)
-    (unless (eq major-mode 'org-mode)
-      (org-mode))
-    (setq buffer-read-only t)))
-
-
 
 ;;-------------------------
 ;; START: Customization
@@ -70,6 +59,12 @@ This suffix will be appended to the filename before the file extension."
   :type 'string
   :group 'org-zettel-ref)
 
+(defcustom org-zettel-ref-auto-save-place t
+  "Whether to automatically enable save-place-mode when org-zettel-ref is used.
+When non-nil, save-place-mode will be enabled if it isn't already.
+Users who prefer to manage save-place-mode themselves can set this to nil."
+  :type 'boolean
+  :group 'org-zettel-ref)
 
 ;;-------------------------
 ;; END: Customization
@@ -112,14 +107,10 @@ This suffix will be appended to the filename before the file extension."
     ;; Buffer name does not include timestamp, ensuring consistency
     (format "*Org Zettel Ref: %s__overview*" title)))
 
+
 (defun org-zettel-ref-setup-buffers (source-buffer overview-buffer)
-  "Set up the source and overview buffers with appropriate modes and configurations."
-  (with-current-buffer source-buffer
-    (org-mode))
-  (with-current-buffer overview-buffer
-    (org-mode)
-    (setq buffer-read-only t))
-    (other-window 1))
+  "Setup SOURCE-BUFFER and OVERVIEW-BUFFER for org-zettel-ref."
+  (with-current-buffer overview-buffer))
 
 ;;-------------------------
 ;; END: Buffer Management
@@ -275,7 +266,8 @@ This suffix will be appended to the filename before the file extension."
          (source-file (buffer-file-name source-buffer)))
     (unless source-file
       (user-error "Current buffer is not associated with a file"))
-    
+    (unless save-place-mode
+      (save-place-mode 1))
     (message "DEBUG: Starting initialization: %s" source-file)
   
     (let* ((entry-pair (org-zettel-ref-ensure-entry source-buffer))

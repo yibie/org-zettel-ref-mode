@@ -4,6 +4,12 @@
 #+end_center
 
 ** Changlog
+*** Version 0.4.2 (2024-11-08)
+  - Fixed:
+    - The error in org-zettel-ref-db-init #15
+    - The issue where the cursor position is lost after executing org-zettel-ref-init
+    - The issue where the overview file failed to synchronize correctly due to improper index file retrieval  
+    
 *** Version 0.4.1 (2024-11-06)
   - Optimized convert_to_pdf.py
     - Dropped using OCR to convert PDF  

@@ -1,5 +1,11 @@
 * org-zettel-ref-mode
 ** 版本历史
+
+- v0.4.2 (2024-11-08)
+  - 修复
+    - 在 org-zettel-ref-db-init 中的错误 #15
+    - 执行 org-zettel-ref-init 后，源文件光标位置丢失的问题
+    - 在概览文件中，无法正确跳转回源文件的问题
 - v0.4.1 (2024-11-06)
   - 优化 conver_to_pdf.py
     - 放弃使用 OCR 转换 PDF
