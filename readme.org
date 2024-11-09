@@ -4,6 +4,9 @@
 #+end_center
 
 ** Changlog
+*** Version 0.4.4 (2024-11-09)
+  - Fixed:
+    - The issue where org-zettel-ref-watch-directory reports an error after running org-zettel-ref-list-rename-file 
 *** Version 0.4.3 (2024-11-08)
   - Optimized:
     - The display method of the overview file window. 

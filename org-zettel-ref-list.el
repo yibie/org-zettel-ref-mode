@@ -469,27 +469,35 @@ ENTRY is the org-zettel-ref-entry struct."
                       (y-or-n-p (format "Rename %s to %s? "
                                       (file-name-nondirectory old-file)
                                       (file-name-nondirectory new-file-path))))
-              ;; Rename file
+              ;; Suspend file monitoring
+              (org-zettel-ref-unwatch-directory)
+              
               (condition-case err
-                  (rename-file old-file new-file-path t)
+                  (progn
+                    ;; Rename file  
+                    (rename-file old-file new-file-path t)
+                    ;; Update database
+                    (org-zettel-ref-db-update-ref-path db old-file new-file-path)
+                    (setf (org-zettel-ref-ref-entry-file-path ref-entry) new-file-path
+                          (org-zettel-ref-ref-entry-title ref-entry) new-title
+                          (org-zettel-ref-ref-entry-author ref-entry) new-author
+                          (org-zettel-ref-ref-entry-keywords ref-entry) new-keywords)
+                    (org-zettel-ref-db-update-ref-entry db ref-entry)
+                    (org-zettel-ref-db-save db)
+                    ;; Update opened buffer
+                    (when-let ((buf (get-file-buffer old-file)))
+                      (with-current-buffer buf
+                        (set-visited-file-name new-file-path)
+                        (set-buffer-modified-p nil)))
+                    ;; Refresh display
+                    (org-zettel-ref-list-refresh)
+                    (message "File renamed from %s to %s"
+                            (file-name-nondirectory old-file)
+                            (file-name-nondirectory new-file-path)))
                 (error
-                 (message "Error renaming file: %s" (error-message-string err))
-                 (signal (car err) (cdr err))))
-              ;; Update file path mapping
-              (org-zettel-ref-db-update-ref-path db old-file new-file-path)
-              ;; Update entry fields
-              (setf (org-zettel-ref-ref-entry-file-path ref-entry) new-file-path
-                    (org-zettel-ref-ref-entry-title ref-entry) new-title
-                    (org-zettel-ref-ref-entry-author ref-entry) new-author
-                    (org-zettel-ref-ref-entry-keywords ref-entry) new-keywords)
-              ;; Update the entry in database
-              (org-zettel-ref-db-update-ref-entry db ref-entry)
-              ;; Save and refresh
-              (org-zettel-ref-db-save db)
-              (org-zettel-ref-list-refresh)
-              (message "File renamed from %s to %s"
-                      (file-name-nondirectory old-file)
-                      (file-name-nondirectory new-file-path)))))))))
+                 (message "Error during rename: %s" (error-message-string err))))
+              ;; Restart file monitoring
+              (run-with-timer 0.5 nil #'org-zettel-ref-watch-directory))))))))
 ;;;----------------------------------------------------------------------------
 ;;; File Operation: Edit Keywords 
 ;;;---------------------------------------------------------------------------- 
@@ -857,51 +865,51 @@ Return a list of file paths."
 
 (defun org-zettel-ref-handle-file-change (event)
   "Handle file change EVENT from file monitoring system."
-  (let ((event-type (nth 1 event))
-        (file (nth 2 event)))
-    ;; 确保文件存在且是.org文件
-    (when (and file
-               (stringp file)
-               (string-match-p "\\.org$" file)
-               (not (string-match-p "^\\." (file-name-nondirectory file))))
-      ;; 根据事件类型处理
-      (pcase event-type
-        ((or 'created 'deleted 'modified 'renamed 'changed 'attribute-changed)
-         (run-with-timer 
-          0.5 nil
-          (lambda ()
-            (when (get-buffer "*Org Zettel Ref List*")
-              (with-current-buffer "*Org Zettel Ref List*"
-                (when (eq major-mode 'org-zettel-ref-list-mode)
-                  (org-zettel-ref-list-refresh)
-                  (message "Refreshed due to file change: %s" 
-                          (file-name-nondirectory file))))))))))))
+  (when (and (bound-and-true-p org-zettel-ref-file-watch-descriptor)
+             (buffer-live-p (get-buffer "*Org Zettel Ref List*")))
+    (let ((event-type (nth 1 event))
+          (file (nth 2 event)))
+      (when (and file
+                 (stringp file)
+                 (string-match-p "\\.org$" file)
+                 (not (string-match-p "^\\." (file-name-nondirectory file))))
+        (run-with-timer 
+         0.5 nil
+         (lambda ()
+           (when (buffer-live-p (get-buffer "*Org Zettel Ref List*"))
+             (with-current-buffer "*Org Zettel Ref List*"
+               (when (eq major-mode 'org-zettel-ref-list-mode)
+                 (org-zettel-ref-list-refresh)
+                 (message "Refreshed due to file change: %s" 
+                         (file-name-nondirectory file)))))))))))
 
 (defun org-zettel-ref-watch-directory ()
   "Start monitoring changes in the reference file directory."
-  (when (and (not org-zettel-ref-file-watch-descriptor)
-             (file-exists-p org-zettel-ref-directory)) 
-    (when org-zettel-ref-file-watch-descriptor
-      (file-notify-rm-watch org-zettel-ref-file-watch-descriptor))
+  (when (file-exists-p org-zettel-ref-directory)
+    ;; Ensure no existing watch
+    (org-zettel-ref-unwatch-directory)
     
-    (let ((descriptor (file-notify-add-watch
-                      org-zettel-ref-directory
-                      '(change attribute-change)
-                      #'org-zettel-ref-handle-file-change)))
-      (setq org-zettel-ref-file-watch-descriptor descriptor)
-      (message "Started monitoring directory: %s" org-zettel-ref-directory))))
+    (condition-case err
+        (let ((descriptor (file-notify-add-watch
+                          org-zettel-ref-directory
+                          '(change attribute-change)
+                          #'org-zettel-ref-handle-file-change)))
+          (setq-local org-zettel-ref-file-watch-descriptor descriptor)
+          (message "Started monitoring directory: %s" org-zettel-ref-directory))
+      (error
+       (message "Error setting up file watch: %s" (error-message-string err))))))
 
 (defun org-zettel-ref-unwatch-directory ()
   "Stop monitoring the reference file directory."
-  (when org-zettel-ref-file-watch-descriptor
+  (when (bound-and-true-p org-zettel-ref-file-watch-descriptor)
     (condition-case err
         (progn
           (file-notify-rm-watch org-zettel-ref-file-watch-descriptor)
-          (setq org-zettel-ref-file-watch-descriptor nil)
+          (setq-local org-zettel-ref-file-watch-descriptor nil)
           (message "Stopped monitoring directory"))
       (error
        (message "Error removing file watch: %s" (error-message-string err))
-       (setq org-zettel-ref-file-watch-descriptor nil)))))
+       (setq-local org-zettel-ref-file-watch-descriptor nil)))))
 
 
 (provide 'org-zettel-ref-list)

@@ -1,6 +1,10 @@
 * org-zettel-ref-mode
 ** 版本历史
 
+- v0.4.4 (2024-11-09)
+  - 修复
+    - 运行 org-zettel-ref-list-rename-file 后，org-zettel-ref-watch-directory 报错的问题
+    
 - v0.4.3 (2024-11-08)
   - 优化
     - 概览文件窗口的显示方式。新增定义概览窗口宽度的配置项： ~org-zettel-ref-overview-width-ratio~ 依照源文件窗口的比例设置概览窗口的宽度，默认 0.3

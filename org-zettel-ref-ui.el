@@ -60,7 +60,8 @@ Cleans:
 1. <<target>> markers completely (including empty ones)
 2. #+begin_html...#+end_html blocks
 3. :PROPERTIES: blocks under headers
-4. *Bold* and _Underline_ markers (preserving heading stars)"
+4. *Bold* and _Underline_ markers (preserving heading stars)
+5. Trailing backslashes at end of lines"
   (interactive)
   (let* ((case-fold-search nil)
          (pre (car org-emphasis-regexp-components))
@@ -104,7 +105,12 @@ Cleans:
                                               (match-beginning 0))))
         (replace-match "\\1\\4\\5")))
     
-    (message "Cleaned up markers, HTML blocks, properties blocks, and emphasis markers.")))
+    ;; Remove trailing backslashes at end of lines (both single and double)
+    (goto-char (point-min))
+    (while (re-search-forward "\\\\+[ \t]*$" nil t)
+      (replace-match ""))
+    
+    (message "Cleaned up markers, HTML blocks, properties blocks, emphasis markers, and trailing backslashes.")))
 
 (defun org-zettel-ref-clean-targets-and-sync ()
   "Clean all markup from the current buffer and then sync the overview."

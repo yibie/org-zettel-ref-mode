@@ -14,8 +14,9 @@
 (require 'org-zettel-ref-list)
 (require 'org-zettel-ref-migrate)
 
+
 ;;-----------------------
-;; Minor Mode
+;; Minor Modey
 ;;-----------------------
 
 (defvar org-zettel-ref-minor-mode-map
