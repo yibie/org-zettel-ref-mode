@@ -13,7 +13,7 @@
 (require 'org-zettel-ref-db) 
 (require 'org-zettel-ref-list)
 (require 'org-zettel-ref-migrate)
-
+(require 'org-zettel-ref-highlight)
 
 ;;-----------------------
 ;; Minor Modey
@@ -124,7 +124,6 @@ For example, 0.3 means the overview window will take 30% of the source window wi
 (defun org-zettel-ref-setup-buffers (source-buffer overview-buffer)
   "Setup SOURCE-BUFFER and OVERVIEW-BUFFER for org-zettel-ref."
   (with-current-buffer overview-buffer))
-
 ;;-------------------------
 ;; END: Buffer Management
 ;;-------------------------
@@ -282,6 +281,8 @@ For example, 0.3 means the overview window will take 30% of the source window wi
     (unless save-place-mode
       (save-place-mode 1))
     (message "DEBUG: Starting initialization: %s" source-file)
+
+    (org-zettel-ref-highlight-initialize-counter)
   
     (let* ((entry-pair (org-zettel-ref-ensure-entry source-buffer))
            (ref-entry (car entry-pair))
