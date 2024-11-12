@@ -155,6 +155,93 @@ For example, 0.3 means the overview window will take 30% of the source window wi
              (file-exists-p org-zettel-ref-overview-file))
     (org-zettel-ref-sync-highlights)))
 
+(defun org-zettel-ref-sync-highlights ()
+  "Synchronize all highlights to the overview file, using incremental update strategy."
+  (interactive)
+  (when (and org-zettel-ref-overview-file
+             (file-exists-p org-zettel-ref-overview-file))
+    (let ((highlights '())
+          (notes '()))
+      
+      ;; 收集所有高亮和笔记
+      (save-excursion
+        (goto-char (point-min))
+        (while (re-search-forward org-zettel-ref-highlight-regexp nil t)
+          (let* ((ref (or (match-string 1) ""))
+                 (type-char (or (match-string 2) ""))
+                 (text (or (match-string 3) ""))
+                 (type (org-zettel-ref-highlight-char-to-type type-char))
+                 (config (cdr (assoc type org-zettel-ref-highlight-types))))
+            (message "DEBUG: Processing highlight - ref: %s, type-char: %s, type: %s" 
+                    ref type-char type)
+            (when (and type-char (not (string-empty-p type-char)) config)
+              (let ((name (plist-get config :name))
+                    (prefix (plist-get config :prefix)))
+                (if (string= type-char "i")
+                    (let* ((img-parts (split-string text "|"))
+                          (img-path (car img-parts))
+                          (img-desc (cadr img-parts)))
+                      (when (and img-path (not (string-empty-p img-path)))
+                        (push (list ref type text name prefix img-path img-desc)
+                              highlights)))
+                  (push (list ref type text name prefix nil nil)
+                        highlights)))))))
+      
+      (message "DEBUG: Collected highlights: %S" highlights)
+      
+      ;; Update the overview file
+      (with-current-buffer (find-file-noselect org-zettel-ref-overview-file)
+        (org-with-wide-buffer
+         ;; Update or add each highlight
+         (dolist (highlight (sort highlights
+                                (lambda (a b)
+                                  (< (string-to-number (car a))
+                                     (string-to-number (car b))))))
+           (let* ((ref (nth 0 highlight))
+                  (type (nth 1 highlight))
+                  (text (nth 2 highlight))
+                  (name (nth 3 highlight))
+                  (prefix (nth 4 highlight))
+                  (img-path (nth 5 highlight))
+                  (img-desc (nth 6 highlight))
+                  (heading-regexp (format "^\\* .* \\[\\[hl:%s\\]" ref)))
+             
+             (message "DEBUG: Processing entry - ref: %s, type: %s" ref type)
+             
+             ;; Check if the corresponding entry exists
+             (goto-char (point-min))
+             (if (re-search-forward heading-regexp nil t)
+                 ;; Update existing entry
+                 (progn
+                   (beginning-of-line)
+                   (delete-region (point) (line-end-position))
+                   (insert (format "* %s [[hl:%s][hl-%s]] %s"
+                                 prefix
+                                 ref
+                                 ref
+                                 (if (string= type "image") 
+                                     (or img-desc "")
+                                     text))))
+               ;; Add new entry
+               (goto-char (point-max))
+               (insert (format "\n* %s [[hl:%s][hl-%s]] %s"
+                             prefix
+                             ref
+                             ref
+                             (if (string= type "image")
+                                 (or img-desc "")
+                                 text))))
+             
+             ;; Handle image specific content
+             (when (and (string= type "image") img-path)
+               (forward-line)
+               (unless (looking-at "\\(#\\+ATTR_ORG:.*\n\\)?\\[\\[file:")
+                 (insert "\n#+ATTR_ORG: :width 300\n")
+                 (insert (format "[[file:%s]]\n" img-path))))))
+         
+         ;; Save the updated file
+         (save-buffer))))))
+
 ;;----------------------------------------------------------------
 ;; File namming
 ;;----------------------------------------------------------------

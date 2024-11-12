@@ -1,6 +1,8 @@
 * org-zettel-ref-mode
 ** 版本历史
 
+- v0.5 (2024-11-12)
+  
 - v0.4.4 (2024-11-09)
   - 修复
     - 运行 org-zettel-ref-list-rename-file 后，org-zettel-ref-watch-directory 报错的问题

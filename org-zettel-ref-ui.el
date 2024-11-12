@@ -29,11 +29,12 @@
              (type (completing-read "选择标记类型: "
                                   (mapcar #'car org-zettel-ref-highlight-types)
                                   nil t))
+             (type-char (org-zettel-ref-highlight-type-to-char type))
              (highlight-id (org-zettel-ref-highlight-generate-id)))
         (delete-region beg end)
         (insert (format "<<hl-%s>> §%s{%s}"
                        highlight-id
-                       type
+                       type-char
                        text))
         (org-zettel-ref-highlight-refresh)
         (org-zettel-ref-sync-highlights))
