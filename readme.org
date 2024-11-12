@@ -4,7 +4,7 @@
 #+end_center
 
 ** Changlog
-*** Version 0.5 (2024-11-12)
+*** Version 0.5 (2024-11-12)  
   - Upgrade: Major upgrade to marking and note system (see #Demo for changes after upgrade)
     - Decoupled from org-mode's built-in styles
     - Automatic note ID numbering
@@ -23,7 +23,7 @@
     - Painless upgrade, maintains familiar commands
     - Note: When executing org-zettel-ref-mark-text, please don't select note type or image type
       - For quick notes, continue using the previous org-zettel-ref-add-quick-note command
-      - This design choice is to provide highlight styles for quick notes and image notes
+      - This design choice is to provide highlight styles for quick notes and image note
 *** Version 0.4.4 (2024-11-09)
   - Fixed:
     - The issue where org-zettel-ref-watch-directory reports an error after running org-zettel-ref-list-rename-file 
