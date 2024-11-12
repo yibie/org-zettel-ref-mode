@@ -9,40 +9,35 @@
 (require 'org-zettel-ref-core)
 
 (defun org-zettel-ref-add-quick-note ()
-  "Add a quick note to the current buffer."
+  "使用高亮系统添加快速笔记."
   (interactive)
-  (let* ((note-name (read-string "Enter note: ")))
-    ;; Source buffer insert note
-    (insert (format "<<%s>>" note-name))
-    ;; Sync to overview file
-    (org-zettel-ref-sync-overview)))
+  (let* ((note-text (read-string "输入笔记内容: "))
+         (highlight-id (org-zettel-ref-highlight-generate-id)))
+    (insert (format "<<hl-%s>> §n{%s}"
+                   highlight-id
+                   note-text))
+    (org-zettel-ref-highlight-refresh)
+    (org-zettel-ref-sync-highlights)))
 
 (defun org-zettel-ref-quick-markup ()
-  "Quickly apply org-mode markup to the region or insert at point, adding spaces for Chinese text."
+  "使用高亮系统快速标记文本."
   (interactive)
-  (let* ((markup-types '(("Bold" . "*")
-                         ("Underline" . "_")
-                         ("Italic(only markup, don't sync)" . "/")
-                         ("Code(only markup, don't sync)" . "~")
-                         ("Verbatim(only markup, don't sync)" . "=")
-                         ("Strikethrough(only markup, don't sync)" . "+")))
-         (markup (completing-read "Choose markup: " markup-types nil t))
-         (marker (cdr (assoc markup markup-types)))
-         (region-active (use-region-p))
-         (beg (if region-active (region-beginning) (point)))
-         (end (if region-active (region-end) (point))))
-    (if region-active
-        (let* ((text (buffer-substring-no-properties beg end))
-               (chinese-p (string-match-p "\\cC" text))
-               (space-before (if (and chinese-p (not (string-match-p "^\\s-" text))) " " ""))
-               (space-after (if (and chinese-p (not (string-match-p "\\s-$" text))) " " "")))
-          (goto-char end)
-          (insert marker space-after)
-          (goto-char beg)
-          (insert space-before marker))
-      (insert marker marker)
-      (backward-char))))
-
+  (if (use-region-p)
+      (let* ((beg (region-beginning))
+             (end (region-end))
+             (text (buffer-substring-no-properties beg end))
+             (type (completing-read "选择标记类型: "
+                                  (mapcar #'car org-zettel-ref-highlight-types)
+                                  nil t))
+             (highlight-id (org-zettel-ref-highlight-generate-id)))
+        (delete-region beg end)
+        (insert (format "<<hl-%s>> §%s{%s}"
+                       highlight-id
+                       type
+                       text))
+        (org-zettel-ref-highlight-refresh)
+        (org-zettel-ref-sync-highlights))
+    (message "请先选择要标记的文本")))
 
 (defcustom org-zettel-ref-quick-markup-key "C-c m"
   "Key binding for quick markup function in org-zettel-ref-mode.

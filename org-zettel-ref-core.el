@@ -30,8 +30,26 @@
 This mode indicates that the buffer is part of an org-zettel-ref pair."
   :init-value nil
   :lighter " Zettel"
-  :keymap org-zettel-ref-minor-mode-map
-  :group 'org-zettel-ref)
+  :keymap (let ((map (make-sparse-keymap)))
+            ;; 整合高亮功能的快捷键
+            (define-key map (kbd "C-c h h") #'org-zettel-ref-highlight-region)
+            (define-key map (kbd "C-c h r") #'org-zettel-ref-highlight-refresh)
+            (define-key map (kbd "C-c h e") #'org-zettel-ref-highlight-edit)
+            (define-key map (kbd "C-c h n") #'org-zettel-ref-highlight-add-note)
+            (define-key map (kbd "C-c h N") #'org-zettel-ref-highlight-edit-note)
+            map)
+  :group 'org-zettel-ref
+  (if org-zettel-ref-minor-mode
+      (progn
+        ;; 启用时的操作
+        (org-zettel-ref-highlight-refresh)
+        (add-hook 'after-save-hook #'org-zettel-ref-sync-highlights nil t)
+        (add-hook 'after-change-functions #'org-zettel-ref-highlight-after-change nil t))
+    ;; 禁用时的操作
+    (progn
+      (remove-overlays nil nil 'org-zettel-ref-highlight t)
+      (remove-hook 'after-save-hook #'org-zettel-ref-sync-highlights t)
+      (remove-hook 'after-change-functions #'org-zettel-ref-highlight-after-change t))))
 
 
 ;;-------------------------
@@ -79,13 +97,9 @@ For example, 0.3 means the overview window will take 30% of the source window wi
   :type 'integer
   :group 'org-zettel-ref)
 
-;;-------------------------
-;; END: Customization
-;;-------------------------
-
-;;-------------------------
-;; START: Variables
-;;-------------------------
+;;------------------------------------------------------------------  
+;; Variables
+;;------------------------------------------------------------------
 
 (defvar org-zettel-ref-overview-file nil
   "The current overview file being used.")
@@ -96,9 +110,12 @@ For example, 0.3 means the overview window will take 30% of the source window wi
 (defvar org-zettel-ref-db nil
   "The persistent database instance for org-zettel-ref.")
 
-;;-------------------------
-;; START: Overview File Management
-;;-------------------------
+(defvar-local org-zettel-ref-source-buffer nil
+  "存储当前高亮源文件的buffer.")
+
+;;------------------------------------------------------------------
+;; Overview File Management
+;;------------------------------------------------------------------
 
 (defun org-zettel-ref-create-overview-file (source-buffer target-file)
   "Create overview file for SOURCE-BUFFER at TARGET-FILE."
@@ -110,9 +127,9 @@ For example, 0.3 means the overview window will take 30% of the source window wi
       (_ (error "Unsupported org-zettel-ref-mode-type: %s" org-zettel-ref-mode-type))))
   target-file)
 
-;;-------------------------
-;; START: Buffer Management
-;;-------------------------
+;;------------------------------------------------------------------
+;; Buffer Management
+;;------------------------------------------------------------------
 (defun org-zettel-ref-get-overview-buffer-name (source-buffer)
   "Get the overview buffer name for the given SOURCE-BUFFER."
   (let* ((source-file-name (buffer-file-name source-buffer))
@@ -124,60 +141,19 @@ For example, 0.3 means the overview window will take 30% of the source window wi
 (defun org-zettel-ref-setup-buffers (source-buffer overview-buffer)
   "Setup SOURCE-BUFFER and OVERVIEW-BUFFER for org-zettel-ref."
   (with-current-buffer overview-buffer))
-;;-------------------------
-;; END: Buffer Management
-;;-------------------------
 
-;;-------------------------
-;; START: Synchronization
-;;-------------------------
+
+;;------------------------------------------------------------------
+;; Synchronization
+;;------------------------------------------------------------------
 
 
 (defun org-zettel-ref-sync-overview ()
-  "Synchronize quick notes and marked text from current buffer to overview file."
+  "使用高亮系统同步当前 buffer 到 overview 文件."
   (interactive)
-  (let* ((source-buffer (current-buffer))
-         (source-file (buffer-file-name)))
-    (if (not source-file)
-        (message "Error: Current buffer is not associated with a file")
-      (condition-case err
-          (let* ((overview-file org-zettel-ref-overview-file)
-                 (overview-buffer org-zettel-ref-current-overview-buffer))
-            (if (not (file-writable-p overview-file))
-                (message "Error: Overview file is not writable: %s" overview-file)
-              (with-current-buffer (or overview-buffer (find-file-noselect overview-file))
-                (let ((inhibit-read-only t))
-                  ;; Clean existing content
-                  (org-zettel-ref-clean-sections (current-buffer))
-                  ;; Insert new content
-                  (org-zettel-ref-insert-notes-and-text source-buffer (current-buffer)))
-                (save-buffer))
-              (message "Debug: Synchronization completed successfully")))
-        (error (message "Error during synchronization: %s" (error-message-string err)))))))
-
-(defun org-zettel-ref-clean-sections (buffer)
-  "Clean the Quick Notes and Marked Text sections in BUFFER."
-  (with-current-buffer buffer
-    (let ((inhibit-read-only t))
-      (save-excursion
-        (goto-char (point-min))
-        ;; Clean content between * Quick Notes and * Marked Text
-        (when (re-search-forward "^\\* Quick Notes\n" nil t)
-          (let ((start (point)))
-            (if (re-search-forward "^\\* Marked Text\n" nil t)
-                (delete-region start (match-beginning 0))
-              (delete-region start (point-max)))))
-        ;; Clean content after * Marked Text
-        (goto-char (point-min))
-        (when (re-search-forward "^\\* Marked Text\n" nil t)
-          (delete-region (point) (point-max)))
-        ;; Ensure * Quick Notes and * Marked Text titles exist
-        (goto-char (point-max))
-        (unless (save-excursion (re-search-backward "^\\* Quick Notes\n" nil t))
-          (insert "\n* Quick Notes\n"))
-        (goto-char (point-max))
-        (unless (save-excursion (re-search-backward "^\\* Marked Text\n" nil t))
-          (insert "\n* Marked Text\n"))))))
+  (when (and org-zettel-ref-overview-file
+             (file-exists-p org-zettel-ref-overview-file))
+    (org-zettel-ref-sync-highlights)))
 
 ;;----------------------------------------------------------------
 ;; File namming
@@ -191,85 +167,10 @@ For example, 0.3 means the overview window will take 30% of the source window wi
             title  ; Use original title directly
             org-zettel-ref-overview-file-suffix)))
 
-;;----------------------------------------------------------------
-;; org-zettel-ref-insert-quick-notes and marked-text
-;;----------------------------------------------------------------  
 
-(defun org-zettel-ref-insert-notes-and-text (source-buffer overview-buffer)
-  "Insert quick notes and marked text from SOURCE-BUFFER into OVERVIEW-BUFFER."
-  (with-current-buffer overview-buffer
-    (let ((inhibit-read-only t)
-          (quick-notes '())
-          (existing-texts (org-zettel-ref-get-existing-marked-texts))
-          (new-texts '()))
-      
-      ;; Collect quick notes and marked text from source buffer
-      (with-current-buffer source-buffer
-        ;; Collet quick notes and their place
-        (org-element-map (org-element-parse-buffer) 'target
-          (lambda (target)
-            (let* ((begin (org-element-property :begin target))
-                   (end (org-element-property :end target))
-                   (content (buffer-substring-no-properties begin end)))
-              (when (string-match "<<\\([^>]+\\)>>\\(.*\\)" content)
-                (let ((note-name (match-string 1 content))
-                      (note-content (string-trim (match-string 2 content))))
-                  (push (cons note-name note-content) quick-notes)))))))
-        
-      ;; Collect marked text and their place
-      (with-current-buffer source-buffer
-        (org-element-map (org-element-parse-buffer) '(bold underline)
-          (lambda (element)
-            (let* ((begin (org-element-property :begin element))
-                   (end (org-element-property :end element))
-                   (raw-text (string-trim (buffer-substring-no-properties begin end))))
-              (when (and raw-text (not (string-empty-p raw-text))
-                         (not (member raw-text existing-texts)))
-                (push raw-text new-texts))))))
-      
-      ;; Insert quick notes
-      (when quick-notes
-        ;; Jump to * Quick Notes section
-        (goto-char (point-min))
-        (re-search-forward "^\\* Quick Notes\n")
-        (goto-char (match-end 0))
-        (dolist (note (nreverse quick-notes))
-          (insert (format "- [[file:%s::%s][%s]]\n"
-                         (buffer-file-name source-buffer)
-                          (car note)
-                          (if (string-empty-p (cdr note))
-                              (car note)
-                            (cdr note)))))
-        (insert "\n"))
-      
-      ;; Insert marked texts
-      (when new-texts
-        ;; Jump to * Marked Text section
-        (goto-char (point-min))
-        (re-search-forward "^\\* Marked Text\n")
-        (goto-char (match-end 0))
-        (dolist (text (delete-dups (nreverse new-texts)))
-          (insert (format "- %s\n" text)))
-        (insert "\n")))))
-
-(defun org-zettel-ref-get-existing-marked-texts ()
-  "Get existing marked texts from the current buffer."
-  (let ((texts '()))
-    (save-excursion
-      (goto-char (point-min))
-      (when (re-search-forward "^\\* Marked Text\n" nil t)
-        (while (re-search-forward "^- \\(.+\\)$" nil t)
-          (push (match-string 1) texts))))
-    texts))
-
-
-;;-------------------------
-;; END: Synchronization
-;;-------------------------
-
-;;-------------------------
-;; START: Initialization
-;;-------------------------
+;;------------------------------------------------------------------
+;; Initialization
+;;------------------------------------------------------------------
 
 (defun org-zettel-ref-init ()
   "Initialize org-zettel-ref-mode."
@@ -278,11 +179,21 @@ For example, 0.3 means the overview window will take 30% of the source window wi
          (source-file (buffer-file-name source-buffer)))
     (unless source-file
       (user-error "Current buffer is not associated with a file"))
+    
+    ;; 启用 minor-mode
+    (org-zettel-ref-minor-mode 1)
+    
+    ;; 设置 source-buffer
+    (setq-local org-zettel-ref-source-buffer source-buffer)
+    
+    ;; 其他初始化
     (unless save-place-mode
       (save-place-mode 1))
     (message "DEBUG: Starting initialization: %s" source-file)
 
+    ;; 初始化高亮功能
     (org-zettel-ref-highlight-initialize-counter)
+    (org-zettel-ref-highlight-refresh)
   
     (let* ((entry-pair (org-zettel-ref-ensure-entry source-buffer))
            (ref-entry (car entry-pair))
@@ -350,9 +261,9 @@ Returns the overview buffer."
     (select-window source-window)
     overview-buffer))
 
-;;-------------------------
-;; START: Overview File Creation
-;;-------------------------
+;;------------------------------------------------------------------
+;; Overview File Creation
+;;------------------------------------------------------------------
 (defun org-zettel-ref-get-normal-overview (source-buffer overview-file)
   "Create an overview file for SOURCE-BUFFER in normal mode."
   (let* ((source-file (buffer-file-name source-buffer))

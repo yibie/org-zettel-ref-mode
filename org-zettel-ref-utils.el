@@ -87,22 +87,46 @@
   (local-unset-key (kbd org-zettel-ref-quick-markup-key)))
 
 (defun org-zettel-ref-advice-open-at-point (orig-fun &rest args)
-  "Advice function for `org-open-at-point'.
-This function checks if the link at point is a quick note link,
-and if so, it jumps to the corresponding quick note in the source buffer.
-Otherwise, it calls the original `org-open-at-point' function."
-  (let ((context (org-element-context)))
+  "简化的链接处理，利用 org-zettel-ref-mode 的上下文."
+  (let* ((context (org-element-context))
+         (type (org-element-property :type context))
+         (path (org-element-property :path context)))
     (if (and (eq (org-element-type context) 'link)
-             (string-equal (org-element-property :type context) "file")
-             (string-match "::\\(.+\\)" (org-element-property :path context)))
-        (let* ((target (match-string 1 (org-element-property :path context)))
-               (source-file (org-element-property :path context))
-               (source-buffer (find-file-noselect (substring source-file 0 (string-match "::" source-file)))))
-          (switch-to-buffer source-buffer)
+             (string= type "file")
+             (string-match ".*::hl-\\([0-9]+\\)" path))
+        ;; 如果是高亮链接，使用已有的关联直接跳转
+        (with-current-buffer org-zettel-ref-source-buffer  ; 使用已关联的源文件缓冲区
+          (widen)
           (goto-char (point-min))
-          (re-search-forward (concat "<<" (regexp-quote target) ">>") nil t)
-          (org-reveal))
+          (let ((target-id (match-string 1 path)))
+            (if (re-search-forward (concat "<<hl-" target-id ">>") nil t)
+                (progn
+                  (goto-char (match-beginning 0))
+                  (org-reveal)
+                  (org-show-entry)
+                  (switch-to-buffer-other-window (current-buffer))
+                  t)
+              (message "Target hl-%s not found" target-id)
+              nil)))
+      ;; 其他链接使用原始函数处理
       (apply orig-fun args))))
+
+(defun org-zettel-ref-find-target (file target)
+  "Find TARGET in FILE and jump to its location.
+FILE should be absolute path, TARGET should be the target identifier."
+  (let ((buf (find-file-noselect file)))
+    (with-current-buffer buf
+      (widen)
+      (goto-char (point-min))
+      (if (re-search-forward (concat "<<" (regexp-quote target) ">>") nil t)
+          (progn
+            (switch-to-buffer buf)
+            (goto-char (match-beginning 0))
+            (org-reveal)
+            (org-show-entry)
+            t)
+        (message "Target %s not found in %s" target file)
+        nil))))
 
 ;; 其他实用函数
 (defun org-zettel-ref-get-overview-buffer-name (source-buffer)
