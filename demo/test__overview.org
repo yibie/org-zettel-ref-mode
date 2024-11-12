@@ -1,0 +1,15 @@
+#+title: Overview - test
+#+startup: showall
+#+filetags: :overview:
+
+* 📖 [[hl:1][hl-1]] Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+*bold*
+_underline_
+/italic/
+* ❓ [[hl:2][hl-2]] Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+
+* 📝 [[hl:3][hl-3]] Donec lobortis risus a elit.
+
+* 🖼️ [[hl:4][hl-4]] pkm
+#+ATTR_ORG: :width 300
+[[file:Images/20241112-120122-pkm-system-diagram.png]]

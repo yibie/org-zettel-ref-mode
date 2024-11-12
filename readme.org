@@ -4,6 +4,26 @@
 #+end_center
 
 ** Changlog
+*** Version 0.5 (2024-11-12)
+  - Upgrade: Major upgrade to marking and note system (see #Demo for changes after upgrade)
+    - Decoupled from org-mode's built-in styles
+    - Automatic note ID numbering
+    - Automatic highlighting of marked content
+    - Content under overview headlines won't be cleared
+    - Mark images and sync them to overview notes
+      - Must run ~org-zettel-ref-add-image~ command to add images to overview notes
+      - Requires setting ~org-zettel-ref-overview-image-directory~ configuration
+    - Overview note style upgrades:
+      - Note titles now display note IDs
+      - Uses org-mode Headlines style
+      - Note icon prefixes to distinguish note types
+    - New custom configuration options (customize text marking types and highlight styles, see #Advanced Features):
+      - ~org-zettel-ref-highlight-types~ defines/adds marking types and highlight styles
+      - ~org-zettel-ref-overview-image-directory~ defines image save path for overview notes
+    - Painless upgrade, maintains familiar commands
+    - Note: When executing org-zettel-ref-mark-text, please don't select note type or image type
+      - For quick notes, continue using the previous org-zettel-ref-add-quick-note command
+      - This design choice is to provide highlight styles for quick notes and image notes
 *** Version 0.4.4 (2024-11-09)
   - Fixed:
     - The issue where org-zettel-ref-watch-directory reports an error after running org-zettel-ref-list-rename-file 
@@ -269,6 +289,34 @@ Complex Filter ("/ m"): Multiple filter conditions can be applied using Author, 
 *** ⚠️ Caution
 1. Do not casually change the filename of note files. If you do, adding quick notes/markups again in the source file will generate duplicate notes during sync.
 ** Advanced Features
+*** Custom Text Marking Types and Highlight Styles
+
+Reference the following example:
+
+#+BEGIN_SRC emacs-lisp
+(setq org-zettel-ref-highlight-types
+      (append org-zettel-ref-highlight-types
+             '(("warning" . (:char "w"
+                           :face (:background "#FFA726" 
+                                 :foreground "#000000" 
+                                 :extend t)
+                           :name "warning"
+                           :prefix "⚠️"))
+               ("success" . (:char "s"
+                           :face (:background "#66BB6A" 
+                                 :foreground "#FFFFFF" 
+                                 :extend t)
+                           :name "success"
+                           :prefix "✅")))))
+#+END_SRC
+
+Highlight type configuration.
+Each type should include:
+- :char    Single character identifier for the type
+- :face    Face attributes for highlighting
+- :name    Display name for the type
+- :prefix  Symbol shown in the overview
+
 *** File Association Mechanism
 org-zettel-ref-mode now supports multiple file association mechanisms and no longer fully relies on the "-overview" suffix in filenames:
 
@@ -281,22 +329,6 @@ If you're upgrading from an older version, your existing "-overview" files will 
 *** Debugging in org-roam Mode
 The `M-x org-zettel-ref-check-roam-db` function checks the status of the org-roam database.
 
-*** Overview File Sync Mechanism Optimization
-
-In version 0.3, org-zettel-ref-mode made significant optimizations to the overview file synchronization mechanism:
-
-1. Selective Updates: Only updates the changed sections (Quick Notes and Marked Text) instead of rewriting the entire file.
-2. Smart Buffer Handling: Prioritizes using open buffers, reducing file I/O operations.
-3. Content Generation Optimization: Removed redundant content generation steps.
-
-These optimizations provide the following benefits:
-
-- Significantly improved sync speed, especially for large overview files.
-- Reduced resource usage, including memory and disk I/O.
-- Enhanced stability, reducing the risk of data loss.
-- Improved user experience with less interface flickering.
-
-For users who frequently use the overview feature, these optimizations will bring noticeable performance improvements.
 *** Custom Note Saving Modes
 (Updated 2024-08-29) org-zettel-ref-mode provides three modes: normal, org-roam, and denote, allowing note files to be saved in the corresponding format. For example, after selecting org-roam mode, the saved note files will automatically include an ID, making them easier to retrieve.
 
@@ -416,6 +448,10 @@ Here are the main configurable variables for org-zettel-ref-mode:
 - `setq org-zettel-ref-reference-folder "~/Documents/ref/"`: Set the reference materials folder path
 - `setq org-zettel-ref-archive-folder "/Volumes/Collect/archives/"`: Set the archive folder path
 - `setq org-zettel-ref-debug nil`: Set whether to enable debug mode
+- `setq org-zettel-ref-overview-width-ratio 0.3`: Set the overview window width ratio
+- `setq org-zettel-ref-overview-min-width 30`: Set the overview window minimum width
+- `setq org-zettel-ref-highlight-types`: Set text marking types and highlight styles
+- `setq org-zettel-ref-overview-image-directory="~/Documents/org-zettel-ref-images/"`: Set the image save path for overview notes
 
 ** FAQ
 
@@ -481,3 +517,5 @@ org-zettel-ref-mode was inspired by my friend [[https://github.com/lijigang][@li
 - Optimize file association mechanisms, reducing reliance on specific filename suffixes
 
 If you like it, please Star.
+
+

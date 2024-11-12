@@ -2,7 +2,25 @@
 ** 版本历史
 
 - v0.5 (2024-11-12)
-  
+  - 升级：标记与笔记系统重大升级 (升级之后变化见 #Demo)
+    - 与 org-mode 自带样式解耦
+    - 笔记 ID 自动编号
+    - 自动高亮所标记的内容
+    - 概览 headline 下的内容不会被清理
+    - 标记图片，将标记的图片同步到概览笔记
+      - 必须运行 ~org-zettel-ref-add-image~ 命令，将图片添加到概览笔记
+      - 使用前需要设置 ~org-zettel-ref-overview-image-directory~ 配置项
+    - 概览笔记的样式升级：
+      - 笔记的标题现在显示笔记的 ID
+      - 使用 org-mode 的 Headlines 样式
+      - 笔记的图标前缀，区分笔记类型
+    - 新增自定义配置项 （自定义标记文本类型与高亮样式，见 #高级功能）：
+      - ~org-zettel-ref-highlight-types~ 定义/添加标记的类型与高亮的样式
+      - ~org-zettel-ref-overview-image-directory~ 定义概览笔记的图片保存路径
+    - 无痛升级，沿用过去的习惯命令
+    - 注意：在执行 org-zettel-ref-mark-text 时，请不要选择 note 类型，和 image 类型
+      - 如需要添加快速笔记，请继续使用过去的命令 org-zettel-ref-add-quick-note
+      - 如此设计的缘由，是需要为快速笔记和图片笔记提供高亮样式
 - v0.4.4 (2024-11-09)
   - 修复
     - 运行 org-zettel-ref-list-rename-file 后，org-zettel-ref-watch-directory 报错的问题
@@ -89,17 +107,18 @@
 输入 =M-x org-zettel-ref-init= 命令, 即可调用 "概览窗口", 里面显示在原文里记录的注释, 以及被标记的文本.
 
 1. 每一次形成概览, 都将自动形成一份文献笔记, 保存到你自定义的文件夹里
-2. 快速注释, =M-x org-zettel-ref-add-quick-note= 即可直接在输入注释
+2. 快速笔记, =M-x org-zettel-ref-add-quick-note= 即可直接在输入笔记
 3. 回顾文献笔记时, 可以从注释直接跳转回原文对应的位置, 重新阅读上下文
 4. 提供一套将其他格式的文档, 转换成 org 格式的方法
-5. 提供快速标记功能, 快速为源文件中的文本添加 org 里的加粗、斜体、下滑线等标记
+5. 提供快速标记功能, 快速高亮标记
 6. 支持与 org-roam 和 denote 等知识管理工具的集成
 7. 灵活的文件关联机制，支持多种知识管理模式（普通模式、Denote、Org-roam）
-8. 直接通过 Emacs 调用外部 Python 脚本，将多种格式的电子文档转换为 Org 文件
+
 ** Demo
 如题所示, 左边是窗口显示的是原文, 右边窗口显示的是概览.
 
 [[file:demo/org-zettel-ref-mode-demo.png]]
+
 
 ** 适用范围
 =org-zettel-ref-mode= 仅能在 org-mode 启动时生效:
@@ -261,10 +280,40 @@ Luhmann 有一个习惯, 是一边读, 一边记文献笔记. 他的书或者资
 
 
 
-*** ⚠️注意事项
+*** ⚠️注意事项（在 0.4 之后，可以在 org-zettel-ref-list 里修改源文件的文件名）
 1. 不要随便修改笔记文件名. 如果修改了, 在源文件上再次添加快速笔记/标记, 在同步时, 会生成重复的笔记.
 ** 高级功能
-*** 改善中文下 org-mode 处理标记的体验
+
+*** 自定义标记文本的类型与高亮样式
+
+参考如下例子：
+
+#+BEGIN_SRC emacs-lisp
+(setq org-zettel-ref-highlight-types
+      (append org-zettel-ref-highlight-types
+             '(("warning" . (:char "w"
+                           :face (:background "#FFA726" 
+                                 :foreground "#000000" 
+                                 :extend t)
+                           :name "warning"
+                           :prefix "⚠️"))
+               ("success" . (:char "s"
+                           :face (:background "#66BB6A" 
+                                 :foreground "#FFFFFF" 
+                                 :extend t)
+                           :name "success"
+                           :prefix "✅")))))
+#+END_SRC
+
+高亮类型的配置。
+每种类型应包含：
+- :char    类型的单字符标识符
+- :face    高亮的 face 属性
+- :name    类型的显示名称
+- :prefix  在概览中显示的符号
+
+
+*** 改善中文下 org-mode 处理标记的体验（已弃用，标记文本和快速笔记系统在 0.5 版本后，不再使用 org-mode 的样式）
 无需在标记两旁添加空格，即可让标记生效。该配置来自 @lijigang 和 @Eli 的贡献。
 
 见：https://github.com/yibie/org-zettel-ref-mode/issues/8#issuecomment-2380661446
@@ -281,22 +330,7 @@ org-zettel-ref-mode 现在支持多种文件关联机制，不再完全依赖于
 *** org-roam 模式下调试功能
  =M-x org-zettel-ref-check-roam-db= 函数，用于检查 org-roam 数据库状态。
 
-*** 概览文件同步机制优化
 
-org-zettel-ref-mode 在 0.3 版本中对概览文件的同步机制进行了重要优化：
-
-1. 选择性更新：只更新变化的部分（Quick Notes 和 Marked Text），而不是重写整个文件。
-2. 智能缓冲区处理：优先使用已打开的缓冲区，减少文件 I/O 操作。
-3. 内容生成优化：移除了重复的内容生成步骤。
-
-这些优化带来以下好处：
-
-- 显著提高了同步速度，特别是对大型概览文件。
-- 减少了资源使用，包括内存和磁盘 I/O。
-- 提高了稳定性，降低了数据丢失的风险。
-- 改善了用户体验，减少了界面闪烁。
-
-对于频繁使用概览功能的用户来说，这个优化将带来明显的性能提升。
 *** 自定义笔记保存模式
 （2024-08-29 更新）org-zettel-ref-mode 提供了 normal、org-roam、denote 三种模式，让笔记文件能够以对应的格式进行保存，比如，选用 org-roam 模式之后, 所保存的笔记文件, 会自动附上 id，方便检索。
 
@@ -310,7 +344,7 @@ org-zettel-ref-mode 在 0.3 版本中对概览文件的同步机制进行了重�
 (setq org-zettel-ref-overview-directory "~/my-notes/overviews/")
 #+END_SRC
 
-+*** 调整自动同步行为+
+*** 调整自动同步行为（已弃用）
 禁用自动同步：
 #+BEGIN_SRC emacs-lisp
 (org-zettel-ref-disable-auto-sync)
@@ -399,8 +433,9 @@ org-zettel-ref-mode 现在支持直接通过 Emacs 调用外部 Python 脚本，
 - =M-x org-zettel-ref-sync-overview=: 手动同步概览文件
 - =M-x org-zettel-ref-quick-markup=: 快速为选中文本添加标记
 - =M-x org-zettel-ref-clean-multiple-targets=: 清理源文件中的多余标记
-- =M-x org-zettel-ref-enable-auto-sync=: 启用自动同步
-- =M-x org-zettel-ref-disable-auto-sync=: 禁用自动同步
+- (新增) =M-x org-zettel-ref-list=: 打开源文件管理面板
+- (已弃用) =M-x org-zettel-ref-enable-auto-sync=: 启用自动同步
+- (已弃用)=M-x org-zettel-ref-disable-auto-sync=: 禁用自动同步
 - =M-x org-zettel-ref-check-roam-db=: 检查 org-roam 数据库状态
 - =M-x org-zettel-ref-run-python-script=: 运行指定的 Python 脚本
 
@@ -421,6 +456,8 @@ org-zettel-ref-mode 现在支持直接通过 Emacs 调用外部 Python 脚本，
 - =setq org-zettel-ref-debug nil=: 设置是否启用调试模式
 - =setq org-zettel-ref-overview-width-ratio 0.3=: 设置概览窗口宽度比例
 - =setq org-zettel-ref-overview-min-width 30=: 设置概览窗口最小宽度
+- =setq org-zettel-ref-highlight-types=: 设置标记文本的类型与高亮样式
+- =setq org-zettel-ref-overview-image-directory="~/Documents/org-zettel-ref-images/"=: 设置概览笔记中图片的保存路径
 
 ** 常见问题解答
 

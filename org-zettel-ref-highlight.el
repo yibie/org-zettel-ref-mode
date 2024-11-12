@@ -62,6 +62,10 @@
                 :face (:background "#FFB74D" :foreground "#000000" :extend t)
                 :name "future"
                 :prefix "🔮"))
+    ("quote" . (:char "t"
+                :face (:background "#C5CAE9" :foreground "#000000" :extend t)
+                :name "quote"
+                :prefix "💭"))
     ("image" . (:char "i"
                 :face (:background "#FFECB3" :foreground "#000000" :extend t)
                 :name "image"
@@ -232,7 +236,7 @@ Group 3: Content (for images including path and description)"
     ;; Return the path relative to the overview file
     (concat "Images/" new-name)))
 
-(defun org-zettel-ref-highlight-image ()
+(defun org-zettel-ref-add-image ()
   "Add a highlight mark to the image at the current position and copy it to the Images directory."
   (interactive)
   (org-zettel-ref-highlight--check-init)
@@ -264,7 +268,7 @@ Group 3: Content (for images including path and description)"
 ;; Highlight Editing
 ;;----------------------------------------------------------------------------
 
-(defun org-zettel-ref-remove-highlight-at-point ()
+(defun org-zettel-ref-remove-marked ()
   "Remove the highlight mark at the cursor, keeping the original text."
   (interactive)
   (save-excursion
@@ -290,7 +294,7 @@ Group 3: Content (for images including path and description)"
         (message "No highlight mark found at point")))))
 
 ;; Edit highlighted text
-(defun org-zettel-ref-highlight-edit ()
+(defun org-zettel-ref-edit-highlight ()
   "Edit the highlighted text under the cursor."
   (interactive)
   (save-excursion
@@ -309,7 +313,7 @@ Group 3: Content (for images including path and description)"
             (org-zettel-ref-highlight-refresh)
             (org-zettel-ref-sync-highlights)))))))
 
-(defun org-zettel-ref-highlight-edit-note ()
+(defun org-zettel-ref-edit-note ()
   "Edit the content of the current note."
   (interactive)
   (when (org-zettel-ref-highlight-at-point)
