@@ -1,5 +1,369 @@
 * org-zettel-ref-mode
-** 版本历史
+* 主要功能
+输入 =M-x org-zettel-ref-init= 命令, 即可调用 "概览窗口", 里面显示在原文里记录的注释, 以及被标记的文本.
+
+1. 每一次形成概览, 都将自动形成一份文献笔记, 保存到你自定义的文件夹里
+2. 快速笔记, =M-x org-zettel-ref-add-quick-note= 即可直接在输入笔记
+3. 回顾文献笔记时, 可以从注释直接跳转回原文对应的位置, 重新阅读上下文
+4. 提供一套将其他格式的文档, 转换成 org 格式的方法
+5. 提供快速标记功能, 快速高亮标记
+6. 支持与 org-roam 和 denote 等知识管理工具的集成
+7. 灵活的文件关联机制，支持多种知识管理模式（普通模式、Denote、Org-roam）
+
+* Demo
+如题所示, 左边是窗口显示的是原文, 右边窗口显示的是概览.
+
+[[file:demo/org-zettel-ref-mode-demo.png]]
+
+* 价值: 兼顾广度, 和深度的阅读方法
+
+TL;DR 版本:
+
+- 简单保存, 摘录或复制资料是不够的,需要对信息进行加工和处理才能转化为有用的知识
+- Zettelkasten方法强调用自己的话总结/回顾和建立联系, 提供了多次信息加工的机会, 但很多介绍忽视了Luhmann处理大量文献笔记的方法
+- 文献笔记是一种兼顾效率和深度的方法, 它记录要点和启发, 便于快速回顾和深入阅读, 同时有助于区分存量信息和增量信息
+
+完整版本:
+
+作为多年的笔记爱好者, 文字工作者, 我逐步体会到一些 "反常识":
+
+- 直接保存, 几乎是无用的.
+- 直接摘录, 几乎是无用的.
+- 直接复制, 几乎是无用的.
+
+背后的原因是, 简单的搬运, 只是增加了资料, 而忽略将资料的再加工. 还记得这个经典的层递关系吗? 资料 -> 信息 -> 知识 -> 智慧.
+
+Zettelkasten 方法总是强调让我们用自己的话总结, 要经常回顾过去的笔记, 增加笔记与笔记之间的联系, 从方法的角度, 它起码提供了 4-7 次信息加工的机会.
+
+即便如此, 市面上讲述 Zettelkasten 的文字或视频, 总沉迷在介绍双链的狂热中, 陷入到直接资料保存的误区里 -- 基本上忽略了 Niklas Luhmann 通过海量文献笔记处理资料的方法.
+
+我引用一个数字, 在 Luhmann 留下的 90000 多张笔记卡片里, 有 10000 多张是文献笔记.
+
+Luhmann 那令人惊叹的高产, 来自夸张的资料处理数量, 而这背后, 是他处理这些资料时体现的高效, 也就是文献笔记的制作.
+
+Luhmann 有一个习惯, 是一边读, 一边记文献笔记. 他的书或者资料, 没有划线, 没有边注, 非常干净, 就好像没读过一样. 每一个文献笔记, 基本上是一份资料的索引. 只在必要时候, 他才会摘录书中的原文.
+
+不过, 当我了解科研人员的制作文献笔记之后, 就发现, Luhmann 的文献笔记几乎和一般的科研文献笔记是一致的. 也是用自己的话注释, 同时记录这句话灵感在论文具体的出处, 等以后有机会再深入阅读.
+
+换言之, 文献笔记这种方法, 是兼顾了效率和深度.
+
+在没有必要对一份资料深入了解时, 用文献笔记记录要点(不是重要的内容, 而是对自己有用的启发); 等有必要深入时，再通过文献笔记快速找到对应上下文, 进行深度阅读和思考, 不用浪费时间重头再读.
+
+除了兼顾效率和深度之外, 文献笔记还有一个好处, 那就是非常容易分辨存量信息和增量信息. 已经为类似概念, 重点做过注释的, 就是存量信息, 下次再另外一个资料里遇到, 就没有必要进行注释; 反之, 完全没有了解过的概念, 数据, 就值得添加注释, 记录出处. 让新知的发现变得更加容易.
+
+* 适用范围
+=org-zettel-ref-mode= 仅能在 org-mode 启动时生效:
+
+1. 直接面向 org 文件
+2. 其他用户自定义由 org-mode 方式进行处理的文本格式文件, 比如: md, txt 等
+   在这种情况下, 面向该格式文件的 major-mode 的功能可能会受影响
+
+不过, 我一般是将资料直接转成 org 格式保存, 因此第二种情况虽然存在, 但不常见.
+
+* 安装
+1. 下载 =org-zettel-ref-mode.el= 文件。
+2. 将文件放置在您的 Emacs 加载路径中（例如 =~/.emacs.d/lisp/=）。
+3. 在您的 Emacs 配置文件（如 ~/.emacs 或 ~/.emacs.d/init.el）中添加：
+
+配置示例:
+#+BEGIN_SRC emacs-lisp
+(use-package org-zettel-ref-mode
+  :ensure nil
+  :load-path "~/Documents/emacs/package/org-zettel-ref-mode/"
+  :init
+  (setq org-zettel-ref-overview-directory "~/Documents/notes/source-note/")
+  :config
+  (setq org-zettel-ref-mode-type 'denote)  
+  ;; (setq org-zettel-ref-mode-type 'org-roam)  
+  ;; (setq org-zettel-ref-mode-type 'normal)  
+  (setq org-zettel-ref-python-file "~/Documents/emacs/package/org-zettel-ref-mode/convert-to-org.py")
+  (setq org-zettel-ref-temp-folder "~/Documents/temp_convert/")
+  (setq org-zettel-ref-reference-folder "~/Documents/ref/")
+  (setq org-zettel-ref-archive-folder "/Volumes/Collect/archives/")
+  (setq org-zettel-ref-debug t)
+  )
+#+END_SRC
+
+* 基本用法
+** 启用模式
+在任何 org-mode 缓冲区中，运行：
+=M-x org-zettel-ref-init=
+
+** 清理源文件中的多余格式
+
+由于添加笔记的核心功能是在原文里添加 <<>> 目标链接(target link)，但很多资料转换成 org 格式之后, 会自带很多 <<>> 的文本。
+
+在第一次对 org 文件进行注释或标记文本之前, 可以用 =org-zettel-ref-clean-targets= 清理一下格式, 确保快速笔记的功能正常工作。
+
+** 添加快速笔记
+1. 将光标放置在您想添加笔记的位置
+2. =M-x org-zettel-ref-add-quick-note=
+3. 输入笔记名称和内容
+
+** 快速添加标记
+1. 在源文件中选中文本
+2. =M-x org-zettel-ref-quick-markup=
+3. 选择自己希望的标记风格
+
+** 同步概览文件
+默认自动同步：默认在保存源文件时自动执行。
+手动同步：=M-x org-zettel-ref-sync-overview=
+
+** 管理源文件
+1. 启动面板
+
+[[file:demo/org-zettel-ref-list.gif]]
+
+~M-x org-zettel-ref-list~
+
+提醒: 以下命令, 均在面板界面中执行.
+
+2. 重命名源文件 ("r")
+
+[[file:demo/org-zettel-ref-list-rename-file.gif]]
+
+~M-x org-zettel-ref-list-rename-file~
+
+按照 AUTHOR__TITLE==KEYWORDS.org 的固定格式进行重命名.
+
+3. 编辑/添加关键词 ("k")
+
+[[file:demo/org-zettel-ref-list-edit-keywords.gif]]
+
+~M-x org-zettel-ref-list-edite-keywords~
+
+可独立为源文件添加一个或多个关键词.
+
+4. 删除源文件
+
+[[file:demo/org-zettel-ref-list-delete-file.gif]]
+
+删除单个文件 ("d")
+~M-x org-zettel-ref-list-delete-file~
+
+
+[[file:demo/org-zettel-ref-list-delete-marked-files.gif]]
+删除多个文件 ("D")
+
+在列表里按下 "m" 标记多个文件, 然后执行 ~M-x org-zettel-ref-list-delete-marked-files~
+
+如果标记的文件不对, 按下 "u" 即可清除标记状态, 按下 "U" 可以直接清除所有标记状态
+
+5. 使用过滤器
+
+[[file:demo/org-zettel-ref-list-filter-by-regexp.gif]]
+简单过滤 ("/ r"): 使用 Author, Title, Keywords 作为过滤条件, 每次只能应用一个过滤条件
+~M-x org-zettel-filter-by-regexp~
+
+复杂过滤 ("/ m"): 可应用多个 Author, Title, Keyowrds 的过滤条件作为条件
+
+
+
+** ⚠️注意事项（在 0.4 之后，可以在 org-zettel-ref-list 里修改源文件的文件名）
+1. 不要随便修改笔记文件名. 如果修改了, 在源文件上再次添加快速笔记/标记, 在同步时, 会生成重复的笔记.
+* 高级功能
+
+** 自定义标记文本的类型与高亮样式
+
+参考如下例子：
+
+#+BEGIN_SRC emacs-lisp
+(setq org-zettel-ref-highlight-types
+      (append org-zettel-ref-highlight-types
+             '(("warning" . (:char "w"
+                           :face (:background "#FFA726" 
+                                 :foreground "#000000" 
+                                 :extend t)
+                           :name "warning"
+                           :prefix "⚠️"))
+               ("success" . (:char "s"
+                           :face (:background "#66BB6A" 
+                                 :foreground "#FFFFFF" 
+                                 :extend t)
+                           :name "success"
+                           :prefix "✅")))))
+#+END_SRC
+
+高亮类型的配置。
+每种类型应包含：
+- :char    类型的单字符标识符
+- :face    高亮的 face 属性
+- :name    类型的显示名称
+- :prefix  在概览中显示的符号
+
+
+** 改善中文下 org-mode 处理标记的体验（已弃用，标记文本和快速笔记系统在 0.5 版本后，不再使用 org-mode 的样式）
+无需在标记两旁添加空格，即可让标记生效。该配置来自 @lijigang 和 @Eli 的贡献。
+
+见：https://github.com/yibie/org-zettel-ref-mode/issues/8#issuecomment-2380661446
+
+** 文件关联机制
+org-zettel-ref-mode 现在支持多种文件关联机制，不再完全依赖于文件名中的 "-overview" 后缀：
+
+- 普通模式：仍然使用 "-overview" 后缀（为了向后兼容）
+- Denote 模式：使用 Denote 的命名约定
+- Org-roam 模式：使用 Org-roam 的命名约定和 ID 属性
+
+如果您从旧版本升级，您的现有 "-overview" 文件仍然可以正常工作。但对于新文件，我们建议使用新的关联机制。
+
+** org-roam 模式下调试功能
+ =M-x org-zettel-ref-check-roam-db= 函数，用于检查 org-roam 数据库状态。
+
+
+** 自定义笔记保存模式
+（2024-08-29 更新）org-zettel-ref-mode 提供了 normal、org-roam、denote 三种模式，让笔记文件能够以对应的格式进行保存，比如，选用 org-roam 模式之后, 所保存的笔记文件, 会自动附上 id，方便检索。
+
+配置方法：
+
+=(setq org-zettel-ref-mode-type 'normal) ;可选：'normal, 'denote, 'org-roam）=
+
+
+** 自定义概览文件位置
+#+BEGIN_SRC emacs-lisp
+(setq org-zettel-ref-overview-directory "~/my-notes/overviews/")
+#+END_SRC
+
+** 调整自动同步行为（已弃用）
+禁用自动同步：
+#+BEGIN_SRC emacs-lisp
+(org-zettel-ref-disable-auto-sync)
+#+END_SRC
+
+启用自动同步：
+#+BEGIN_SRC emacs-lisp
+(org-zettel-ref-enable-auto-sync)
+#+END_SRC
+** 启用调试模式
+如果您在使用过程中遇到问题，可以启用调试模式来获取更多信息:
+
+#+BEGIN_SRC emacs-lisp
+(setq org-zettel-ref-debug t)
+#+END_SRC
+** 使用脚本将 PDF, ePub, html, md, txt 等文档格式转换成 org 文件
+
+[[file:demo/pkm-system-diagram.png]]
+
+
+脚本: [[file:convert-to-org.py]]
+
+org-zettel-ref-mode 现在支持直接通过 Emacs 调用外部 Python 脚本，用于将多种不同格式的电子文档转换成 org 文件。
+
+** Convert to Org 主要特性
+
+1. 多格式支持：
+   - 支持将 PDF、EPUB、HTML、Markdown 和 TXT 等格式转换为 Org 格式。
+   - 能够处理电子版和扫描版 PDF，支持中英文混合文档。
+
+2. OCR 功能：
+   - 使用 OCR 技术处理扫描版 PDF，支持中英文识别。
+
+3. 文件管理：
+   - 自动进行文件大小检查，防止处理过大的文件。
+   - 转换完成后，可以自动将源文件归档。
+
+4. 灵活配置：
+   - 支持自定义临时文件夹、参考资料文件夹和归档文件夹路径。
+   - 可以选择使用系统 Python、Conda 环境或虚拟环境。
+
+*** 使用方法
+
+1. 配置 Python 环境：
+   #+BEGIN_SRC emacs-lisp
+   (setq org-zettel-ref-python-environment 'conda)  ; 或 'system, 'venv
+   (setq org-zettel-ref-python-env-name "your-env-name")  ; 如果使用 Conda 或 venv
+   #+END_SRC
+
+2. 设置脚本路径和文件夹：
+   #+BEGIN_SRC emacs-lisp
+   (setq org-zettel-ref-python-file "~/path/to/document_convert_to_org.py")
+   (setq org-zettel-ref-temp-folder "~/Documents/temp_convert/")
+   (setq org-zettel-ref-reference-folder "~/Documents/ref/")
+   (setq org-zettel-ref-archive-folder "/Volumes/Collect/archives/")
+   #+END_SRC
+
+3. 运行转换脚本：
+   使用 =M-x org-zettel-ref-run-python-script= 命令来执行转换操作。
+
+*** 注意事项
+
+- 确保已安装所有必要的 Python 库（如 PyPDF2、pdf2image、pytesseract 等）。
+- 对于扫描版 PDF，转换过程可能较慢，且效果可能不如电子版理想。
+- 建议优先使用该脚本处理电子版 PDF、EPUB、Markdown 和 TXT 文档。
+
+*** 工作流建议
+
+1. 使用浏览器扩展（如 Markdownload）将网页保存为 Markdown 文件。
+2. 使用 org-zettel-ref-mode 的 Python 脚本将 Markdown 文件转换为 Org 格式。
+3. 对于音频文件，可以先使用 Whisper 转换为文本，然后再使用脚本转换为 Org 格式。
+
+这一功能极大地扩展了 org-zettel-ref-mode 的应用范围，使其成为一个更全面的知识管理工具。
+*** ⚠️注意事项
+推荐使用该脚本对 ePub, markdown, txt, 电子版 PDF 文档进行转换.
+
+不推荐将该脚本用于转换扫描版 PDF, 原因是转换速度慢, 而且转换的效果也不非常好.
+
+* 可调用指令列表
+
+以下是 org-zettel-ref-mode 提供的主要可调用指令：
+
+- =M-x org-zettel-ref-init=: 初始化 org-zettel-ref-mode，创建或打开概览文件
+- =M-x org-zettel-ref-add-quick-note=: 在当前位置添加快速笔记
+- =M-x org-zettel-ref-sync-overview=: 手动同步概览文件
+- =M-x org-zettel-ref-quick-markup=: 快速为选中文本添加标记
+- =M-x org-zettel-ref-clean-multiple-targets=: 清理源文件中的多余标记
+- (新增) =M-x org-zettel-ref-list=: 打开源文件管理面板
+- (已弃用) =M-x org-zettel-ref-enable-auto-sync=: 启用自动同步
+- (已弃用)=M-x org-zettel-ref-disable-auto-sync=: 禁用自动同步
+- =M-x org-zettel-ref-check-roam-db=: 检查 org-roam 数据库状态
+- =M-x org-zettel-ref-run-python-script=: 运行指定的 Python 脚本
+
+* 可配置变量列表
+以下是 org-zettel-ref-mode 的主要可配置变量：
+
+- =setq org-zettel-ref-overview-directory "~/org-zettel-ref-overviews/"=: 设置概览文件存储目录
+- =setq org-zettel-ref-mode-type 'normal=: 设置模式类型（可选：'normal, 'denote, 'org-roam）
++- =setq org-zettel-ref-include-empty-notes nil=: 设置是否包含空的快速笔记+
+- =setq org-zettel-ref-quick-markup-key "C-c m"=: 设置快速标记的快捷键
+- =setq org-zettel-ref-add-quick-note "C-c n"=: 设置快速笔记的快捷键
+- =setq org-zettel-ref-python-environment 'system=: 设置 Python 环境类型（可选：'system, 'conda, 'venv）
+- =setq org-zettel-ref-python-env-name nil=: 设置 Python 环境名称
+- =setq org-zettel-ref-python-file "~/path/to/script.py"=: 设置 Python 脚本文件路径
+- =setq org-zettel-ref-temp-folder "~/Documents/temp_convert/"=: 设置临时文件夹路径
+- =setq org-zettel-ref-reference-folder "~/Documents/ref/"=: 设置参考资料文件夹路径
+- =setq org-zettel-ref-archive-folder "/Volumes/Collect/archives/"=: 设置归档文件夹路径
+- =setq org-zettel-ref-debug nil=: 设置是否启用调试模式
+- =setq org-zettel-ref-overview-width-ratio 0.3=: 设置概览窗口宽度比例
+- =setq org-zettel-ref-overview-min-width 30=: 设置概览窗口最小宽度
+- =setq org-zettel-ref-highlight-types=: 设置标记文本的类型与高亮样式
+- =setq org-zettel-ref-overview-image-directory="~/Documents/org-zettel-ref-images/"=: 设置概览笔记中图片的保存路径
+
+* 常见问题解答
+
+Q: 如何在多个项目之间使用 org-zettel-ref-mode？
+A: 您可以为每个项目设置不同的概览目录，使用 =let-bound= 的方式在项目切换时动态改变 =org-zettel-ref-overview-directory= 的值。
+
+Q: 概览文件变得太大怎么办？
+A: 考虑按主题或时间周期分割概览文件。您可以自定义 =org-zettel-ref-create-or-open-overview-file= 函数来实现这一点。
+
+Q: 如何备份我的笔记？
+A: 将源文件和概览文件都纳入您的版本控制系统（如 Git）中。另外，定期执行文件系统级别的备份也是好的做法。
+
+Q: 如何检查org-roam数据库的状态?
+A: 您可以使用 =M-x org-zettel-ref-check-roam-db= 命令来检查org-roam数据库的状态,包括版本信息、节点数量等。
+
+* 故障排除
+
+如果遇到问题：
+1. 确保您使用的是最新版本的 org-zettel-ref-mode。
+2. 检查您的 Emacs 配置，确保没有冲突的设置。
+3. 尝试在一个干净的 Emacs 配置（emacs -q）中重现问题。
+4. 查看 =*Messages*= 缓冲区中的任何错误消息。
+5. 如果问题与Python脚本或Conda环境有关,请检查您的Python环境配置。
+6. 启用调试模式(设置 =org-zettel-ref-debug= 为 =t=)以获取更详细的日志信息。
+
+如果问题持续存在，请通过 GitHub 仓库提交 issue，附上问题描述、重现步骤和调试日志。
+
+* 版本历史
 
 - v0.5 (2024-11-12)
   - 升级：标记与笔记系统重大升级 (升级之后变化见 #Demo)
@@ -103,390 +467,7 @@
   - 添加自动同步机制
   - 提供自定义选项
 
-** 主要功能
-输入 =M-x org-zettel-ref-init= 命令, 即可调用 "概览窗口", 里面显示在原文里记录的注释, 以及被标记的文本.
-
-1. 每一次形成概览, 都将自动形成一份文献笔记, 保存到你自定义的文件夹里
-2. 快速笔记, =M-x org-zettel-ref-add-quick-note= 即可直接在输入笔记
-3. 回顾文献笔记时, 可以从注释直接跳转回原文对应的位置, 重新阅读上下文
-4. 提供一套将其他格式的文档, 转换成 org 格式的方法
-5. 提供快速标记功能, 快速高亮标记
-6. 支持与 org-roam 和 denote 等知识管理工具的集成
-7. 灵活的文件关联机制，支持多种知识管理模式（普通模式、Denote、Org-roam）
-
-** Demo
-如题所示, 左边是窗口显示的是原文, 右边窗口显示的是概览.
-
-[[file:demo/org-zettel-ref-mode-demo.png]]
-
-
-** 适用范围
-=org-zettel-ref-mode= 仅能在 org-mode 启动时生效:
-
-1. 直接面向 org 文件
-2. 其他用户自定义由 org-mode 方式进行处理的文本格式文件, 比如: md, txt 等
-   在这种情况下, 面向该格式文件的 major-mode 的功能可能会受影响
-
-不过, 我一般是将资料直接转成 org 格式保存, 因此第二种情况虽然存在, 但不常见.
-
-** 价值: 兼顾广度, 和深度的阅读方法
-
-TL;DR 版本:
-
-- 简单保存, 摘录或复制资料是不够的,需要对信息进行加工和处理才能转化为有用的知识
-- Zettelkasten方法强调用自己的话总结/回顾和建立联系, 提供了多次信息加工的机会, 但很多介绍忽视了Luhmann处理大量文献笔记的方法
-- 文献笔记是一种兼顾效率和深度的方法, 它记录要点和启发, 便于快速回顾和深入阅读, 同时有助于区分存量信息和增量信息
-
-完整版本:
-
-作为多年的笔记爱好者, 文字工作者, 我逐步体会到一些 "反常识":
-
-- 直接保存, 几乎是无用的.
-- 直接摘录, 几乎是无用的.
-- 直接复制, 几乎是无用的.
-
-背后的原因是, 简单的搬运, 只是增加了资料, 而忽略将资料的再加工. 还记得这个经典的层递关系吗? 资料 -> 信息 -> 知识 -> 智慧.
-
-Zettelkasten 方法总是强调让我们用自己的话总结, 要经常回顾过去的笔记, 增加笔记与笔记之间的联系, 从方法的角度, 它起码提供了 4-7 次信息加工的机会.
-
-即便如此, 市面上讲述 Zettelkasten 的文字或视频, 总沉迷在介绍双链的狂热中, 陷入到直接资料保存的误区里 -- 基本上忽略了 Niklas Luhmann 通过海量文献笔记处理资料的方法.
-
-我引用一个数字, 在 Luhmann 留下的 90000 多张笔记卡片里, 有 10000 多张是文献笔记.
-
-Luhmann 那令人惊叹的高产, 来自夸张的资料处理数量, 而这背后, 是他处理这些资料时体现的高效, 也就是文献笔记的制作.
-
-Luhmann 有一个习惯, 是一边读, 一边记文献笔记. 他的书或者资料, 没有划线, 没有边注, 非常干净, 就好像没读过一样. 每一个文献笔记, 基本上是一份资料的索引. 只在必要时候, 他才会摘录书中的原文.
-
-不过, 当我了解科研人员的制作文献笔记之后, 就发现, Luhmann 的文献笔记几乎和一般的科研文献笔记是一致的. 也是用自己的话注释, 同时记录这句话灵感在论文具体的出处, 等以后有机会再深入阅读.
-
-换言之, 文献笔记这种方法, 是兼顾了效率和深度.
-
-在没有必要对一份资料深入了解时, 用文献笔记记录要点(不是重要的内容, 而是对自己有用的启发); 等有必要深入时，再通过文献笔记快速找到对应上下文, 进行深度阅读和思考, 不用浪费时间重头再读.
-
-除了兼顾效率和深度之外, 文献笔记还有一个好处, 那就是非常容易分辨存量信息和增量信息. 已经为类似概念, 重点做过注释的, 就是存量信息, 下次再另外一个资料里遇到, 就没有必要进行注释; 反之, 完全没有了解过的概念, 数据, 就值得添加注释, 记录出处. 让新知的发现变得更加容易.
-
-** 安装
-*** 安装步骤
-1. 下载 =org-zettel-ref-mode.el= 文件。
-2. 将文件放置在您的 Emacs 加载路径中（例如 =~/.emacs.d/lisp/=）。
-3. 在您的 Emacs 配置文件（如 ~/.emacs 或 ~/.emacs.d/init.el）中添加：
-
-配置示例 1:
-#+BEGIN_SRC emacs-lisp
-(add-to-list 'load-path "~/.emacs.d/lisp/")
-(require 'org-zettel-ref-mode)
-#+END_SRC
-
-配置示例 2:
-#+BEGIN_SRC emacs-lisp
-(use-package org-zettel-ref-mode
-  :ensure t  ; 如果通过包管理器安装
-  :init
-  (setq org-zettel-ref-overview-directory "~/Documents/org-overviews/")
-  :config
-  (setq org-zettel-ref-quick-markup-key "C-c m"))
-#+END_SRC
-
-配置示例 3(Doom Emacs 用户):
-
-在 =~/.doom.d/packages.el= 中：
-
-#+BEGIN_SRC emacs-lisp
-(package! org-zettel-ref-mode
-  :recipe (:host github :repo "username/org-zettel-ref-mode"))
-#+END_SRC
-
-在 =~/.doom.d/config.el= 中：
-
-#+BEGIN_SRC emacs-lisp
-(use-package! org-zettel-ref-mode
-  :config
-  (setq org-zettel-ref-overview-directory "~/Documents/org-overviews/"))
-#+END_SRC
-4. 重新启动 Emacs 或评估刚添加的代码。
-
-** 基本用法
-*** 启用模式
-在任何 org-mode 缓冲区中，运行：
-=M-x org-zettel-ref-init=
-
-*** 清理源文件中的多余格式
-
-由于添加笔记的核心功能是在原文里添加 <<>> 目标链接(target link)，但很多资料转换成 org 格式之后, 会自带很多 <<>> 的文本。
-
-在第一次对 org 文件进行注释或标记文本之前, 可以用 =org-zettel-ref-clean-targets= 清理一下格式, 确保快速笔记的功能正常工作。
-
-*** 添加快速笔记
-1. 将光标放置在您想添加笔记的位置
-2. =M-x org-zettel-ref-add-quick-note=
-3. 输入笔记名称和内容
-
-*** 快速添加标记
-1. 在源文件中选中文本
-2. =M-x org-zettel-ref-quick-markup=
-3. 选择自己希望的标记风格
-
-*** 同步概览文件
-默认自动同步：默认在保存源文件时自动执行。
-手动同步：=M-x org-zettel-ref-sync-overview=
-
-*** 管理源文件
-1. 启动面板
-
-[[file:demo/org-zettel-ref-list.gif]]
-
-~M-x org-zettel-ref-list~
-
-提醒: 以下命令, 均在面板界面中执行.
-
-2. 重命名源文件 ("r")
-
-[[file:demo/org-zettel-ref-list-rename-file.gif]]
-
-~M-x org-zettel-ref-list-rename-file~
-
-按照 AUTHOR__TITLE==KEYWORDS.org 的固定格式进行重命名.
-
-3. 编辑/添加关键词 ("k")
-
-[[file:demo/org-zettel-ref-list-edit-keywords.gif]]
-
-~M-x org-zettel-ref-list-edite-keywords~
-
-可独立为源文件添加一个或多个关键词.
-
-4. 删除源文件
-
-[[file:demo/org-zettel-ref-list-delete-file.gif]]
-
-删除单个文件 ("d")
-~M-x org-zettel-ref-list-delete-file~
-
-
-[[file:demo/org-zettel-ref-list-delete-marked-files.gif]]
-删除多个文件 ("D")
-
-在列表里按下 "m" 标记多个文件, 然后执行 ~M-x org-zettel-ref-list-delete-marked-files~
-
-如果标记的文件不对, 按下 "u" 即可清除标记状态, 按下 "U" 可以直接清除所有标记状态
-
-5. 使用过滤器
-
-[[file:demo/org-zettel-ref-list-filter-by-regexp.gif]]
-简单过滤 ("/ r"): 使用 Author, Title, Keywords 作为过滤条件, 每次只能应用一个过滤条件
-~M-x org-zettel-filter-by-regexp~
-
-复杂过滤 ("/ m"): 可应用多个 Author, Title, Keyowrds 的过滤条件作为条件
-
-
-
-*** ⚠️注意事项（在 0.4 之后，可以在 org-zettel-ref-list 里修改源文件的文件名）
-1. 不要随便修改笔记文件名. 如果修改了, 在源文件上再次添加快速笔记/标记, 在同步时, 会生成重复的笔记.
-** 高级功能
-
-*** 自定义标记文本的类型与高亮样式
-
-参考如下例子：
-
-#+BEGIN_SRC emacs-lisp
-(setq org-zettel-ref-highlight-types
-      (append org-zettel-ref-highlight-types
-             '(("warning" . (:char "w"
-                           :face (:background "#FFA726" 
-                                 :foreground "#000000" 
-                                 :extend t)
-                           :name "warning"
-                           :prefix "⚠️"))
-               ("success" . (:char "s"
-                           :face (:background "#66BB6A" 
-                                 :foreground "#FFFFFF" 
-                                 :extend t)
-                           :name "success"
-                           :prefix "✅")))))
-#+END_SRC
-
-高亮类型的配置。
-每种类型应包含：
-- :char    类型的单字符标识符
-- :face    高亮的 face 属性
-- :name    类型的显示名称
-- :prefix  在概览中显示的符号
-
-
-*** 改善中文下 org-mode 处理标记的体验（已弃用，标记文本和快速笔记系统在 0.5 版本后，不再使用 org-mode 的样式）
-无需在标记两旁添加空格，即可让标记生效。该配置来自 @lijigang 和 @Eli 的贡献。
-
-见：https://github.com/yibie/org-zettel-ref-mode/issues/8#issuecomment-2380661446
-
-*** 文件关联机制
-org-zettel-ref-mode 现在支持多种文件关联机制，不再完全依赖于文件名中的 "-overview" 后缀：
-
-- 普通模式：仍然使用 "-overview" 后缀（为了向后兼容）
-- Denote 模式：使用 Denote 的命名约定
-- Org-roam 模式：使用 Org-roam 的命名约定和 ID 属性
-
-如果您从旧版本升级，您的现有 "-overview" 文件仍然可以正常工作。但对于新文件，我们建议使用新的关联机制。
-
-*** org-roam 模式下调试功能
- =M-x org-zettel-ref-check-roam-db= 函数，用于检查 org-roam 数据库状态。
-
-
-*** 自定义笔记保存模式
-（2024-08-29 更新）org-zettel-ref-mode 提供了 normal、org-roam、denote 三种模式，让笔记文件能够以对应的格式进行保存，比如，选用 org-roam 模式之后, 所保存的笔记文件, 会自动附上 id，方便检索。
-
-配置方法：
-
-=(setq org-zettel-ref-mode-type 'normal) ;可选：'normal, 'denote, 'org-roam）=
-
-
-*** 自定义概览文件位置
-#+BEGIN_SRC emacs-lisp
-(setq org-zettel-ref-overview-directory "~/my-notes/overviews/")
-#+END_SRC
-
-*** 调整自动同步行为（已弃用）
-禁用自动同步：
-#+BEGIN_SRC emacs-lisp
-(org-zettel-ref-disable-auto-sync)
-#+END_SRC
-
-启用自动同步：
-#+BEGIN_SRC emacs-lisp
-(org-zettel-ref-enable-auto-sync)
-#+END_SRC
-*** 启用调试模式
-如果您在使用过程中遇到问题，可以启用调试模式来获取更多信息:
-
-#+BEGIN_SRC emacs-lisp
-(setq org-zettel-ref-debug t)
-#+END_SRC
-*** 使用脚本将 PDF, ePub, html, md, txt 等文档格式转换成 org 文件
-
-[[file:demo/pkm-system-diagram.png]]
-
-
-脚本: [[file:convert-to-org.py]]
-
-org-zettel-ref-mode 现在支持直接通过 Emacs 调用外部 Python 脚本，用于将多种不同格式的电子文档转换成 org 文件。
-
-*** Convert to Org 主要特性
-
-1. 多格式支持：
-   - 支持将 PDF、EPUB、HTML、Markdown 和 TXT 等格式转换为 Org 格式。
-   - 能够处理电子版和扫描版 PDF，支持中英文混合文档。
-
-2. OCR 功能：
-   - 使用 OCR 技术处理扫描版 PDF，支持中英文识别。
-
-3. 文件管理：
-   - 自动进行文件大小检查，防止处理过大的文件。
-   - 转换完成后，可以自动将源文件归档。
-
-4. 灵活配置：
-   - 支持自定义临时文件夹、参考资料文件夹和归档文件夹路径。
-   - 可以选择使用系统 Python、Conda 环境或虚拟环境。
-
-**** 使用方法
-
-1. 配置 Python 环境：
-   #+BEGIN_SRC emacs-lisp
-   (setq org-zettel-ref-python-environment 'conda)  ; 或 'system, 'venv
-   (setq org-zettel-ref-python-env-name "your-env-name")  ; 如果使用 Conda 或 venv
-   #+END_SRC
-
-2. 设置脚本路径和文件夹：
-   #+BEGIN_SRC emacs-lisp
-   (setq org-zettel-ref-python-file "~/path/to/document_convert_to_org.py")
-   (setq org-zettel-ref-temp-folder "~/Documents/temp_convert/")
-   (setq org-zettel-ref-reference-folder "~/Documents/ref/")
-   (setq org-zettel-ref-archive-folder "/Volumes/Collect/archives/")
-   #+END_SRC
-
-3. 运行转换脚本：
-   使用 =M-x org-zettel-ref-run-python-script= 命令来执行转换操作。
-
-**** 注意事项
-
-- 确保已安装所有必要的 Python 库（如 PyPDF2、pdf2image、pytesseract 等）。
-- 对于扫描版 PDF，转换过程可能较慢，且效果可能不如电子版理想。
-- 建议优先使用该脚本处理电子版 PDF、EPUB、Markdown 和 TXT 文档。
-
-**** 工作流建议
-
-1. 使用浏览器扩展（如 Markdownload）将网页保存为 Markdown 文件。
-2. 使用 org-zettel-ref-mode 的 Python 脚本将 Markdown 文件转换为 Org 格式。
-3. 对于音频文件，可以先使用 Whisper 转换为文本，然后再使用脚本转换为 Org 格式。
-
-这一功能极大地扩展了 org-zettel-ref-mode 的应用范围，使其成为一个更全面的知识管理工具。
-**** ⚠️注意事项
-推荐使用该脚本对 ePub, markdown, txt, 电子版 PDF 文档进行转换.
-
-不推荐将该脚本用于转换扫描版 PDF, 原因是转换速度慢, 而且转换的效果也不非常好.
-
-
-** 可调用指令列表
-
-以下是 org-zettel-ref-mode 提供的主要可调用指令：
-
-- =M-x org-zettel-ref-init=: 初始化 org-zettel-ref-mode，创建或打开概览文件
-- =M-x org-zettel-ref-add-quick-note=: 在当前位置添加快速笔记
-- =M-x org-zettel-ref-sync-overview=: 手动同步概览文件
-- =M-x org-zettel-ref-quick-markup=: 快速为选中文本添加标记
-- =M-x org-zettel-ref-clean-multiple-targets=: 清理源文件中的多余标记
-- (新增) =M-x org-zettel-ref-list=: 打开源文件管理面板
-- (已弃用) =M-x org-zettel-ref-enable-auto-sync=: 启用自动同步
-- (已弃用)=M-x org-zettel-ref-disable-auto-sync=: 禁用自动同步
-- =M-x org-zettel-ref-check-roam-db=: 检查 org-roam 数据库状态
-- =M-x org-zettel-ref-run-python-script=: 运行指定的 Python 脚本
-
-** 可配置变量列表
-
-以下是 org-zettel-ref-mode 的主要可配置变量：
-
-- =setq org-zettel-ref-overview-directory "~/org-zettel-ref-overviews/"=: 设置概览文件存储目录
-- =setq org-zettel-ref-mode-type 'normal=: 设置模式类型（可选：'normal, 'denote, 'org-roam）
-+- =setq org-zettel-ref-include-empty-notes nil=: 设置是否包含空的快速笔记+
-- =setq org-zettel-ref-quick-markup-key "C-c m"=: 设置快速标记的快捷键
-- =setq org-zettel-ref-python-environment 'system=: 设置 Python 环境类型（可选：'system, 'conda, 'venv）
-- =setq org-zettel-ref-python-env-name nil=: 设置 Python 环境名称
-- =setq org-zettel-ref-python-file "~/path/to/script.py"=: 设置 Python 脚本文件路径
-- =setq org-zettel-ref-temp-folder "~/Documents/temp_convert/"=: 设置临时文件夹路径
-- =setq org-zettel-ref-reference-folder "~/Documents/ref/"=: 设置参考资料文件夹路径
-- =setq org-zettel-ref-archive-folder "/Volumes/Collect/archives/"=: 设置归档文件夹路径
-- =setq org-zettel-ref-debug nil=: 设置是否启用调试模式
-- =setq org-zettel-ref-overview-width-ratio 0.3=: 设置概览窗口宽度比例
-- =setq org-zettel-ref-overview-min-width 30=: 设置概览窗口最小宽度
-- =setq org-zettel-ref-highlight-types=: 设置标记文本的类型与高亮样式
-- =setq org-zettel-ref-overview-image-directory="~/Documents/org-zettel-ref-images/"=: 设置概览笔记中图片的保存路径
-
-** 常见问题解答
-
-Q: 如何在多个项目之间使用 org-zettel-ref-mode？
-A: 您可以为每个项目设置不同的概览目录，使用 =let-bound= 的方式在项目切换时动态改变 =org-zettel-ref-overview-directory= 的值。
-
-Q: 概览文件变得太大怎么办？
-A: 考虑按主题或时间周期分割概览文件。您可以自定义 =org-zettel-ref-create-or-open-overview-file= 函数来实现这一点。
-
-Q: 如何备份我的笔记？
-A: 将源文件和概览文件都纳入您的版本控制系统（如 Git）中。另外，定期执行文件系统级别的备份也是好的做法。
-
-Q: 如何检查org-roam数据库的状态?
-A: 您可以使用 =M-x org-zettel-ref-check-roam-db= 命令来检查org-roam数据库的状态,包括版本信息、节点数量等。
-
-** 故障排除
-
-如果遇到问题：
-1. 确保您使用的是最新版本的 org-zettel-ref-mode。
-2. 检查您的 Emacs 配置，确保没有冲突的设置。
-3. 尝试在一个干净的 Emacs 配置（emacs -q）中重现问题。
-4. 查看 =*Messages*= 缓冲区中的任何错误消息。
-5. 如果问题与Python脚本或Conda环境有关,请检查您的Python环境配置。
-6. 启用调试模式(设置 =org-zettel-ref-debug= 为 =t=)以获取更详细的日志信息。
-
-如果问题持续存在，请通过 GitHub 仓库提交 issue，附上问题描述、重现步骤和调试日志。
-
-
-** 贡献
+* 贡献
 
 我们欢迎社区贡献! 以下是一些参与方式：
 - 报告 bugs 或提出功能建议。
@@ -494,11 +475,11 @@ A: 您可以使用 =M-x org-zettel-ref-check-roam-db= 命令来检查org-roam数
 - 改进文档或编写教程。
 - 分享您使用 org-zettel-ref-mode 的经验和技巧。
 
-** 致谢
+* 致谢
 
 org-zettel-ref-mode 的灵感借鉴了朋友 [[https://github.com/lijigang][@lijigang]] 的 [[https://github.com/lijigang/org-marked-text-overview][org-marked-text-overview]], 由于自己改造的地方太多, 在经过沟通的情况下, 单独发布为 org-zettel-ref-mode.
 
-** 未来计划
+* 未来计划
 ✅ 改进性能，优化大型文件的处理
 
 ✅ 与其他知识管理 Package 的集成, 比如 org-roam, denote

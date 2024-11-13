@@ -3,113 +3,6 @@
 [[file:readme_cn.org][中文版说明]]
 #+end_center
 
-** Changlog
-*** Version 0.5 (2024-11-12)  
-  - Upgrade: Major upgrade to marking and note system (see #Demo for changes after upgrade)
-    - Decoupled from org-mode's built-in styles
-    - Automatic note ID numbering
-    - Automatic highlighting of marked content
-    - Content under overview headlines won't be cleared
-    - Mark images and sync them to overview notes
-      - Must run ~org-zettel-ref-add-image~ command to add images to overview notes
-      - Requires setting ~org-zettel-ref-overview-image-directory~ configuration
-    - Overview note style upgrades:
-      - Note titles now display note IDs
-      - Uses org-mode Headlines style
-      - Note icon prefixes to distinguish note types
-    - New custom configuration options (customize text marking types and highlight styles, see #Advanced Features):
-      - ~org-zettel-ref-highlight-types~ defines/adds marking types and highlight styles
-      - ~org-zettel-ref-overview-image-directory~ defines image save path for overview notes
-    - Painless upgrade, maintains familiar commands
-    - Note: When executing org-zettel-ref-mark-text, please don't select note type or image type
-      - For quick notes, continue using the previous org-zettel-ref-add-quick-note command
-      - This design choice is to provide highlight styles for quick notes and image note
-*** Version 0.4.4 (2024-11-09)
-  - Fixed:
-    - The issue where org-zettel-ref-watch-directory reports an error after running org-zettel-ref-list-rename-file 
-*** Version 0.4.3 (2024-11-08)
-  - Optimized:
-    - The display method of the overview file window. 
-      - Added a configuration item to define the width of the overview window: ~org-zettel-ref-overview-width-ratio~, default 0.3 
-      - Added a configuration item to define the minimum width of the overview window: ~org-zettel-ref-overview-min-width~, default 30
-*** Version 0.4.2 (2024-11-08)
-  - Fixed:
-    - The error in org-zettel-ref-db-init #15
-    - The issue where the cursor position is lost after executing org-zettel-ref-init
-    - The issue where the overview file failed to synchronize correctly due to improper index file retrieval  
-    
-*** Version 0.4.1 (2024-11-06)
-  - Optimized convert_to_pdf.py
-    - Dropped using OCR to convert PDF  
-
-*** Version 0.4 (2024-11-04)
-  - Attention!
-    - If you’ve previously used org-zettel-ref-mode, you need to run ~M-x org-zettel-ref-migrate~ the first time you use the new version to upgrade the data structure in the hash table.
-  - New Feature: Provides a visual management panel for source files
-    - ~org-zettel-ref-list~ (see Basic Usage -> Manage Source Files for details):
-      - Visualization: Provides a reference management panel
-      - Multi-column list: Displays the current references in a list format, with key columns such as Title, Author, and Keywords
-      - Rename: Allows renaming files in the format AUTHOR__TITLE==KEYWORDS.org within the panel
-      - Sorting: Click on the column name to sort the list alphabetically
-      - Filtering: Filter source file entries by conditions, such as Author, Title, or Keywords. Currently, only one condition can be filtered at a time.
-  - Upgraded the data structure of the hash table in ~org-zettel-ref-db.el~
-  - Upgraded ~org-zettel-ref-clean-multiple-targets~
-  - Fixes:
-    - Restored the accidentally deleted custom configuration item ~org-zettel-ref-debug~
-  - Reminder:
-    - Due to the upgrade of the hash table storing the mapping between source files and overview files to version 2.0, the following functions are deprecated:
-      - org-zettel-ref-check-and-repair-links, org-zettel-ref-maintenance-menu,  org-zettel-ref-refresh-index, org-zettel-ref-rescan-overview-files,  org-zettel-ref-status. 
-*** Version 0.3.3 Stable release (2024-09-28)
-  - Backend optimizations to further enhance code robustness, modularity, and improve plugin stability.
-  - Fixed an issue in version 0.3.2 where rapid updates to the overview file caused synchronization errors with quick notes and marked text.
-  - Fixed an issue in version 0.3.2 where the file naming strategy led to frequent re-creation of overview files in Denote mode.
-  - Fixed an issue in version 0.3.2 where the overview file failed to synchronize correctly due to improper index file retrieval.
-
-After this period of development, the code for org-zettel-ref-mode has finally become modular and robust. No new features will be introduced before version 0.4. Instead, the focus will be on further componentization of the code and providing more customization options.
-
-*** Version 0.3.2 (2024-09-24)
-  - Improved compatibility with Org-roam v2: Update the record of literature notes in the overview file to the Org-roam database.
-  - Improved file naming
-  - Fix a bugs that causes Emacs crash
-  - Refined code, modularized
-   
-  
-*** Version 0.3.1 (2024-09-15)
-  - Compatible with Emacs 30 and later versions.
-  - Overview files now have more elegant names, reducing repetitive occurrences of the word "overview."
-  - Fixed an intermittent (setq, 5) error.
-  - Removed the dependency on conda.el in org-zettel-ref-mode.el, and the detection of the Python environment is now entirely handled by convert-to-org.py.
-    - Automatically sets up a virtual environment via the python venv command and installs required libraries. 
-      - *Note:* After updating to this version, running convert-to-org.py will reinstall third-party libraries. If you prefer a clean environment, you may want to manage this manually.
-  - Improved synchronization mechanism for overview files, preventing multiple overview files from being created for the same source file. Also improved the robustness and stability of this feature.
-    - A hash table is now used to map source files to overview files. One great thing is that you don’t need to manually set the hash table file location.
-    - The overview file header now includes a new property block: ~#+SOURCE-FILE:~ to confirm the mapping.
-    - New commands:
-      - ~org-zettel-ref-check-and-repair-links~ - Check and repair links between source files and overview files.
-      - ~org-zettel-ref-maintenance-menu~ - Display a menu for org-zettel-ref-mode maintenance operations.
-      - ~org-zettel-ref-refresh-index~ - Manually refresh the overview index.
-      - ~org-zettel-ref-rescan-overview-files~ - Rescan the overview directory and update the index.
-      - ~org-zettel-ref-status~ - Display the current status of org-zettel-ref-mode.
-
-*** Version 0.3 (2024-09-03)
-   - Improved integration with org-roam:
-     + Added conditional loading and error-handling mechanisms for better stability
-     + Optimized database operations for increased efficiency
-     + Enhanced file handling for greater compatibility
-     + Added a database status check feature for easier debugging
-   - Enhanced support for Conda environments:
-     + Provided more flexible Python environment configuration options
-     + Improved the initialization and activation process for Conda environments
-   - Refined logic for filename generation and processing:
-     + Added a filename cleanup feature for greater robustness
-     + Optimized file naming strategies across different modes
-   - Optimized overview file synchronization:
-     + Implemented selective updates, only refreshing changed sections
-     + Improved buffer handling to reduce file I/O operations
-     + Enhanced content generation for increased efficiency
-   - Added debugging features:
-     + Included detailed log output for easier troubleshooting
-     + Provided more error messages and status check options
 ** Main Features
 Invoke the command `M-x org-zettel-ref-init` to open the "Overview Window," displaying the notes recorded in the original document and the marked text.
 
@@ -123,6 +16,8 @@ Invoke the command `M-x org-zettel-ref-init` to open the "Overview Window," disp
 8. Directly call external Python scripts from within Emacs to convert various document formats into org files.
 ** Demo
 As shown, the left window displays the original text, while the right window displays the overview.
+
+The overview windows contains that marked text and notes from original text, and it will save as a note file standalone. 
 
 [[file:demo/org-zettel-ref-mode-demo.png]]
 
@@ -171,48 +66,43 @@ When it's unnecessary to deeply understand a material, literature notes can reco
 
 Besides balancing efficiency and depth, literature notes also have the advantage of easily distinguishing between existing and new information. Concepts or key points that have been annotated similarly before are existing information, and it is unnecessary to annotate them again when encountered in another material. Conversely, concepts, data, or ideas that have not been encountered before are worth annotating and recording their sources, making the discovery of new knowledge easier.
 
+BTW:
+
+A good intro about Zettelkstan:
+[[https://zettelkasten.de/introduction/][Introduction to the Zettelkasten Method]]
 ** Installation
 *** Installation Steps
 1. Download the `org-zettel-ref-mode.el` file.
 2. Place the file in your Emacs load path (e.g., `~/.emacs.d/lisp/`).
 3. Add the following to your Emacs configuration file (such as `~/.emacs` or `~/.emacs.d/init.el`):
 
-Example Configuration 1:
-#+BEGIN_SRC emacs-lisp
-(add-to-list 'load-path "~/.emacs.d/lisp/")
-(require 'org-zettel-ref-mode)
-#+END_SRC
-
-Example Configuration 2:
+Example Configuration:
 #+BEGIN_SRC emacs-lisp
 (use-package org-zettel-ref-mode
-  :ensure t  ; If installed via package manager
+  :ensure nil
+  :load-path "~/Documents/emacs/package/org-zettel-ref-mode/"
   :init
-  (setq org-zettel-ref-overview-directory "~/Documents/org-overviews/")
+  (setq org-zettel-ref-overview-directory "~/Documents/notes/source-note/")
   :config
-  (setq org-zettel-ref-quick-markup-key "C-c m"))
+  (setq org-zettel-ref-mode-type 'denote)  
+  ;; (setq org-zettel-ref-mode-type 'org-roam)  
+  ;; (setq org-zettel-ref-mode-type 'normal)  
+  (setq org-zettel-ref-python-file "~/Documents/emacs/package/org-zettel-ref-mode/convert-to-org.py")
+  (setq org-zettel-ref-temp-folder "~/Documents/temp_convert/")
+  (setq org-zettel-ref-reference-folder "~/Documents/ref/")
+  (setq org-zettel-ref-archive-folder "/Volumes/Collect/archives/")
+  (setq org-zettel-ref-debug t)
+  )
 #+END_SRC
 
-Example Configuration 3 (Doom Emacs users):
-
-In `~/.doom.d/packages.el`:
-
-#+BEGIN_SRC emacs-lisp
-(package! org-zettel-ref-mode
-  :recipe (:host github :repo "username/org-zettel-ref-mode"))
-#+END_SRC
-
-In `~/.doom.d/config.el`:
-
-#+BEGIN_SRC emacs-lisp
-(use-package! org-zettel-ref-mode
-  :config
-  (setq org-zettel-ref-overview-directory "~/Documents/org-overviews/"))
-#+END_SRC
-
-4. Restart Emacs or evaluate the newly added code.
 
 ** Basic Usage
+*** Custom Note Saving Modes
+(Updated 2024-08-29) org-zettel-ref-mode provides three modes: normal, org-roam, and denote, allowing note files to be saved in the corresponding format. For example, after selecting org-roam mode, the saved note files will automatically include an ID, making them easier to retrieve.
+
+Configuration Method:
+
+=(setq org-zettel-ref-mode-type 'normal) ; Options: 'normal, 'denote, 'org-roam)=
 
 *** Activating the Mode
 In any org-mode buffer, run:
@@ -329,12 +219,6 @@ If you're upgrading from an older version, your existing "-overview" files will 
 *** Debugging in org-roam Mode
 The `M-x org-zettel-ref-check-roam-db` function checks the status of the org-roam database.
 
-*** Custom Note Saving Modes
-(Updated 2024-08-29) org-zettel-ref-mode provides three modes: normal, org-roam, and denote, allowing note files to be saved in the corresponding format. For example, after selecting org-roam mode, the saved note files will automatically include an ID, making them easier to retrieve.
-
-Configuration Method:
-
-=(setq org-zettel-ref-mode-type 'normal) ; Options: 'normal, 'denote, 'org-roam)=
 
 *** Custom Overview File Location
 #+BEGIN_SRC emacs-lisp
@@ -487,26 +371,116 @@ We welcome community contributions! Here are some ways you can get involved:
 - Improve documentation or write tutorials.
 - Share your experiences and tips for using org-zettel-ref-mode.
 
-** Acknowledgments
+** Changlog
+*** Version 0.5 (2024-11-12)  
+  - Upgrade: Major upgrade to marking and note system (see #Demo for changes after upgrade)
+    - Decoupled from org-mode's built-in styles
+    - Automatic note ID numbering
+    - Automatic highlighting of marked content
+    - Content under overview headlines won't be cleared
+    - Mark images and sync them to overview notes
+      - Must run ~org-zettel-ref-add-image~ command to add images to overview notes
+      - Requires setting ~org-zettel-ref-overview-image-directory~ configuration
+    - Overview note style upgrades:
+      - Note titles now display note IDs
+      - Uses org-mode Headlines style
+      - Note icon prefixes to distinguish note types
+    - New custom configuration options (customize text marking types and highlight styles, see #Advanced Features):
+      - ~org-zettel-ref-highlight-types~ defines/adds marking types and highlight styles
+      - ~org-zettel-ref-overview-image-directory~ defines image save path for overview notes
+    - Painless upgrade, maintains familiar commands
+    - Note: When executing org-zettel-ref-mark-text, please don't select note type or image type
+      - For quick notes, continue using the previous org-zettel-ref-add-quick-note command
+      - This design choice is to provide highlight styles for quick notes and image note
+*** Version 0.4.4 (2024-11-09)
+  - Fixed:
+    - The issue where org-zettel-ref-watch-directory reports an error after running org-zettel-ref-list-rename-file 
+*** Version 0.4.3 (2024-11-08)
+  - Optimized:
+    - The display method of the overview file window. 
+      - Added a configuration item to define the width of the overview window: ~org-zettel-ref-overview-width-ratio~, default 0.3 
+      - Added a configuration item to define the minimum width of the overview window: ~org-zettel-ref-overview-min-width~, default 30
+*** Version 0.4.2 (2024-11-08)
+  - Fixed:
+    - The error in org-zettel-ref-db-init #15
+    - The issue where the cursor position is lost after executing org-zettel-ref-init
+    - The issue where the overview file failed to synchronize correctly due to improper index file retrieval  
+    
+*** Version 0.4.1 (2024-11-06)
+  - Optimized convert_to_pdf.py
+    - Dropped using OCR to convert PDF  
 
+*** Version 0.4 (2024-11-04)
+  - Attention!
+    - If you’ve previously used org-zettel-ref-mode, you need to run ~M-x org-zettel-ref-migrate~ the first time you use the new version to upgrade the data structure in the hash table.
+  - New Feature: Provides a visual management panel for source files
+    - ~org-zettel-ref-list~ (see Basic Usage -> Manage Source Files for details):
+      - Visualization: Provides a reference management panel
+      - Multi-column list: Displays the current references in a list format, with key columns such as Title, Author, and Keywords
+      - Rename: Allows renaming files in the format AUTHOR__TITLE==KEYWORDS.org within the panel
+      - Sorting: Click on the column name to sort the list alphabetically
+      - Filtering: Filter source file entries by conditions, such as Author, Title, or Keywords. Currently, only one condition can be filtered at a time.
+  - Upgraded the data structure of the hash table in ~org-zettel-ref-db.el~
+  - Upgraded ~org-zettel-ref-clean-multiple-targets~
+  - Fixes:
+    - Restored the accidentally deleted custom configuration item ~org-zettel-ref-debug~
+  - Reminder:
+    - Due to the upgrade of the hash table storing the mapping between source files and overview files to version 2.0, the following functions are deprecated:
+      - org-zettel-ref-check-and-repair-links, org-zettel-ref-maintenance-menu,  org-zettel-ref-refresh-index, org-zettel-ref-rescan-overview-files,  org-zettel-ref-status. 
+*** Version 0.3.3 Stable release (2024-09-28)
+  - Backend optimizations to further enhance code robustness, modularity, and improve plugin stability.
+  - Fixed an issue in version 0.3.2 where rapid updates to the overview file caused synchronization errors with quick notes and marked text.
+  - Fixed an issue in version 0.3.2 where the file naming strategy led to frequent re-creation of overview files in Denote mode.
+  - Fixed an issue in version 0.3.2 where the overview file failed to synchronize correctly due to improper index file retrieval.
+
+After this period of development, the code for org-zettel-ref-mode has finally become modular and robust. No new features will be introduced before version 0.4. Instead, the focus will be on further componentization of the code and providing more customization options.
+
+*** Version 0.3.2 (2024-09-24)
+  - Improved compatibility with Org-roam v2: Update the record of literature notes in the overview file to the Org-roam database.
+  - Improved file naming
+  - Fix a bugs that causes Emacs crash
+  - Refined code, modularized
+   
+  
+*** Version 0.3.1 (2024-09-15)
+  - Compatible with Emacs 30 and later versions.
+  - Overview files now have more elegant names, reducing repetitive occurrences of the word "overview."
+  - Fixed an intermittent (setq, 5) error.
+  - Removed the dependency on conda.el in org-zettel-ref-mode.el, and the detection of the Python environment is now entirely handled by convert-to-org.py.
+    - Automatically sets up a virtual environment via the python venv command and installs required libraries. 
+      - *Note:* After updating to this version, running convert-to-org.py will reinstall third-party libraries. If you prefer a clean environment, you may want to manage this manually.
+  - Improved synchronization mechanism for overview files, preventing multiple overview files from being created for the same source file. Also improved the robustness and stability of this feature.
+    - A hash table is now used to map source files to overview files. One great thing is that you don’t need to manually set the hash table file location.
+    - The overview file header now includes a new property block: ~#+SOURCE-FILE:~ to confirm the mapping.
+    - New commands:
+      - ~org-zettel-ref-check-and-repair-links~ - Check and repair links between source files and overview files.
+      - ~org-zettel-ref-maintenance-menu~ - Display a menu for org-zettel-ref-mode maintenance operations.
+      - ~org-zettel-ref-refresh-index~ - Manually refresh the overview index.
+      - ~org-zettel-ref-rescan-overview-files~ - Rescan the overview directory and update the index.
+      - ~org-zettel-ref-status~ - Display the current status of org-zettel-ref-mode.
+
+*** Version 0.3 (2024-09-03)
+   - Improved integration with org-roam:
+     + Added conditional loading and error-handling mechanisms for better stability
+     + Optimized database operations for increased efficiency
+     + Enhanced file handling for greater compatibility
+     + Added a database status check feature for easier debugging
+   - Enhanced support for Conda environments:
+     + Provided more flexible Python environment configuration options
+     + Improved the initialization and activation process for Conda environments
+   - Refined logic for filename generation and processing:
+     + Added a filename cleanup feature for greater robustness
+     + Optimized file naming strategies across different modes
+   - Optimized overview file synchronization:
+     + Implemented selective updates, only refreshing changed sections
+     + Improved buffer handling to reduce file I/O operations
+     + Enhanced content generation for increased efficiency
+   - Added debugging features:
+     + Included detailed log output for easier troubleshooting
+     + Provided more error messages and status check options
+** Acknowledgments
 org-zettel-ref-mode was inspired by my friend [[https://github.com/lijigang][@lijigang]]'s [[https://github.com/lijigang/org-marked-text-overview][org-marked-text-overview]]. Due to extensive modifications, I decided to release it separately as org-zettel-ref-mode after discussing it with him.
 
-** Version History
-- v0.3 (2024-09-03)
-  - Enhanced integration with org-roam
-  - Improved Conda environment support
-  - Optimized file processing logic
-  - Improved overview file synchronization mechanism
-  - Added debugging features
-  - Integrated external Python script functionality
-- v0.2 (2024-08-29)
-  - Refined overall workflow, providing automated scripts to handle different formats of electronic documents
-  - Improved connectivity with other tools, allowing org-zettel-ref-mode to save note files in denote or org-roam formats through custom configuration
-  - Provided quick markup functionality, allowing users to quickly add bold, italic, underline, and other formatting to highlighted text in the source file using `org-zettel-quick-markup`
-- v0.1 (2024-8-21): Initial release
-  - Implemented basic quick note and markup functions
-  - Added auto-sync mechanism
-  - Provided custom options
 
 ** Future Plans
 - ✅ Improve performance, optimizing handling of large files
