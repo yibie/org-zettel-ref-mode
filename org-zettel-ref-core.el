@@ -53,7 +53,7 @@ This mode indicates that the buffer is part of an org-zettel-ref pair."
 
 
 ;;-------------------------
-;; START: Customization
+;; Customization
 ;;-------------------------
 
 (defgroup org-zettel-ref nil
@@ -172,8 +172,9 @@ For example, 0.3 means the overview window will take 30% of the source window wi
                  (text (or (match-string 3) ""))
                  (type (org-zettel-ref-highlight-char-to-type type-char))
                  (config (cdr (assoc type org-zettel-ref-highlight-types))))
-            (message "DEBUG: Processing highlight - ref: %s, type-char: %s, type: %s" 
-                    ref type-char type)
+            (org-zettel-ref-debug-message-category 'core 
+              "Processing highlight - ref: %s, type: %s" 
+              ref type)
             (when (and type-char (not (string-empty-p type-char)) config)
               (let ((name (plist-get config :name))
                     (prefix (plist-get config :prefix)))
@@ -187,7 +188,9 @@ For example, 0.3 means the overview window will take 30% of the source window wi
                   (push (list ref type text name prefix nil nil)
                         highlights)))))))
       
-      (message "DEBUG: Collected highlights: %S" highlights)
+      (org-zettel-ref-debug-message-category 'core 
+        "Sync complete - processed %d highlights" 
+        (length highlights))
       
       ;; Update the overview file
       (with-current-buffer (find-file-noselect org-zettel-ref-overview-file)
@@ -276,7 +279,7 @@ For example, 0.3 means the overview window will take 30% of the source window wi
     ;; 其他初始化
     (unless save-place-mode
       (save-place-mode 1))
-    (message "DEBUG: Starting initialization: %s" source-file)
+    (org-zettel-ref-debug-message-category 'core "Starting initialization: %s" source-file)
 
     ;; 初始化高亮功能
     (org-zettel-ref-highlight-initialize-counter)
@@ -360,7 +363,7 @@ Returns the overview buffer."
                (org-zettel-ref-generate-filename title)))))
     (unless (file-exists-p overview-file)
       (with-temp-file overview-file
-        (insert (format "#+TITLE: Overview - %s\n#+SOURCE_FILE: %s\n#+filetags: :overview:\n#+startup: showall\n\n* Quick Notes\n\n* Marked Text\n" 
+        (insert (format "#+TITLE: Overview - %s\n#+SOURCE_FILE: %s\n#+filetags: :overview:\n#+startup: showall\n\n" 
                        title source-file))))
     overview-file))
 
@@ -371,7 +374,7 @@ Returns the overview buffer."
          (org-id (org-id-new)))
     (unless (file-exists-p overview-file)
       (with-temp-file overview-file
-        (insert (format ":PROPERTIES:\n:ID:       %s\n:END:\n#+title: Overview - %s\n#+filetags: :overview:\n#+startup: showall\n\n* Quick Notes\n\n* Marked Text\n" org-id title))))
+        (insert (format ":PROPERTIES:\n:ID:       %s\n:END:\n#+title: Overview - %s\n#+filetags: :overview:\n#+startup: showall\n\n" org-id title))))
     (when (and (featurep 'org-roam)
                (fboundp 'org-roam-db-update-file))
       (org-roam-db-update-file overview-file))
@@ -383,7 +386,7 @@ Returns the overview buffer."
          (title (file-name-base source-file)))
     (unless (file-exists-p overview-file)
       (with-temp-file overview-file
-        (insert (format "#+title: Overview - %s\n#+startup: showall\n#+filetags: :overview:\n\n* Quick Notes\n\n\n* Marked Text\n" title))))
+        (insert (format "#+title: Overview - %s\n#+startup: showall\n#+filetags: :overview:\n\n" title))))
     overview-file))
 
 ;;----------------------------------------------------------------------------

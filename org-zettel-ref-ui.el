@@ -9,9 +9,9 @@
 (require 'org-zettel-ref-core)
 
 (defun org-zettel-ref-add-quick-note ()
-  "使用高亮系统添加快速笔记."
+  "Use highlight system to add a quick note."
   (interactive)
-  (let* ((note-text (read-string "输入笔记内容: "))
+  (let* ((note-text (read-string "Insert note: "))
          (highlight-id (org-zettel-ref-highlight-generate-id)))
     (insert (format "<<hl-%s>> §n{%s}"
                    highlight-id
@@ -20,13 +20,13 @@
     (org-zettel-ref-sync-highlights)))
 
 (defun org-zettel-ref-quick-markup ()
-  "使用高亮系统快速标记文本."
+  "Use highlight system to quickly mark text."
   (interactive)
   (if (use-region-p)
       (let* ((beg (region-beginning))
              (end (region-end))
              (text (buffer-substring-no-properties beg end))
-             (type (completing-read "选择标记类型: "
+             (type (completing-read "Select mark type: "
                                   (mapcar #'car org-zettel-ref-highlight-types)
                                   nil t))
              (type-char (org-zettel-ref-highlight-type-to-char type))
@@ -38,7 +38,7 @@
                        text))
         (org-zettel-ref-highlight-refresh)
         (org-zettel-ref-sync-highlights))
-    (message "请先选择要标记的文本")))
+    (message "Please select the text to mark first")))
 
 (defcustom org-zettel-ref-quick-markup-key "C-c m"
   "Key binding for quick markup function in org-zettel-ref-mode.

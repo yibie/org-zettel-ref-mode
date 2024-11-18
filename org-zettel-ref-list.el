@@ -100,10 +100,10 @@
           keywords (when keywords (mapcar #'string-trim keywords)))
     
     ;; Debug output
-    (message "DEBUG: Parsing filename: %s" filename)
-    (message "DEBUG: Author: %s" author)
-    (message "DEBUG: Title: %s" title)
-    (message "DEBUG: Keywords: %s" 
+    (org-zettel-ref-debug-message-category 'list "Parsing filename: %s" filename)
+    (org-zettel-ref-debug-message-category 'list "Author: %s" author)
+    (org-zettel-ref-debug-message-category 'list "Title: %s" title)
+    (org-zettel-ref-debug-message-category 'list "Keywords: %s" 
              (if keywords (mapconcat 'identity keywords ", ") ""))
     
     (list author title keywords)))
@@ -257,15 +257,14 @@ ENTRY is the org-zettel-ref-entry struct."
         (db (org-zettel-ref-ensure-db)))
     (maphash
      (lambda (id entry)
-       (when-let* ((file-path (org-zettel-ref-ref-entry-file-path entry))
-                   (exists (file-exists-p file-path)))
+       (when-let ((file-path (org-zettel-ref-ref-entry-file-path entry)))
          (let* ((file-name (file-name-nondirectory file-path))
                 (parsed-info (org-zettel-ref-parse-filename file-name))
                 (author (nth 0 parsed-info))  
                 (title (nth 1 parsed-info))   
                 (keywords (nth 2 parsed-info)))
-           (message "DEBUG: Processing file: %s" file-name)
-           (message "DEBUG: Parsed - Author: %s, Title: %s" author title)
+           (org-zettel-ref-debug-message-category 'list "Processing file: %s" file-name)
+           (org-zettel-ref-debug-message-category 'list "Parsed - Author: %s, Title: %s" author title)
            (push (list file-path
                       (vector
                        ;; Title column 
@@ -734,9 +733,8 @@ DB is the database object."
         (new-count 0)
         (existing-count 0)
         (added 0))
-    (message "Found %d files to process" (length files))
+    (org-zettel-ref-debug-message-category 'list "Found %d files to process" (length files))
     
-    ;; Reset ID counter at start of scan
     (setq org-zettel-ref-id-counter 0)
     
     (dolist (file files)
@@ -748,19 +746,22 @@ DB is the database object."
                  (title (plist-get file-info :title))
                  (author (plist-get file-info :author))
                  (keywords (plist-get file-info :keywords)))
-            ;; 创建新条目
+            ;; create new entry
             (org-zettel-ref-db-ensure-ref-entry db file-path title author keywords)
             (cl-incf new-count)
             (cl-incf added)
             
-            ;; Save database every 100 entries
+            ;; save database every 100 entries  
             (when (zerop (mod added 100))
-              (message "Saving database after %d new entries..." added)
+              (org-zettel-ref-debug-message-category 'list 
+                "Saving database after %d new entries..." added)
               (org-zettel-ref-db-save db))))))
     
-    (message "Scan complete: %d new files, %d existing files"
-             new-count existing-count)
-    ;; Final save if there are any new entries
+    ;; use debug message system
+    (org-zettel-ref-debug-message-category 'list 
+      "Scan complete: %d new files, %d existing files"
+      new-count existing-count)
+    
     (when (> new-count 0)
       (org-zettel-ref-db-save db))))
 

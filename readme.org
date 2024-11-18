@@ -372,6 +372,9 @@ We welcome community contributions! Here are some ways you can get involved:
 - Share your experiences and tips for using org-zettel-ref-mode.
 
 ** Changlog
+*** Version 0.5.1 (2024-11-19)
+  - Optimized: convert-to-org.py conversion process, restored using Pandoc to process txt, md, epub formats, added simple file name processing logic
+  - Fixed: The logic for creating overview files, no longer create "Marked Text" and "Quick Notes" titles, as these titles are no longer needed in the new marking and note system  
 *** Version 0.5 (2024-11-12)  
   - Upgrade: Major upgrade to marking and note system (see #Demo for changes after upgrade)
     - Decoupled from org-mode's built-in styles

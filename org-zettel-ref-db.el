@@ -500,20 +500,15 @@ Return the database object or nil if loading fails."
 ;;;----------------------------------------------------------------------------
 
 (defun org-zettel-ref-db-debug-info (db)
-  "Display debug information for the database.
-DB is the database object.
-Return the updated reference entry object."
-  (message "\n=== Database Debug Information ===")
-  (message "Reference Table Contents:")
-  (maphash (lambda (id entry)
-             (message "  ID: %s, Title: %s"
-                     id (org-zettel-ref-ref-entry-title entry)))
-           (org-zettel-ref-db-refs db))
-  (message "\nOverview Table Contents:")
-  (maphash (lambda (id entry)
-             (message "  ID: %s, Title: %s"
-                     id (org-zettel-ref-overview-entry-title entry)))
-           (org-zettel-ref-db-overviews db)))
+  "Display debug information for the database."
+  (when org-zettel-ref-debug
+    (org-zettel-ref-debug-message-category 'db "\n=== Database Debug Information ===")
+    (org-zettel-ref-debug-message-category 'db "Reference Table Contents:")
+    (maphash (lambda (id entry)
+               (org-zettel-ref-debug-message-category 
+                'db "  ID: %s, Title: %s"
+                id (org-zettel-ref-ref-entry-title entry)))
+             (org-zettel-ref-db-refs db))))
 
 ;;;----------------------------------------------------------------------------
 ;;; Advanced Database Operations

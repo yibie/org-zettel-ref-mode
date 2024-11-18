@@ -454,20 +454,24 @@ Group 3: Content (for images including path and description)"
   (interactive)
   (let ((current-counter org-zettel-ref-highlight-counter)
         (max-found (org-zettel-ref-highlight-initialize-counter)))
-    (message "Current counter: %d, Maximum found in buffer: %d"
-             current-counter max-found)))
+    (org-zettel-ref-debug-message-category 'highlight
+      "Current counter: %d, Maximum found in buffer: %d"
+      current-counter max-found)))
 
 (defun org-zettel-ref-highlight-debug-info ()
   "Display the highlight debugging information of the current buffer."
   (interactive)
-  (message "Current counter value: %s" org-zettel-ref-highlight-counter)
+  (org-zettel-ref-debug-message-category 'highlight
+    "Current counter value: %s" org-zettel-ref-highlight-counter)
   (save-excursion
     (goto-char (point-min))
     (let ((count 0))
       (while (re-search-forward org-zettel-ref-highlight-regexp nil t)
         (cl-incf count)
-        (message "Found highlight #%d: %s" count (match-string 0)))
-      (message "Total found %d highlight marks" count))))
+        (org-zettel-ref-debug-message-category 'highlight
+          "Found highlight #%d: %s" count (match-string 0)))
+      (org-zettel-ref-debug-message-category 'highlight
+        "Total found %d highlight marks" count))))
 
 (defun org-zettel-ref-highlight-add-note ()
   "Add a standalone note, using the highlight system's ID counter."
@@ -515,23 +519,20 @@ Group 3: Content (for images including path and description)"
 (defun org-zettel-ref-highlight-setup ()
   "Setup highlight system."
   (interactive)
-  ;; 确保变量是 buffer-local 的
+  ;; Ensure the variable is buffer-local
   (make-local-variable 'org-zettel-ref-highlight-counter)
-  
-  ;; 验证配置
+  ;; Validate configuration
   (unless (org-zettel-ref-highlight-validate-types)
-    (message "Warning: Invalid highlight types configuration"))
-  
-  ;; 初始化计数器
+    (org-zettel-ref-debug-message-category 'highlight 
+      "Warning: Invalid highlight types configuration"))
+  ;; Initialize counter
   (org-zettel-ref-highlight-initialize-counter)
-  
-  ;; 刷新显示
+  ;; Refresh display
   (org-zettel-ref-highlight-refresh)
-  
-  ;; 显示当前配置状态
-  (message "Highlight system setup complete. Use M-x org-zettel-ref-highlight-debug-config to check configuration."))
-
-;; 添加到主模式钩子
+  ;; Display current configuration status
+  (org-zettel-ref-debug-message-category 'highlight 
+    "Highlight system setup complete. Use M-x org-zettel-ref-highlight-debug-config to check configuration."))
+;; Add to main mode hook
 (add-hook 'org-mode-hook #'org-zettel-ref-highlight-setup)               
 
 
@@ -557,7 +558,7 @@ Group 3: Content (for images including path and description)"
         (puthash char type chars)))
     valid))
 
-;; 在加载时验证配置
+;; When highlight system is initialized, validate configuration.
 (defun org-zettel-ref-highlight-initialize ()
   "Initialize highlight system and validate configuration."
   (unless (org-zettel-ref-highlight-validate-types)

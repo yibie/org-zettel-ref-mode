@@ -365,6 +365,10 @@ A: 您可以使用 =M-x org-zettel-ref-check-roam-db= 命令来检查org-roam数
 
 * 版本历史
 
+- v0.5.1 (2024-11-19)
+  - 优化：convert-to-org.py 的转换流程，恢复使用 Pandoc 处理 txt、md、epub 等格式，增加简单的文件名处理逻辑
+  - 修复：创建概览文件时的逻辑，不再创建“* Marked Text” 和 “* Quick Notes” 的标题，因为在新的标记和笔记系统下，无需再创建这些标题 
+
 - v0.5 (2024-11-12)
   - 升级：标记与笔记系统重大升级 (升级之后变化见 #Demo)
     - 与 org-mode 自带样式解耦

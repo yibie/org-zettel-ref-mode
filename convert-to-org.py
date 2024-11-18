@@ -9,6 +9,9 @@ import subprocess
 from typing import Tuple, List, Optional
 from pathlib import Path
 from shutil import which
+import importlib
+import importlib.util
+import unicodedata
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -72,146 +75,26 @@ def sanitize_filename(filename: str) -> str:
     filename = re.sub(r'_+', '_', filename)
     return filename.strip('_')
 
-def convert_markdown_to_org(input_file: str, output_file: str) -> Tuple[bool, List[str]]:
-    """Convert Markdown to Org format"""
-    try:
-        with open(input_file, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
-        # Basic Markdown to Org format conversion
-        # Convert titles
-        content = re.sub(r'^#{1,6}\s+', '*' * 1, content, flags=re.MULTILINE)
-        # Convert lists
-        content = re.sub(r'^\s*[-*+]\s+', '- ', content, flags=re.MULTILINE)
-        # Convert code blocks
-        content = re.sub(r'```(\w*)\n', '#+BEGIN_SRC \\1\n', content)
-        content = re.sub(r'```', '#+END_SRC', content)
-        
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(content)
-        return True, []
-    except Exception as e:
-        return False, [f"Error converting markdown: {str(e)}"]
+def convert_markdown(input_file: Path, output_file: Path) -> bool:
+    """转换 Markdown 到 Org 格式"""
+    success = convert_with_pandoc(input_file, output_file, 'markdown')
+    if success:
+        post_process_org(output_file)
+    return success
 
-def convert_html_to_org(input_file: str, output_file: str) -> Tuple[bool, List[str]]:
-    """Convert HTML to Org format"""
-    try:
-        import html2text
-        h = html2text.HTML2Text()
-        h.body_width = 0  
-        
-        with open(input_file, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
-        # 转换为 markdown
-        md_content = h.handle(content)
-        
-        # 然后转换为 org
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(md_content)
-        return True, []
-    except ImportError:
-        return False, ["html2text module not installed"]
-    except Exception as e:
-        return False, [f"Error converting HTML: {str(e)}"]
+def convert_html(input_file: Path, output_file: Path) -> bool:
+    """转换 HTML 到 Org 格式"""
+    success = convert_with_pandoc(input_file, output_file, 'html')
+    if success:
+        post_process_org(output_file)
+    return success
 
-def convert_epub_to_org(input_file: str, output_file: str) -> Tuple[bool, List[str]]:
-    """
-    将 EPUB 转换为 org 格式，使用多种方法尝试转换
-    """
-    errors = []
-    
-    # 1. 首先尝试使用 Calibre（如果已安装）
-    if EBOOK_CONVERT_PATH:
-        try:
-            temp_txt = input_file + '.txt'
-            result = subprocess.run(
-                [EBOOK_CONVERT_PATH, input_file, temp_txt],
-                check=True,
-                capture_output=True,
-                text=True
-            )
-            
-            with open(temp_txt, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
-            with open(output_file, 'w', encoding='utf-8') as f:
-                f.write(content)
-            
-            os.remove(temp_txt)  # 清理临时文件
-            return True, []
-            
-        except subprocess.CalledProcessError as e:
-            errors.append(f"Calibre conversion failed: {e.stderr}")
-        except Exception as e:
-            errors.append(f"Calibre processing error: {str(e)}")
-    
-    try:
-        import ebooklib
-        from ebooklib import epub
-        from bs4 import BeautifulSoup
-        import warnings
-        
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            
-            book = epub.read_epub(input_file, options={'ignore_ncx': True})
-            
-            content = []
-            
-            if book.title:
-                content.append(f"#+TITLE: {book.title}\n")
-            
-            
-            metadata = []
-            if book.metadata:
-                for meta in book.metadata:
-                    if meta:
-                        metadata.append(f"#+{meta[0].upper()}: {meta[1]}")
-            if metadata:
-                content.extend(metadata)
-                content.append("")  # 添加空行
-        
-            
-            for item in book.get_items():
-                if item.get_type() == ebooklib.ITEM_DOCUMENT:
-                    try:
-                        soup = BeautifulSoup(item.get_content(), 'html.parser')
-                        
-                        
-                        for h in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
-                            level = int(h.name[1])
-                            h.replace_with(f"{'*' * level} {h.get_text()}\n")
-                        
-                        
-                        for p in soup.find_all('p'):
-                            p.replace_with(f"{p.get_text()}\n\n")
-                        
-                        text = soup.get_text()
-                        if text.strip():
-                            content.append(text)
-                    except Exception as e:
-                        errors.append(f"Error processing EPUB item: {str(e)}")
-                        continue
-            
-            
-            with open(output_file, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(content))
-            
-            return True, []
-            
-    except ImportError:
-        errors.append("ebooklib or beautifulsoup4 not installed")
-    except Exception as e:
-        errors.append(f"EPUB processing error: {str(e)}")
-    
-
-    if errors:
-        logger.error(f"All EPUB conversion methods failed for {input_file}")
-        for error in errors:
-            logger.error(f"  - {error}")
-    
-    return False, errors
+def convert_epub(input_file: Path, output_file: Path) -> bool:
+    """转换 EPUB 到 Org 格式"""
+    success = convert_with_pandoc(input_file, output_file, 'epub')
+    if success:
+        post_process_org(output_file)
+    return success
 
 def convert_text_to_org(input_file: str, output_file: str) -> Tuple[bool, List[str]]:
     """
@@ -224,8 +107,8 @@ def convert_text_to_org(input_file: str, output_file: str) -> Tuple[bool, List[s
         # Add basic conversion for .rst files   
         if input_file.lower().endswith('.rst'):
             # Convert RST title format
-            content = re.sub(r'={3,}', lambda m: '*' * len(m.group()), content)
-            content = re.sub(r'-{3,}', lambda m: '*' * len(m.group()), content)
+            content = re.sub(r'={3,}', lambda m: '* ' * len(m.group()), content)
+            content = re.sub(r'-{3,}', lambda m: '* ' * len(m.group()), content)
             
             # Convert RST reference format
             content = re.sub(r'^\.\. code-block::', '#+BEGIN_SRC', content, flags=re.MULTILINE)
@@ -292,55 +175,47 @@ def convert_pdf_to_org(input_file: str, output_file: str) -> Tuple[bool, List[st
     except Exception as e:
         return False, [f"Error converting PDF: {str(e)}"]
 
-def process_file(file: str, temp_folder: str, reference_folder: str, archive_folder: str) -> bool:
-    """Process a single file"""
+def process_file(file_path: Path, reference_dir: Path, archive_dir: Path) -> bool:
+    """
+    Process a single file conversion
+    
+    Args:
+        file_path: Input file path
+        reference_dir: Output directory path
+        archive_dir: Archive directory path
+    """
     try:
-        input_file = os.path.join(temp_folder, file)
-        safe_filename = sanitize_filename(os.path.splitext(file)[0])
-        output_file = os.path.join(reference_folder, safe_filename + '.org')
+        # Get a safe filename
+        safe_name = get_safe_filename(file_path.stem)
+        output_file = reference_dir / f"{safe_name}.org"
         
+        # Choose conversion method based on file type
+        suffix = file_path.suffix.lower()
         success = False
-        errors = []
         
-        # 检查文件类型
-        if file.lower().endswith('.mobi'):
-            logger.warning(f"MOBI format is not supported: {file}")
-            logger.warning("Please use Calibre to convert MOBI to EPUB first:")
-            logger.warning("1. Install Calibre from https://calibre-ebook.com/")
-            logger.warning("2. Convert using: ebook-convert input.mobi output.epub")
-            logger.warning("3. Then try processing the EPUB file")
-            return False
-        
-        # 处理支持的文件类型
-        if file.lower().endswith('.pdf'):
-            success, errors = convert_pdf_to_org(input_file, output_file)
-        elif file.lower().endswith('.md'):
-            success, errors = convert_markdown_to_org(input_file, output_file)
-        elif file.lower().endswith('.html'):
-            success, errors = convert_html_to_org(input_file, output_file)
-        elif file.lower().endswith('.epub'):
-            success, errors = convert_epub_to_org(input_file, output_file)
-        elif file.lower().endswith(('.txt', '.rst')):
-            success, errors = convert_text_to_org(input_file, output_file)
+        if suffix == '.md':
+            success = convert_markdown(file_path, output_file)
+        elif suffix == '.html':
+            success = convert_html(file_path, output_file)
+        elif suffix == '.epub':
+            success = convert_epub(file_path, output_file)
+        elif suffix == '.pdf':
+            success = convert_pdf(file_path, output_file)
         else:
-            logger.warning(f"Unsupported file format: {file}")
+            logging.warning(f"Unsupported file type: {suffix}")
             return False
         
         if success:
-            logger.info(f"Converted: {input_file} -> {output_file}")
-            try:
-                archive_path = os.path.join(archive_folder, file)
-                shutil.move(input_file, archive_path)
-                logger.info(f"Archived: {input_file} -> {archive_path}")
-            except Exception as e:
-                logger.error(f"Error archiving file: {e}")
+            # Move to archive directory
+            archive_path = archive_dir / file_path.name
+            shutil.move(str(file_path), str(archive_path))
+            logging.info(f"Successfully converted: {file_path.name}")
             return True
-        else:
-            logger.error(f"Failed to process {file}: {', '.join(errors)}")
-            return False
-            
+        
+        return False
+        
     except Exception as e:
-        logger.error(f"Error processing {file}: {str(e)}")
+        logging.error(f"Error processing {file_path}: {str(e)}")
         return False
 
 def check_calibre_installation():
@@ -356,46 +231,144 @@ def check_calibre_installation():
         return False
     return True
 
+def check_dependencies():
+    """Check if all dependencies are installed"""
+    # Check pandoc
+    if not shutil.which('pandoc'):
+        raise RuntimeError("Pandoc is not installed. Please install pandoc first.")
+    
+    # Only keep necessary Python package checks
+    required_packages = [
+        'PyMuPDF',  # Only for PDF processing
+    ]
+    
+    missing_packages = []
+    for package in required_packages:
+        if importlib.util.find_spec(package.lower()) is None:
+            missing_packages.append(package)
+    
+    if missing_packages:
+        packages_str = ' '.join(missing_packages)
+        logging.warning(f"Missing packages: {packages_str}")
+        logging.info("Attempting to install missing packages...")
+        try:
+            subprocess.run(['pip', 'install'] + missing_packages, check=True)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Failed to install required packages: {str(e)}")
+
+# Pandoc conversion options
+PANDOC_ORG_OPTS = [
+    '--wrap=none',      # Avoid automatic line wrapping
+    '--standalone', # Create complete document
+    '-t', 'org', # Output file type is org 
+    '--no-highlight' 
+    ]
+
+def convert_with_pandoc(input_file: Path, output_file: Path, input_format: str) -> bool:
+    """Convert file to org format using pandoc"""
+    cmd = ['pandoc'] + PANDOC_ORG_OPTS + [
+        '-f', input_format,
+        str(input_file),
+        '-o', str(output_file)
+    ]
+    
+    try:
+        result = subprocess.run(
+            cmd,
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        return True
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Pandoc conversion failed for {input_file}: {e.stderr}")
+        return False
+
+def post_process_org(file_path: Path) -> None:
+    """Process the converted org file, clean up unnecessary marks"""
+    try:
+        content = file_path.read_text(encoding='utf-8')
+        # Clean up unnecessary line end backslashes
+        cleaned = re.sub(r'\\\n', '\n', content)
+        # Add other cleanup rules if needed
+        file_path.write_text(cleaned, encoding='utf-8')
+    except Exception as e:
+        logging.error(f"Post-processing failed for {file_path}: {str(e)}")
+
+def get_safe_filename(filename: str) -> str:
+    """
+    Convert filename to a safe format
+    
+    Args:
+        filename: Original filename
+    
+    Returns:
+        Safe filename    
+    """
+    # Remove unsafe characters, only keep letters, numbers, Chinese and some basic punctuation
+    filename = re.sub(r'[^\w\s\-\.\(\)（）\[\]【】\u4e00-\u9fff]', '_', filename)
+    
+    # Replace multiple consecutive spaces and underscores with a single underscore
+    filename = re.sub(r'[\s_]+', '_', filename)
+    
+    # Process filename length, truncate if too long (keep the extension)
+    max_length = 40  # Set maximum length
+    if len(filename) > max_length:
+        # Ensure not to truncate in the middle of Chinese characters
+        truncated = filename[:max_length]
+        # Find the last safe truncation point (underscore or space)
+        last_safe = truncated.rfind('_')
+        if last_safe > max_length // 2:  # If a suitable truncation point is found
+            filename = truncated[:last_safe]
+        else:
+            filename = truncated
+    
+        # Remove leading and trailing spaces and underscores
+    filename = filename.strip('_').strip()
+    
+    # Ensure filename is not empty
+    if not filename:
+        filename = 'unnamed_file'
+    
+    return filename
+
 def main():
     """Main function"""
-    parser = argparse.ArgumentParser(description='Convert documents to org format')
-    parser.add_argument('--temp', required=True, help='Temporary folder path')
-    parser.add_argument('--reference', required=True, help='Reference folder path')
-    parser.add_argument('--archive', required=True, help='Archive folder path')
+    # Set up logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
     
-    args = parser.parse_args()
-    
-    for path in [args.temp, args.reference, args.archive]:
-        os.makedirs(path, exist_ok=True)
-    
-
-    file_types = ['.md', '.html', '.epub', '.pdf', '.txt', '.rst']  # 移除 .mobi
-    unprocessed_files = []
-    
-    for file_type in file_types:
-        logger.info(f"\nProcessing {file_type.upper()} files...")
-        files = [f for f in os.listdir(args.temp) if f.lower().endswith(file_type)]
+    try:
+        # Check dependencies
+        check_dependencies()
         
-        for file in files:
-            if not process_file(file, args.temp, args.reference, args.archive):
-                unprocessed_files.append(file)
-
-    mobi_files = [f for f in os.listdir(args.temp) if f.lower().endswith('.mobi')]
-    if mobi_files:
-        logger.warning("\nFound MOBI files that need conversion:")
-        for mobi_file in mobi_files:
-            logger.warning(f"- {mobi_file}")
-        logger.warning("\nPlease convert MOBI files to EPUB using Calibre:")
-        logger.warning("1. Install Calibre from https://calibre-ebook.com/")
-        logger.warning("2. Convert using: ebook-convert input.mobi output.epub")
-        logger.warning("3. Then run this script again with the EPUB files")
-    
-    if unprocessed_files:
-        logger.warning("\nUnprocessed files:")
-        for file in unprocessed_files:
-            logger.warning(f"- {file}")
-    else:
-        logger.info("\nAll supported files processed successfully.")
+        # Get command line arguments
+        parser = argparse.ArgumentParser(description='Convert documents to Org format')
+        parser.add_argument('--temp', type=str, required=True, help='Temporary directory path')
+        parser.add_argument('--reference', type=str, required=True, help='Reference directory path')
+        parser.add_argument('--archive', type=str, required=True, help='Archive directory path')
+        
+        args = parser.parse_args()
+        
+        # Convert paths to Path objects
+        temp_dir = Path(args.temp)
+        reference_dir = Path(args.reference)
+        archive_dir = Path(args.archive)
+        
+        # Ensure directories exist
+        for directory in [temp_dir, reference_dir, archive_dir]:
+            directory.mkdir(parents=True, exist_ok=True)
+        
+        # Process files
+        for file_path in temp_dir.iterdir():
+            if file_path.is_file():
+                process_file(file_path, reference_dir, archive_dir)
+                
+    except Exception as e:
+        logging.error(f"An error occurred: {str(e)}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     try:
