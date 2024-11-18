@@ -3,6 +3,7 @@
 *.log
 tmp/
 venv/
+__pycache__/
 *.backup
 *.test
 org-zettel-ref-mode.el.backup2
