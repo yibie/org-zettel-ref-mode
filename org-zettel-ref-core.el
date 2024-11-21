@@ -85,7 +85,7 @@ Users who prefer to manage save-place-mode themselves can set this to nil."
   :type 'boolean
   :group 'org-zettel-ref)
 
-(defcustom org-zettel-ref-overview-width-ratio 0.3
+(defcustom org-zettel-ref-overview-width-ratio 0.5
   "Ratio of overview window width relative to source window width.
 Should be a float between 0.0 and 1.0.
 For example, 0.3 means the overview window will take 30% of the source window width."

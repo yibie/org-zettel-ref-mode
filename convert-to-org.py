@@ -1,3 +1,7 @@
+import warnings
+warnings.filterwarnings("ignore", message=".*tqdm.*")
+
+
 import os
 import sys
 import re
@@ -363,6 +367,7 @@ def main():
         
         # Process files
         for file_path in temp_dir.iterdir():
+            print(f"Found file: {file_path}")  
             if file_path.is_file():
                 process_file(file_path, reference_dir, archive_dir)
                 
