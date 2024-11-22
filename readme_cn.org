@@ -276,9 +276,9 @@ org-zettel-ref-mode 现在支持直接通过 Emacs 调用外部 Python 脚本，
 2. 设置脚本路径和文件夹：
    #+BEGIN_SRC emacs-lisp
    (setq org-zettel-ref-python-file "~/path/to/document_convert_to_org.py")
-   (setq org-zettel-ref-temp-folder "~/Documents/temp_convert/")
-   (setq org-zettel-ref-reference-folder "~/Documents/ref/")
-   (setq org-zettel-ref-archive-folder "/Volumes/Collect/archives/")
+   (setq org-zettel-ref-temp-folder "~/Documents/temp_convert/") ; 该文件夹用于存放等待转换的文档 
+   (setq org-zettel-ref-reference-folder "~/Documents/ref/") ; 该文件夹用于存放转换后的参考资料
+   (setq org-zettel-ref-archive-folder "/Volumes/Collect/archives/") ; 该文件夹用于存放转换后的归档文件
    #+END_SRC
 
 3. 运行转换脚本：
@@ -328,7 +328,7 @@ org-zettel-ref-mode 现在支持直接通过 Emacs 调用外部 Python 脚本，
 - =setq org-zettel-ref-python-environment 'system=: 设置 Python 环境类型（可选：'system, 'conda, 'venv）
 - =setq org-zettel-ref-python-env-name nil=: 设置 Python 环境名称
 - =setq org-zettel-ref-python-file "~/path/to/script.py"=: 设置 Python 脚本文件路径
-- =setq org-zettel-ref-temp-folder "~/Documents/temp_convert/"=: 设置临时文件夹路径
+- =setq org-zettel-ref-temp-folder "~/Documents/temp_convert/"=: 设置临时文件夹路径(该文件夹用于存放等待转换的文档)
 - =setq org-zettel-ref-reference-folder "~/Documents/ref/"=: 设置参考资料文件夹路径
 - =setq org-zettel-ref-archive-folder "/Volumes/Collect/archives/"=: 设置归档文件夹路径
 - =setq org-zettel-ref-debug nil=: 设置是否启用调试模式

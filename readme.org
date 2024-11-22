@@ -277,9 +277,9 @@ org-zettel-ref-mode now supports directly calling external Python scripts from w
 2. Set Script Path and Folders:
    #+BEGIN_SRC emacs-lisp
    (setq org-zettel-ref-python-file "~/path/to/document_convert_to_org.py")
-   (setq org-zettel-ref-temp-folder "~/Documents/temp_convert/")
-   (setq org-zettel-ref-reference-folder "~/Documents/ref/")
-   (setq org-zettel-ref-archive-folder "/Volumes/Collect/archives/")
+   (setq org-zettel-ref-temp-folder "~/Documents/temp_convert/") ; This folder is used to store documents waiting to be converted 
+   (setq org-zettel-ref-reference-folder "~/Documents/ref/") ; This folder is used to store converted reference materials
+   (setq org-zettel-ref-archive-folder "/Volumes/Collect/archives/") ; This folder is used to store converted archived files
    #+END_SRC
 
 3. Run Conversion Script:
@@ -328,9 +328,9 @@ Here are the main configurable variables for org-zettel-ref-mode:
 - `setq org-zettel-ref-python-environment 'system`: Set the Python environment type (options: 'system, 'conda, 'venv)
 - `setq org-zettel-ref-python-env-name nil`: Set the Python environment name
 - `setq org-zettel-ref-python-file "~/path/to/script.py"`: Set the Python script file path
-- `setq org-zettel-ref-temp-folder "~/Documents/temp_convert/"`: Set the temporary folder path
-- `setq org-zettel-ref-reference-folder "~/Documents/ref/"`: Set the reference materials folder path
-- `setq org-zettel-ref-archive-folder "/Volumes/Collect/archives/"`: Set the archive folder path
+- `setq org-zettel-ref-temp-folder "~/Documents/temp_convert/"`: Set the temporary folder path (This folder is used to store documents waiting to be converted)
+- `setq org-zettel-ref-reference-folder "~/Documents/ref/"`: Set the reference materials folder path (This folder is used to store converted reference materials)
+- `setq org-zettel-ref-archive-folder "/Volumes/Collect/archives/"`: Set the archive folder path (This folder is used to store converted archived files)
 - `setq org-zettel-ref-debug nil`: Set whether to enable debug mode
 - `setq org-zettel-ref-overview-width-ratio 0.3`: Set the overview window width ratio
 - `setq org-zettel-ref-overview-min-width 30`: Set the overview window minimum width
@@ -373,7 +373,7 @@ We welcome community contributions! Here are some ways you can get involved:
 
 ** Changlog
 *** Version 0.5.1 (2024-11-19)
-  - Optimized: convert-to-org.py conversion process, restored using Pandoc to process txt, md, epub formats, added simple file name processing logic
+  - Optimized: convert-to-org.py conversion process, restored using Pandoc to process txt, md, epub formats, added simple filename processing logic
   - Fixed: The logic for creating overview files, no longer create "Marked Text" and "Quick Notes" titles, as these titles are no longer needed in the new marking and note system  
 *** Version 0.5 (2024-11-12)  
   - Upgrade: Major upgrade to marking and note system (see #Demo for changes after upgrade)

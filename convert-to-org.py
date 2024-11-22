@@ -94,11 +94,50 @@ def convert_html(input_file: Path, output_file: Path) -> bool:
     return success
 
 def convert_epub(input_file: Path, output_file: Path) -> bool:
-    """转换 EPUB 到 Org 格式"""
-    success = convert_with_pandoc(input_file, output_file, 'epub')
-    if success:
-        post_process_org(output_file)
-    return success
+    """转换 EPUB 到 Org 格式，包括图片提取"""
+    try:
+        # 创建图片保存目录
+        images_dir = output_file.parent / f"{output_file.stem}_images"
+        images_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 使用 pandoc 转换，添加图片提取选项
+        cmd = ['pandoc'] + PANDOC_ORG_OPTS + [
+            '--extract-media=' + str(images_dir),  # 提取媒体文件
+            '-f', 'epub',
+            str(input_file),
+            '-o', str(output_file)
+        ]
+        
+        result = subprocess.run(
+            cmd,
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode == 0:
+            # 处理转换后的文件，更新图片链接
+            content = output_file.read_text(encoding='utf-8')
+            
+            # 更新图片链接为相对路径
+            content = re.sub(
+                r'\[\[file:(.*?)\]\]',
+                lambda m: f'[[file:{images_dir.name}/{os.path.basename(m.group(1))}]]',
+                content
+            )
+            
+            # 保存更新后的内容
+            output_file.write_text(content, encoding='utf-8')
+            
+            # 后处理
+            post_process_org(output_file)
+            return True
+            
+        return False
+        
+    except Exception as e:
+        logging.error(f"Error converting EPUB {input_file}: {str(e)}")
+        return False
 
 def convert_text_to_org(input_file: str, output_file: str) -> Tuple[bool, List[str]]:
     """
@@ -182,11 +221,6 @@ def convert_pdf_to_org(input_file: str, output_file: str) -> Tuple[bool, List[st
 def process_file(file_path: Path, reference_dir: Path, archive_dir: Path) -> bool:
     """
     Process a single file conversion
-    
-    Args:
-        file_path: Input file path
-        reference_dir: Output directory path
-        archive_dir: Archive directory path
     """
     try:
         # Get a safe filename
@@ -204,16 +238,36 @@ def process_file(file_path: Path, reference_dir: Path, archive_dir: Path) -> boo
         elif suffix == '.epub':
             success = convert_epub(file_path, output_file)
         elif suffix == '.pdf':
-            success = convert_pdf(file_path, output_file)
+            success, errors = convert_pdf_to_org(str(file_path), str(output_file))
+            if errors:
+                logging.error(f"PDF conversion errors: {errors}")
         else:
             logging.warning(f"Unsupported file type: {suffix}")
             return False
         
         if success:
-            # Move to archive directory
-            archive_path = archive_dir / file_path.name
-            shutil.move(str(file_path), str(archive_path))
-            logging.info(f"Successfully converted: {file_path.name}")
+            try:
+                # Make sure the archive directory exists
+                archive_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Check if the target path is writable
+                if not os.access(archive_dir, os.W_OK):
+                    logging.error(f"No write permission for archive directory: {archive_dir}")
+                    return False
+                
+                # Move the file to the archive directory
+                archive_path = archive_dir / file_path.name
+                shutil.move(str(file_path), str(archive_path))
+                logging.info(f"Successfully converted and archived: {file_path.name}")
+                
+            except PermissionError as e:
+                logging.error(f"Permission denied when archiving file: {e}")
+                # If archiving fails, but conversion is successful, return True
+                return True
+            except Exception as e:
+                logging.error(f"Error archiving file: {e}")
+                return True
+                
             return True
         
         return False
@@ -265,8 +319,9 @@ PANDOC_ORG_OPTS = [
     '--wrap=none',      # Avoid automatic line wrapping
     '--standalone', # Create complete document
     '-t', 'org', # Output file type is org 
-    '--no-highlight' 
-    ]
+    '--no-highlight',
+    '--extract-media=.', # 默认图片提取选项
+]
 
 def convert_with_pandoc(input_file: Path, output_file: Path, input_format: str) -> bool:
     """Convert file to org format using pandoc"""
