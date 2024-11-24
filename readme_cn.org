@@ -367,7 +367,7 @@ A: 您可以使用 =M-x org-zettel-ref-check-roam-db= 命令来检查org-roam数
 - v0.5.2 (2024-11-24)
   - 修复：恢复 convert-to-org.py 转换文件后，保留原文件里的图片的特性，转换后的 org 文件也可以浏览原文件里的图片
   - 优化：改进交互逻辑，当源文件切换或关闭时，其对应的 overview 文件会自动关闭 
-  - 新增：org-zettel-ref-rename-source-file 命令，在管理面板之外，也能够用 AUTHOR__TITLE==KEYWORDS.org 的格式重命名当前的源文件n
+  - 新增：org-zettel-ref-rename-source-file 命令，在管理面板之外，也能够用 AUTHOR__TITLE==KEYWORDS.org 的格式重命名当前的源文件
   - 优化：org-zettel-ref-remove-makred 命令，让它可以移除源文件中的高亮，在移除之后，会自动重新为高亮，和笔记编号
 
 - v0.5.1 (2024-11-19)
