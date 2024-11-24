@@ -268,30 +268,77 @@ Group 3: Content (for images including path and description)"
 ;; Highlight Editing
 ;;----------------------------------------------------------------------------
 
-(defun org-zettel-ref-remove-marked ()
-  "Remove the highlight mark at the cursor, keeping the original text."
-  (interactive)
+;; Constants
+(defconst org-zettel-ref-highlight-threshold 100
+  "Threshold for number of highlights to consider a file as large.")
+
+(defun org-zettel-ref-count-highlights ()
+  "Count total number of highlights in current buffer."
   (save-excursion
-    (let* ((pos (point))
-           (found nil))
+    (save-match-data
+      (let ((count 0))
+        (goto-char (point-min))
+        (while (re-search-forward org-zettel-ref-highlight-regexp nil t)
+          (setq count (1+ count)))
+        count))))
+
+(defun org-zettel-ref-renumber-highlights-after-point (start-number)
+  "Renumber all highlights after START-NUMBER."
+  (save-excursion
+    (save-match-data
+      (let* ((total-highlights (org-zettel-ref-count-highlights))
+             (is-large-file (> total-highlights org-zettel-ref-highlight-threshold))
+             (processed 0)
+             (new-number start-number))
+        
+        (message "Buffer size: %d" (buffer-size)) ;; Debug info
+        
+        (goto-char (point-min))
+        ;; Find and renumber all highlights
+        (while (re-search-forward org-zettel-ref-highlight-regexp nil t)
+          (let* ((current-number (string-to-number (match-string 1)))  ; 使用组1获取编号
+                 (type-char (match-string 2))                          ; 使用组2获取类型
+                 (text (match-string 3)))                              ; 使用组3获取文本
+            
+            (when (>= current-number start-number)
+              ;; 只替换编号部分，保持格式不变
+              (goto-char (match-beginning 1))
+              (delete-region (match-beginning 1) (match-end 1))
+              (insert (number-to-string new-number))
+              (setq new-number (1+ new-number)))))
+        
+        ;; Update counter
+        (setq-local org-zettel-ref-highlight-counter (1- new-number))))))
+
+(defun org-zettel-ref-remove-marked ()
+  "Remove the highlight mark at the cursor and renumber subsequent highlights."
+  (interactive)
+  (let ((pos (point))
+        (found nil))
+    (save-excursion
       ;; Find the highlight mark on the current line
       (beginning-of-line)
-      (when (re-search-forward org-zettel-ref-hig1hlight-regexp (line-end-position) t)
+      (when (re-search-forward org-zettel-ref-highlight-regexp (line-end-position) t)
         (let* ((target-start (match-beginning 0))
                (target-end (match-end 0))
-               (text (match-string 3)))  ; Extract the original text
+               (highlight-id (match-string 1))    ; 使用组1获取编号
+               (type-char (match-string 2))       ; 使用组2获取类型
+               (text (match-string 3))            ; 使用组3获取文本
+               (current-number (string-to-number highlight-id)))
           (setq found t)
           ;; Confirm deletion
           (when (y-or-n-p "Remove highlight mark? ")
-            ;; Delete the mark and keep the original text
+            ;; Delete the mark and insert original text
             (delete-region target-start target-end)
             (goto-char target-start)
-            (insert text)
+            (insert (propertize text 'face 'org-zettel-ref-highlight-face))
+            ;; Renumber subsequent highlights
+            (org-zettel-ref-renumber-highlights-after-point current-number)
             ;; Synchronize the overview file
-            (org-zettel-ref-sync-highlights)
-            (message "Highlight mark removed"))))
-      (unless found
-        (message "No highlight mark found at point")))))
+            (org-zettel-ref-sync-highlights)))))
+    ;; Message outside save-excursion
+    (unless found
+      (message "No highlight mark found at point"))))
 
 ;; Edit highlighted text
 (defun org-zettel-ref-edit-highlight ()

@@ -372,6 +372,11 @@ We welcome community contributions! Here are some ways you can get involved:
 - Share your experiences and tips for using org-zettel-ref-mode.
 
 ** Changlog
+*** Version 0.5.2 (2024-11-24)
+  - Fixed: Restored the feature of converting files to org files, retaining images from the original file
+  - Optimized: Improved interaction logic - overview files now automatically close when their source file is switched or closed
+  - Added: org-zettel-ref-rename-source-file command allows renaming current source file using AUTHOR__TITLE==KEYWORDS.org format outside the management panel
+  - Optimized: org-zettel-ref-remove-marked command can now remove highlights from source files and automatically re-highlight with updated note numbering
 *** Version 0.5.1 (2024-11-19)
   - Optimized: convert-to-org.py conversion process, restored using Pandoc to process txt, md, epub formats, added simple filename processing logic
   - Fixed: The logic for creating overview files, no longer create "Marked Text" and "Quick Notes" titles, as these titles are no longer needed in the new marking and note system  

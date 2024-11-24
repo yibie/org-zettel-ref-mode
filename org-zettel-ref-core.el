@@ -37,6 +37,7 @@ This mode indicates that the buffer is part of an org-zettel-ref pair."
             (define-key map (kbd "C-c h e") #'org-zettel-ref-highlight-edit)
             (define-key map (kbd "C-c h n") #'org-zettel-ref-highlight-add-note)
             (define-key map (kbd "C-c h N") #'org-zettel-ref-highlight-edit-note)
+            (define-key map (kbd "C-c C-r") #'org-zettel-ref-rename-source-file)
             map)
   :group 'org-zettel-ref
   (if org-zettel-ref-minor-mode
@@ -127,6 +128,39 @@ For example, 0.3 means the overview window will take 30% of the source window wi
       (_ (error "Unsupported org-zettel-ref-mode-type: %s" org-zettel-ref-mode-type))))
   target-file)
 
+(defun org-zettel-ref-cleanup-overview ()
+  "Close overview buffer if source buffer has changed."
+  (let ((current-buffer (current-buffer)))
+    ;; Check all windows
+    (dolist (window (window-list))
+      (let ((buffer (window-buffer window)))
+        (when (buffer-live-p buffer)
+          (with-current-buffer buffer
+            ;; Check if it's an overview buffer
+            (when (and (local-variable-p 'org-zettel-ref-source-buffer)
+                      org-zettel-ref-source-buffer
+                      (buffer-live-p org-zettel-ref-source-buffer)
+                      (not (eq org-zettel-ref-source-buffer current-buffer))
+                      org-zettel-ref-overview-file
+                      (file-exists-p org-zettel-ref-overview-file))
+              ;; Save if needed
+              (when (buffer-modified-p)
+                (save-buffer))
+              ;; Delete window and buffer
+              (let ((buf (current-buffer)))
+                (delete-window window)  ;; 直接删除窗口，而不是切换buffer
+                (kill-buffer buf)))))))))
+
+(defun org-zettel-ref-maybe-cleanup-overview ()
+  "Only cleanup overview when appropriate conditions are met."
+  (when (and (not (minibufferp))
+             (not (window-minibuffer-p))
+             (not executing-kbd-macro))
+    (org-zettel-ref-cleanup-overview)))
+
+(remove-hook 'window-configuration-change-hook #'org-zettel-ref-cleanup-overview)
+(add-hook 'window-configuration-change-hook #'org-zettel-ref-maybe-cleanup-overview)
+
 ;;------------------------------------------------------------------
 ;; Buffer Management
 ;;------------------------------------------------------------------
@@ -140,13 +174,18 @@ For example, 0.3 means the overview window will take 30% of the source window wi
 
 (defun org-zettel-ref-setup-buffers (source-buffer overview-buffer)
   "Setup SOURCE-BUFFER and OVERVIEW-BUFFER for org-zettel-ref."
-  (with-current-buffer overview-buffer))
 
+  (with-current-buffer overview-buffer
+    (setq-local org-zettel-ref-source-buffer source-buffer)
+    (org-zettel-ref-minor-mode 1))
+  
+  (with-current-buffer source-buffer
+    (setq-local org-zettel-ref-source-buffer source-buffer)
+    (org-zettel-ref-minor-mode 1)))
 
 ;;------------------------------------------------------------------
 ;; Synchronization
 ;;------------------------------------------------------------------
-
 
 (defun org-zettel-ref-sync-overview ()
   "使用高亮系统同步当前 buffer 到 overview 文件."
@@ -257,6 +296,115 @@ For example, 0.3 means the overview window will take 30% of the source window wi
             title  ; Use original title directly
             org-zettel-ref-overview-file-suffix)))
 
+(defun org-zettel-ref-normalize-filename (file)
+  "Normalize FILE name according to the standard format.
+Returns nil if no changes needed, or new filepath if changes required."
+  (let* ((dir (file-name-directory file))
+         (filename (file-name-nondirectory file))
+         (components (org-zettel-ref-parse-filename filename))
+         (author (nth 0 components))
+         (title (nth 1 components))
+         (keywords (nth 2 components))
+         ;; 生成标准格式的文件名
+         (new-filename (org-zettel-ref-format-filename author title keywords))
+         (new-filepath (expand-file-name new-filename dir)))
+    (unless (equal filename new-filename)
+      new-filepath)))
+
+(defun org-zettel-ref-maybe-normalize-file (file)
+  "Check and normalize FILE name if needed."
+  (when-let* ((db (org-zettel-ref-ensure-db))
+              (new-filepath (org-zettel-ref-normalize-filename file)))
+    
+    (when (and (not (equal file new-filepath))
+               (y-or-n-p (format "Normalize filename from %s to %s? "
+                                (file-name-nondirectory file)
+                                (file-name-nondirectory new-filepath))))
+      
+      ;; 暂停文件监控
+      (org-zettel-ref-unwatch-directory)
+      
+      (condition-case err
+          (let* ((ref-id (org-zettel-ref-db-get-ref-id-by-path db file))
+                 (ref-entry (when ref-id (org-zettel-ref-db-get-ref-entry db ref-id))))
+            
+            ;; 重命名文件
+            (rename-file file new-filepath t)
+            
+            ;; 更新数据库
+            (when ref-entry
+              (org-zettel-ref-db-update-ref-path db file new-filepath)
+              (setf (org-zettel-ref-ref-entry-file-path ref-entry) new-filepath)
+              (org-zettel-ref-db-update-ref-entry db ref-entry)
+              (org-zettel-ref-db-save db))
+            
+            ;; 更新打开的buffer
+            (when-let ((buf (get-file-buffer file)))
+              (with-current-buffer buf
+                (set-visited-file-name new-filepath)
+                (set-buffer-modified-p nil)))
+            
+            (message "File renamed from %s to %s"
+                    (file-name-nondirectory file)
+                    (file-name-nondirectory new-filepath)))
+        
+        (error
+         (message "Error during rename: %s" (error-message-string err))))
+      
+      ;; 重启文件监控
+      (run-with-timer 0.5 nil #'org-zettel-ref-watch-directory))))
+
+(defun org-zettel-ref-rename-source-file ()
+  "Rename the current source file according to the standard format."
+  (interactive)
+  (let* ((db (org-zettel-ref-ensure-db))
+         (old-file (buffer-file-name)))
+    (if (not old-file)
+        (message "Current buffer is not associated with a file")
+      (let* ((dir (file-name-directory old-file))
+             (ref-id (org-zettel-ref-db-get-ref-id-by-path db old-file)))
+        (if (not ref-id)
+            (message "Error: Cannot find database entry for file: %s" old-file)
+          (let* ((ref-entry (org-zettel-ref-db-get-ref-entry db ref-id))
+                 (current-author (org-zettel-ref-ref-entry-author ref-entry))
+                 (current-title (org-zettel-ref-ref-entry-title ref-entry))
+                 (current-keywords (org-zettel-ref-ref-entry-keywords ref-entry))
+                 (new-author (org-zettel-ref-rename--prompt-author current-author))
+                 (new-title (org-zettel-ref-rename--prompt-title current-title))
+                 (new-keywords (org-zettel-ref-rename--prompt-keywords current-keywords))
+                 (new-file-name (org-zettel-ref-format-filename new-author new-title new-keywords))
+                 (new-file-path (expand-file-name new-file-name dir)))
+            
+            (when (and (not (equal old-file new-file-path))
+                      (y-or-n-p (format "Rename %s to %s? "
+                                      (file-name-nondirectory old-file)
+                                      (file-name-nondirectory new-file-path))))
+              ;; Suspend file monitoring
+              (org-zettel-ref-unwatch-directory)
+              
+              (condition-case err
+                  (progn
+                    ;; Rename file
+                    (rename-file old-file new-file-path t)
+                    ;; Update database
+                    (org-zettel-ref-db-update-ref-path db old-file new-file-path)
+                    (setf (org-zettel-ref-ref-entry-file-path ref-entry) new-file-path
+                          (org-zettel-ref-ref-entry-title ref-entry) new-title
+                          (org-zettel-ref-ref-entry-author ref-entry) new-author
+                          (org-zettel-ref-ref-entry-keywords ref-entry) new-keywords)
+                    (org-zettel-ref-db-update-ref-entry db ref-entry)
+                    (org-zettel-ref-db-save db)
+                    ;; 更新当前buffer
+                    (set-visited-file-name new-file-path)
+                    (set-buffer-modified-p nil)
+                    
+                    (message "File renamed from %s to %s"
+                            (file-name-nondirectory old-file)
+                            (file-name-nondirectory new-file-path)))
+                (error
+                 (message "Error during rename: %s" (error-message-string err))))
+              ;; 重启文件监控
+              (run-with-timer 0.5 nil #'org-zettel-ref-watch-directory))))))))
 
 ;;------------------------------------------------------------------
 ;; Initialization
