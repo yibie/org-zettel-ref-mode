@@ -20,36 +20,180 @@ import unicodedata
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-EBOOK_CONVERT_PATH = which('ebook-convert')
 
-def install_dependencies():
-    """安装必要的依赖包"""
-    required_packages = {
-        'PyMuPDF': 'pymupdf',
-        'pdfplumber': 'pdfplumber',
-        'PyPDF2': 'PyPDF2',
-        'html2text': 'html2text',
-        'ebooklib': 'ebooklib',
-        'beautifulsoup4': 'beautifulsoup4'
-    }
+
+import warnings
+warnings.filterwarnings("ignore", message=".*tqdm.*")
+
+import os
+import sys
+import re
+import logging
+import shutil
+import subprocess
+from pathlib import Path
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+def read_requirements(requirements_file: Path) -> list:
+    """Read the contents of the requirements.txt file"""
+    try:
+        with open(requirements_file, 'r') as f:
+            return [line.strip() for line in f if line.strip() and not line.startswith('#')]
+    except Exception as e:
+        logger.error(f"Reading requirements.txt failed: {e}")
+        return []
+
+def check_package_installed(package: str, python_path: str) -> bool:
+    """Check if the package is installed"""
+    try:
+        cmd = [python_path, "-c", f"import {package.split('==')[0]}"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        return result.returncode == 0
+    except Exception:
+        return False
+
+def install_requirements(pip_path: str, requirements: list) -> bool:
+    """Install the required packages"""
+    try:
+        for package in requirements:
+            logger.info(f"Installing {package}...")
+            subprocess.run([pip_path, "install", package], check=True)
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.error(f"安装包失败: {e}")
+        return False
+
+def setup_environment():
+    """Automatically set up and manage the virtual environment"""
+    script_dir = Path(__file__).parent.absolute()
+    requirements_file = script_dir / "requirements.txt"
+    venv_type = os.environ.get('ORG_ZETTEL_REF_PYTHON_ENV', 'venv')
+    venv_name = 'org-zettel-ref-env'
+
+    # 读取 requirements.txt
+    if not requirements_file.exists():
+        logger.error("requirements.txt 文件不存在")
+        return False
     
-    logger.info("Checking and installing required packages...")
-    
-    for package_name, pip_name in required_packages.items():
-        try:
-            __import__(package_name.lower())
-            logger.info(f"{package_name} is already installed")
-        except ImportError:
-            logger.info(f"Installing {package_name}...")
-            try:
-                subprocess.check_call([sys.executable, "-m", "pip", "install", pip_name])
-                logger.info(f"Successfully installed {package_name}")
-            except subprocess.CalledProcessError as e:
-                logger.error(f"Failed to install {package_name}: {e}")
+    requirements = read_requirements(requirements_file)
+    if not requirements:
+        logger.error("Can not read the requirements list")
+        return False
+
+    if venv_type == 'conda':
+        return setup_conda_env(venv_name, requirements)
+    else:
+        venv_path = script_dir / '.venv'
+        return setup_venv_env(venv_path, requirements)
+
+def setup_venv_env(venv_path: Path, requirements: list) -> bool:
+    """Set up and manage the venv virtual environment"""
+    try:
+        # Determine the path to the executable file in the virtual environment
+        if os.name == 'nt':  # Windows
+            bin_dir = venv_path / 'Scripts'
+            python_path = str(bin_dir / 'python.exe')
+            pip_path = str(bin_dir / 'pip.exe')
+        else:  # Unix-like
+            bin_dir = venv_path / 'bin'
+            python_path = str(bin_dir / 'python')
+            pip_path = str(bin_dir / 'pip')
+
+        # If the virtual environment does not exist, create it
+        if not venv_path.exists():
+            logger.info("Creating new venv virtual environment...")
+            subprocess.run([sys.executable, "-m", "venv", str(venv_path)], check=True)
+            logger.info("Virtual environment created successfully")
+
+        # Check and install dependencies
+        logger.info("Checking dependencies...")
+        missing_packages = []
+        for package in requirements:
+            package_name = package.split('==')[0]
+            if not check_package_installed(package_name, python_path):
+                missing_packages.append(package)
+
+        if missing_packages:
+            logger.info(f"Missing packages: {', '.join(missing_packages)}")
+            if not install_requirements(pip_path, missing_packages):
+                return False
+            logger.info("All dependencies installed")
+        else:
+            logger.info("All dependencies installed")
+
+        # Activate the virtual environment
+        os.environ['VIRTUAL_ENV'] = str(venv_path)
+        os.environ['PATH'] = str(bin_dir) + os.pathsep + os.environ['PATH']
+        sys.executable = python_path
+        
+        return True
+
+    except Exception as e:
+        logger.error(f"Setting up venv environment failed: {e}")
+        return False
+
+def setup_conda_env(env_name: str, requirements: list) -> bool:
+    """Set up and manage the conda virtual environment"""
+    try:
+        # Check if conda is available
+        if not shutil.which('conda'):
+            logger.error("Conda command not found")
+            return False
+
+        # Check if the environment exists
+        result = subprocess.run(["conda", "env", "list"], capture_output=True, text=True)
+        env_exists = env_name in result.stdout
+
+        if not env_exists:
+            logger.info(f"Creating new conda environment: {env_name}")
+            subprocess.run(["conda", "create", "-n", env_name, "python", "-y"], check=True)
+
+        # Get the Python and pip paths for the environment
+        conda_prefix = subprocess.check_output(["conda", "info", "--base"]).decode().strip()
+        env_path = os.path.join(conda_prefix, "envs", env_name)
+        
+        if os.name == 'nt':  # Windows
+            python_path = os.path.join(env_path, "python.exe")
+            pip_path = os.path.join(env_path, "Scripts", "pip.exe")
+        else:  # Unix-like
+            python_path = os.path.join(env_path, "bin", "python")
+            pip_path = os.path.join(env_path, "bin", "pip")
+
+        # Check and install dependencies
+        logger.info("Checking dependencies...")
+        missing_packages = []
+        for package in requirements:
+            package_name = package.split('==')[0]
+            if not check_package_installed(package_name, python_path):
+                missing_packages.append(package)
+
+        if missing_packages:
+            logger.info(f"Missing packages: {', '.join(missing_packages)}")
+            cmd = ["conda", "run", "-n", env_name, "pip", "install"] + missing_packages
+            subprocess.run(cmd, check=True)
+            logger.info("All dependencies installed")
+        else:
+            logger.info("All dependencies installed")
+
+        # Activate the environment
+        os.environ['CONDA_DEFAULT_ENV'] = env_name
+        os.environ['CONDA_PREFIX'] = env_path
+        
+        return True
+
+    except Exception as e:
+        logger.error(f"Setting up conda environment failed: {e}")
+        return False
 
 
-install_dependencies()
-
+if not setup_environment():
+    logger.error("Virtual environment setup failed, exiting...")
+    sys.exit(1)
 
 AVAILABLE_PDF_PROCESSORS = []
 
@@ -80,29 +224,105 @@ def sanitize_filename(filename: str) -> str:
     return filename.strip('_')
 
 def convert_markdown(input_file: Path, output_file: Path) -> bool:
-    """转换 Markdown 到 Org 格式"""
-    success = convert_with_pandoc(input_file, output_file, 'markdown')
-    if success:
-        post_process_org(output_file)
-    return success
+    """Convert Markdown to Org format"""
+    # Create image directory for this conversion
+    images_dir = output_file.parent / f"{output_file.stem}_images"
+    images_dir.mkdir(parents=True, exist_ok=True)
+    
+    cmd = ['pandoc',
+        '--wrap=none',
+        '--standalone',
+        '-t', 'org',
+        '--no-highlight',
+        f'--extract-media={images_dir}',  # 指定图片保存目录
+        '-f', 'markdown',
+        str(input_file),
+        '-o', str(output_file)
+    ]
+    
+    try:
+        result = subprocess.run(
+            cmd,
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode == 0:
+            # Update image links in the converted file
+            content = output_file.read_text(encoding='utf-8')
+            content = re.sub(
+                r'\[\[file:(.*?)\]\]',
+                lambda m: f'[[file:{images_dir.name}/{os.path.basename(m.group(1))}]]',
+                content
+            )
+            output_file.write_text(content, encoding='utf-8')
+            
+            post_process_org(output_file)
+            return True
+            
+        return False
+    except Exception as e:
+        logging.error(f"Pandoc conversion failed for {input_file}: {str(e)}")
+        return False
 
 def convert_html(input_file: Path, output_file: Path) -> bool:
-    """转换 HTML 到 Org 格式"""
-    success = convert_with_pandoc(input_file, output_file, 'html')
-    if success:
-        post_process_org(output_file)
-    return success
+    """Convert HTML to Org format"""
+    # Create image directory for this conversion
+    images_dir = output_file.parent / f"{output_file.stem}_images"
+    images_dir.mkdir(parents=True, exist_ok=True)
+    
+    cmd = ['pandoc',
+        '--wrap=none',
+        '--standalone',
+        '-t', 'org',
+        '--no-highlight',
+        f'--extract-media={images_dir}',  # 指定图片保存目录
+        '-f', 'html',
+        str(input_file),
+        '-o', str(output_file)
+    ]
+    
+    try:
+        result = subprocess.run(
+            cmd,
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode == 0:
+            # Update image links in the converted file
+            content = output_file.read_text(encoding='utf-8')
+            content = re.sub(
+                r'\[\[file:(.*?)\]\]',
+                lambda m: f'[[file:{images_dir.name}/{os.path.basename(m.group(1))}]]',
+                content
+            )
+            output_file.write_text(content, encoding='utf-8')
+            
+            post_process_org(output_file)
+            return True
+            
+        return False
+    except Exception as e:
+        logging.error(f"Pandoc conversion failed for {input_file}: {str(e)}")
+        return False
 
 def convert_epub(input_file: Path, output_file: Path) -> bool:
-    """转换 EPUB 到 Org 格式，包括图片提取"""
+    """Convert EPUB to Org format, including image extraction"""
     try:
-        # 创建图片保存目录
+        # Create image save directory with output file's name
         images_dir = output_file.parent / f"{output_file.stem}_images"
         images_dir.mkdir(parents=True, exist_ok=True)
         
-        # 使用 pandoc 转换，添加图片提取选项
-        cmd = ['pandoc'] + PANDOC_ORG_OPTS + [
-            '--extract-media=' + str(images_dir),  # 提取媒体文件
+        # Use pandoc to convert, specify image extraction directory
+        cmd = ['pandoc',
+            '--wrap=none',
+            '--standalone',
+            '-t', 'org',
+            '--no-highlight',
+            f'--extract-media={images_dir}',  # 指定图片保存目录
             '-f', 'epub',
             str(input_file),
             '-o', str(output_file)
@@ -116,20 +336,20 @@ def convert_epub(input_file: Path, output_file: Path) -> bool:
         )
         
         if result.returncode == 0:
-            # 处理转换后的文件，更新图片链接
+            # Process the converted file, update image links
             content = output_file.read_text(encoding='utf-8')
             
-            # 更新图片链接为相对路径
+            # Update image links to relative paths
             content = re.sub(
                 r'\[\[file:(.*?)\]\]',
                 lambda m: f'[[file:{images_dir.name}/{os.path.basename(m.group(1))}]]',
                 content
             )
             
-            # 保存更新后的内容
+            # Save the updated content
             output_file.write_text(content, encoding='utf-8')
             
-            # 后处理
+            # Post-process
             post_process_org(output_file)
             return True
             
@@ -258,19 +478,37 @@ def process_file(file_path: Path, reference_dir: Path, archive_dir: Path) -> boo
                 # Move the file to the archive directory
                 archive_path = archive_dir / file_path.name
                 shutil.move(str(file_path), str(archive_path))
-                logging.info(f"Successfully converted and archived: {file_path.name}")
+                
+                # 添加成功转换的详细消息
+                logger.info("=" * 50)
+                logger.info(f"Successfully converted: {file_path.name}")
+                logger.info(f"Output file: {output_file}")
+                logger.info(f"Archived to: {archive_path}")
+                logger.info("=" * 50)
                 
             except PermissionError as e:
                 logging.error(f"Permission denied when archiving file: {e}")
-                # If archiving fails, but conversion is successful, return True
+                # If archiving fails, but conversion is successful, still show conversion success
+                logger.info("=" * 50)
+                logger.info(f"Successfully converted: {file_path.name}")
+                logger.info(f"Output file: {output_file}")
+                logger.info("Note: File archiving failed due to permission error")
+                logger.info("=" * 50)
                 return True
             except Exception as e:
                 logging.error(f"Error archiving file: {e}")
+                # If archiving fails, but conversion is successful, still show conversion success
+                logger.info("=" * 50)
+                logger.info(f"Successfully converted: {file_path.name}")
+                logger.info(f"Output file: {output_file}")
+                logger.info("Note: File archiving failed")
+                logger.info("=" * 50)
                 return True
                 
             return True
-        
-        return False
+        else:
+            logger.error(f"Failed to convert: {file_path.name}")
+            return False
         
     except Exception as e:
         logging.error(f"Error processing {file_path}: {str(e)}")
@@ -313,35 +551,6 @@ def check_dependencies():
             subprocess.run(['pip', 'install'] + missing_packages, check=True)
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to install required packages: {str(e)}")
-
-# Pandoc conversion options
-PANDOC_ORG_OPTS = [
-    '--wrap=none',      # Avoid automatic line wrapping
-    '--standalone', # Create complete document
-    '-t', 'org', # Output file type is org 
-    '--no-highlight',
-    '--extract-media=.', # 默认图片提取选项
-]
-
-def convert_with_pandoc(input_file: Path, output_file: Path, input_format: str) -> bool:
-    """Convert file to org format using pandoc"""
-    cmd = ['pandoc'] + PANDOC_ORG_OPTS + [
-        '-f', input_format,
-        str(input_file),
-        '-o', str(output_file)
-    ]
-    
-    try:
-        result = subprocess.run(
-            cmd,
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        return True
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Pandoc conversion failed for {input_file}: {e.stderr}")
-        return False
 
 def post_process_org(file_path: Path) -> None:
     """Process the converted org file, clean up unnecessary marks"""

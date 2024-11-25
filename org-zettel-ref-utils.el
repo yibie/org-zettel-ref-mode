@@ -143,11 +143,12 @@ FORMAT-STRING and ARGS are passed to `message'."
           (highlight . t)  
           (ui      . t)))  
   (message "Reset debug settings to defaults"))
+
 ;;----------------------------------------------------------------
 ;; org-zettel-ref-run-python-script
 ;;---------------------------------------------------------------- 
 
-(defcustom org-zettel-ref-python-file "~/Documents/emacs/package/org-zettel-ref-mode/document_convert_to_org.py"
+(defcustom org-zettel-ref-python-file "~/Documents/emacs/package/org-zettel-ref-mode/convert_to_org.py"
   "Python script file path."
   :type 'string
   :group 'org-zettel-ref)
@@ -167,21 +168,29 @@ FORMAT-STRING and ARGS are passed to `message'."
   :type 'string
   :group 'org-zettel-ref)
 
-
+(defcustom org-zettel-ref-python-environment 'venv
+  "Python virtual environment type to use.
+Can be either 'venv or 'conda."
+  :type '(choice (const :tag "Python venv" venv)
+                (const :tag "Conda" conda))
+  :group 'org-zettel-ref)
 
 ;; run python script
 (defun org-zettel-ref-run-python-script ()
-  "Run the configured Python script, displaying its output in the *Convert to Org* buffer."
+  "Run the configured Python script with virtual environment support."
   (interactive)
   (let* ((script-path (expand-file-name org-zettel-ref-python-file))
          (default-directory (file-name-directory script-path))
-         (python-path (executable-find "python"))
+         (venv-type (symbol-name org-zettel-ref-python-environment))
          (temp-folder (expand-file-name org-zettel-ref-temp-folder))
          (reference-folder (expand-file-name org-zettel-ref-reference-folder))
          (archive-folder (expand-file-name org-zettel-ref-archive-folder)))
+    
+    ;; Set virtual environment type
+    (setenv "ORG_ZETTEL_REF_PYTHON_ENV" venv-type)
+    
+    ;; Run the script with appropriate checks
     (cond
-     ((not python-path)
-      (error "Python executable not found in PATH"))
      ((not (file-exists-p script-path))
       (error "Cannot find the specified Python script: %s" script-path))
      ((not (file-directory-p temp-folder))
@@ -192,17 +201,15 @@ FORMAT-STRING and ARGS are passed to `message'."
       (error "Archive folder does not exist: %s" archive-folder))
      (t
       (let ((command (format "%s %s --temp %s --reference %s --archive %s"
-                             (shell-quote-argument python-path)
-                             (shell-quote-argument script-path)
-                             (shell-quote-argument temp-folder)
-                             (shell-quote-argument reference-folder)
-                             (shell-quote-argument archive-folder))))
+                            (shell-quote-argument "python")
+                            (shell-quote-argument script-path)
+                            (shell-quote-argument temp-folder)
+                            (shell-quote-argument reference-folder)
+                            (shell-quote-argument archive-folder))))
         (org-zettel-ref-debug-message "Executing command: %s" command)
         (async-shell-command command "*Convert to Org*")
         (with-current-buffer "*Convert to Org*"
           (org-zettel-ref-debug-message "Python script output:\n%s" (buffer-string))))))))
-
-
 
 ;;----------------------------------------------------------------
 ;; Other components
