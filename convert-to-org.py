@@ -10,12 +10,17 @@ import shutil
 import argparse
 import time
 import subprocess
+import email
+from email import policy
+from email.parser import BytesParser
+from datetime import datetime
 from typing import Tuple, List, Optional
 from pathlib import Path
 from shutil import which
 import importlib
 import importlib.util
 import unicodedata
+import tempfile
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -457,6 +462,8 @@ def process_file(file_path: Path, reference_dir: Path, archive_dir: Path) -> boo
             success = convert_html(file_path, output_file)
         elif suffix == '.epub':
             success = convert_epub(file_path, output_file)
+        elif suffix == '.eml':
+            success = convert_eml(file_path, output_file)
         elif suffix == '.pdf':
             success, errors = convert_pdf_to_org(str(file_path), str(output_file))
             if errors:
@@ -599,6 +606,114 @@ def get_safe_filename(filename: str) -> str:
         filename = 'unnamed_file'
     
     return filename
+
+def convert_eml(input_file: Path, output_file: Path) -> bool:
+    """Convert email (.eml) files to Org format"""
+    try:
+        # Create image directory for attachments
+        images_dir = output_file.parent / f"{output_file.stem}_images"
+        images_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Parse the email file
+        with open(input_file, 'rb') as fp:
+            msg = BytesParser(policy=policy.default).parse(fp)
+        
+        # Extract email metadata and content
+        subject = msg.get('subject', 'No Subject')
+        from_addr = msg.get('from', 'Unknown')
+        to_addr = msg.get('to', 'Unknown')
+        date_str = msg.get('date', '')
+        try:
+            date = email.utils.parsedate_to_datetime(date_str)
+            date_formatted = date.strftime('%Y-%m-%d %H:%M:%S')
+        except:
+            date_formatted = date_str
+        
+        # Start building org content
+        org_content = []
+        org_content.append(f'#+TITLE: {subject}')
+        org_content.append('#+OPTIONS: ^:nil')
+        org_content.append(f'#+DATE: {date_formatted}')
+        org_content.append('')
+        org_content.append('* Email Metadata')
+        org_content.append(f'- From: {from_addr}')
+        org_content.append(f'- To: {to_addr}')
+        org_content.append(f'- Date: {date_formatted}')
+        org_content.append('')
+        org_content.append('* Content')
+        
+        # Handle multipart messages
+        attachments = []
+        
+        def extract_content(part):
+            content_type = part.get_content_type()
+            if content_type == 'text/plain':
+                return part.get_content()
+            elif content_type == 'text/html':
+                # Convert HTML to org using pandoc
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as temp:
+                    temp.write(part.get_content())
+                    temp_path = temp.name
+                
+                try:
+                    cmd = [
+                        'pandoc',
+                        '--wrap=none',
+                        '--standalone',
+                        '-f', 'html',
+                        '-t', 'org',
+                        temp_path
+                    ]
+                    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                    return result.stdout
+                finally:
+                    os.unlink(temp_path)
+            return None
+        
+        def process_part(part):
+            if part.is_multipart():
+                for subpart in part.iter_parts():
+                    process_part(subpart)
+            else:
+                content_type = part.get_content_type()
+                if content_type.startswith('text/'):
+                    content = extract_content(part)
+                    if content:
+                        org_content.append(content)
+                elif part.get_filename():  # This is an attachment
+                    filename = part.get_filename()
+                    safe_filename = get_safe_filename(filename)
+                    attachment_path = images_dir / safe_filename
+                    
+                    with open(attachment_path, 'wb') as f:
+                        f.write(part.get_payload(decode=True))
+                    
+                    attachments.append((safe_filename, content_type))
+        
+        # Process the email content
+        if msg.is_multipart():
+            process_part(msg)
+        else:
+            content = extract_content(msg)
+            if content:
+                org_content.append(content)
+        
+        # Add attachments section if there are any
+        if attachments:
+            org_content.append('')
+            org_content.append('* Attachments')
+            for filename, content_type in attachments:
+                org_content.append(f'- [[file:{images_dir.name}/{filename}][{filename}]] ({content_type})')
+        
+        # Write the org file
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(org_content))
+        
+        return True
+        
+    except Exception as e:
+        logging.error(f"Error converting email file {input_file}: {str(e)}")
+        return False
 
 def main():
     """Main function"""
