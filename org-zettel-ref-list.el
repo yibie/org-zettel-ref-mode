@@ -51,7 +51,6 @@
   ;; Add mouse support
   (make-local-variable 'mouse-face-highlight-property)
   (setq mouse-face-highlight-property 'highlight)
-  (org-zettel-ref-list--update-mode-line)
   ;; Start file monitoring
   ;;(org-zettel-ref-watch-directory)
   ;; Stop monitoring when buffer is killed
@@ -98,13 +97,6 @@
     (setq author (when author (string-trim author))
           title (when title (string-trim title))
           keywords (when keywords (mapcar #'string-trim keywords)))
-    
-    ;; Debug output
-    (org-zettel-ref-debug-message-category 'list "Parsing filename: %s" filename)
-    (org-zettel-ref-debug-message-category 'list "Author: %s" author)
-    (org-zettel-ref-debug-message-category 'list "Title: %s" title)
-    (org-zettel-ref-debug-message-category 'list "Keywords: %s" 
-             (if keywords (mapconcat 'identity keywords ", ") ""))
     
     (list author title keywords)))
 
@@ -251,20 +243,20 @@ ENTRY is the org-zettel-ref-entry struct."
            (string-join keywords ", ")
          "")))))
 
+
 (defun org-zettel-ref-list--get-entries ()
   "Get entries for tabulated list display."
   (let ((entries '())
         (db (org-zettel-ref-ensure-db)))
     (maphash
      (lambda (id entry)
-       (when-let ((file-path (org-zettel-ref-ref-entry-file-path entry)))
+       (when-let* ((file-path (org-zettel-ref-ref-entry-file-path entry))
+                   (exists (file-exists-p file-path)))
          (let* ((file-name (file-name-nondirectory file-path))
                 (parsed-info (org-zettel-ref-parse-filename file-name))
                 (author (nth 0 parsed-info))  
                 (title (nth 1 parsed-info))   
                 (keywords (nth 2 parsed-info)))
-           (org-zettel-ref-debug-message-category 'list "Processing file: %s" file-name)
-           (org-zettel-ref-debug-message-category 'list "Parsed - Author: %s, Title: %s" author title)
            (push (list file-path
                       (vector
                        ;; Title column 
@@ -452,7 +444,7 @@ ENTRY is the org-zettel-ref-entry struct."
     (if (not old-file)
         (message "No file selected")
       (let* ((dir (file-name-directory old-file))
-             (ref-id (org-zettel-ref-db-get-ref-id-by-path db old-file)))
+             (ref-id (when old-file (org-zettel-ref-db-get-ref-id-by-path db old-file))))
         (if (not ref-id)
             (message "Error: Cannot find database entry for file: %s" old-file)
           (let* ((ref-entry (org-zettel-ref-db-get-ref-entry db ref-id))
@@ -497,6 +489,7 @@ ENTRY is the org-zettel-ref-entry struct."
                  (message "Error during rename: %s" (error-message-string err))))
               ;; Restart file monitoring
               (run-with-timer 0.5 nil #'org-zettel-ref-watch-directory))))))))
+
 ;;;----------------------------------------------------------------------------
 ;;; File Operation: Edit Keywords 
 ;;;---------------------------------------------------------------------------- 
@@ -633,12 +626,12 @@ ENTRY is the org-zettel-ref-entry struct."
             (error
              (message "Error deleting file %s: %s" 
                      file (error-message-string err))))))
-      ;; Save database and refresh
-      (org-zettel-ref-db-save db)
-      (setq org-zettel-ref-marked-files nil)
-      (org-zettel-ref-list-refresh)
-      (message "Successfully deleted %d of %d files" 
-              deleted file-count))))
+        ;; Save database and refresh
+        (org-zettel-ref-db-save db)
+        (setq org-zettel-ref-marked-files nil)
+        (org-zettel-ref-list-refresh)
+        (message "Successfully deleted %d of %d files" 
+                deleted file-count))))
 
 
 
@@ -733,8 +726,9 @@ DB is the database object."
         (new-count 0)
         (existing-count 0)
         (added 0))
-    (org-zettel-ref-debug-message-category 'list "Found %d files to process" (length files))
+    (message "Found %d files to process" (length files))
     
+    ;; Reset ID counter at start of scan
     (setq org-zettel-ref-id-counter 0)
     
     (dolist (file files)
@@ -746,22 +740,19 @@ DB is the database object."
                  (title (plist-get file-info :title))
                  (author (plist-get file-info :author))
                  (keywords (plist-get file-info :keywords)))
-            ;; create new entry
+            ;; 创建新条目
             (org-zettel-ref-db-ensure-ref-entry db file-path title author keywords)
             (cl-incf new-count)
             (cl-incf added)
             
-            ;; save database every 100 entries  
+            ;; Save database every 100 entries
             (when (zerop (mod added 100))
-              (org-zettel-ref-debug-message-category 'list 
-                "Saving database after %d new entries..." added)
+              (message "Saving database after %d new entries..." added)
               (org-zettel-ref-db-save db))))))
     
-    ;; use debug message system
-    (org-zettel-ref-debug-message-category 'list 
-      "Scan complete: %d new files, %d existing files"
-      new-count existing-count)
-    
+    (message "Scan complete: %d new files, %d existing files"
+             new-count existing-count)
+    ;; Final save if there are any new entries
     (when (> new-count 0)
       (org-zettel-ref-db-save db))))
 
@@ -914,4 +905,3 @@ Return a list of file paths."
 
 
 (provide 'org-zettel-ref-list)
-
