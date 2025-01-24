@@ -25,18 +25,8 @@ import tempfile
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
-
 import warnings
 warnings.filterwarnings("ignore", message=".*tqdm.*")
-
-import os
-import sys
-import re
-import logging
-import shutil
-import subprocess
-from pathlib import Path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -112,10 +102,35 @@ def setup_venv_env(venv_path: Path, requirements: list) -> bool:
         # If the virtual environment does not exist, create it
         if not venv_path.exists():
             logger.info("Creating new venv virtual environment...")
-            subprocess.run([sys.executable, "-m", "venv", str(venv_path)], check=True)
-            logger.info("Virtual environment created successfully")
+            try:
+                subprocess.run([sys.executable, "-m", "venv", str(venv_path)], 
+                             check=True, 
+                             capture_output=True,
+                             text=True)
+                logger.info("Virtual environment created successfully")
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Failed to create virtual environment: {e.stderr}")
+                return False
 
-        # Check and install dependencies
+        # 验证虚拟环境是否正确创建
+        if not Path(python_path).exists():
+            logger.error(f"Python executable not found at {python_path}")
+            return False
+            
+        if not Path(pip_path).exists():
+            logger.error(f"Pip executable not found at {pip_path}")
+            # 尝试安装 pip
+            try:
+                subprocess.run([python_path, "-m", "ensurepip"], 
+                             check=True,
+                             capture_output=True,
+                             text=True)
+                logger.info("Pip installed successfully")
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Failed to install pip: {e.stderr}")
+                return False
+
+        # 检查和安装依赖
         logger.info("Checking dependencies...")
         missing_packages = []
         for package in requirements:
@@ -129,9 +144,9 @@ def setup_venv_env(venv_path: Path, requirements: list) -> bool:
                 return False
             logger.info("All dependencies installed")
         else:
-            logger.info("All dependencies installed")
+            logger.info("All dependencies already installed")
 
-        # Activate the virtual environment
+        # 激活虚拟环境
         os.environ['VIRTUAL_ENV'] = str(venv_path)
         os.environ['PATH'] = str(bin_dir) + os.pathsep + os.environ['PATH']
         sys.executable = python_path
@@ -139,7 +154,7 @@ def setup_venv_env(venv_path: Path, requirements: list) -> bool:
         return True
 
     except Exception as e:
-        logger.error(f"Setting up venv environment failed: {e}")
+        logger.error(f"Setting up venv environment failed: {str(e)}")
         return False
 
 def setup_conda_env(env_name: str, requirements: list) -> bool:
