@@ -305,7 +305,6 @@ Returns nil if no changes needed, or new filepath if changes required."
          (author (nth 0 components))
          (title (nth 1 components))
          (keywords (nth 2 components))
-         ;; 生成标准格式的文件名
          (new-filename (org-zettel-ref-format-filename author title keywords))
          (new-filepath (expand-file-name new-filename dir)))
     (unless (equal filename new-filename)
@@ -320,38 +319,25 @@ Returns nil if no changes needed, or new filepath if changes required."
                (y-or-n-p (format "Normalize filename from %s to %s? "
                                 (file-name-nondirectory file)
                                 (file-name-nondirectory new-filepath))))
-      
-      ;; 暂停文件监控
       (org-zettel-ref-unwatch-directory)
-      
       (condition-case err
           (let* ((ref-id (org-zettel-ref-db-get-ref-id-by-path db file))
                  (ref-entry (when ref-id (org-zettel-ref-db-get-ref-entry db ref-id))))
-            
-            ;; 重命名文件
             (rename-file file new-filepath t)
-            
-            ;; 更新数据库
             (when ref-entry
               (org-zettel-ref-db-update-ref-path db file new-filepath)
               (setf (org-zettel-ref-ref-entry-file-path ref-entry) new-filepath)
               (org-zettel-ref-db-update-ref-entry db ref-entry)
               (org-zettel-ref-db-save db))
-            
-            ;; 更新打开的buffer
             (when-let ((buf (get-file-buffer file)))
               (with-current-buffer buf
                 (set-visited-file-name new-filepath)
                 (set-buffer-modified-p nil)))
-            
             (message "File renamed from %s to %s"
                     (file-name-nondirectory file)
                     (file-name-nondirectory new-filepath)))
-        
         (error
          (message "Error during rename: %s" (error-message-string err))))
-      
-      ;; 重启文件监控
       (run-with-timer 0.5 nil #'org-zettel-ref-watch-directory))))
 
 (defun org-zettel-ref-rename-source-file ()
@@ -394,7 +380,7 @@ Returns nil if no changes needed, or new filepath if changes required."
                           (org-zettel-ref-ref-entry-keywords ref-entry) new-keywords)
                     (org-zettel-ref-db-update-ref-entry db ref-entry)
                     (org-zettel-ref-db-save db)
-                    ;; 更新当前buffer
+                    ;; Update buffers
                     (set-visited-file-name new-file-path)
                     (set-buffer-modified-p nil)
                     

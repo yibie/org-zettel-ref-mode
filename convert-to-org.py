@@ -70,6 +70,16 @@ def setup_environment():
     venv_type = os.environ.get('ORG_ZETTEL_REF_PYTHON_ENV', 'venv')
     venv_name = 'org-zettel-ref-env'
 
+    # 添加调试信息
+    logger.info(f"Script directory: {script_dir}")
+    logger.info(f"Requirements file path: {requirements_file}")
+    logger.info(f"Virtual environment type: {venv_type}")
+    
+    # 检查目录权限
+    if not os.access(script_dir, os.W_OK):
+        logger.error(f"No write permission in directory: {script_dir}")
+        return False
+
     # 读取 requirements.txt
     if not requirements_file.exists():
         logger.error("requirements.txt 文件不存在")
@@ -80,10 +90,17 @@ def setup_environment():
         logger.error("Can not read the requirements list")
         return False
 
-    if venv_type == 'conda':
+    logger.info(f"Found requirements: {requirements}")
+
+    # 检查并设置虚拟环境
+    if venv_type == 'conda' and shutil.which('conda'):
+        logger.info("Using conda environment")
         return setup_conda_env(venv_name, requirements)
     else:
+        if venv_type == 'conda':
+            logger.info("Conda not found, falling back to venv")
         venv_path = script_dir / '.venv'
+        logger.info(f"Using venv at: {venv_path}")
         return setup_venv_env(venv_path, requirements)
 
 def setup_venv_env(venv_path: Path, requirements: list) -> bool:

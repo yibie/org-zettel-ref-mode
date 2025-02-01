@@ -17,11 +17,11 @@
   :group 'org-zettel-ref)
 
 (defvar org-zettel-ref-debug-categories
-  '((core    . t)     
-    (db      . t)    
-    (list    . t)    
-    (highlight . t)  
-    (ui      . t))   
+  '((core    . t)     ;; core functionality
+    (db      . t)    ;; database operations
+    (list    . t)    ;; list management
+    (highlight . t)  ;; highlighting
+    (ui      . t))   ;; user interface
   "Debug categories and their status.")
 
 (defun org-zettel-ref-debug-message-category (category format-string &rest args)
@@ -137,11 +137,11 @@ FORMAT-STRING and ARGS are passed to `message'."
   (interactive)
   (setq org-zettel-ref-debug nil)
   (setq org-zettel-ref-debug-categories
-        '((core    . t)    
-          (db      . t)   
-          (list    . t)    
-          (highlight . t)  
-          (ui      . t)))  
+        '((core    . t)    ;; core functionality
+          (db      . t)   ;; database operations
+          (list    . t)    ;; list management
+          (highlight . t)  ;; highlighting
+          (ui      . t)))  ;; user interface
   (message "Reset debug settings to defaults"))
 
 ;;----------------------------------------------------------------
@@ -150,6 +150,11 @@ FORMAT-STRING and ARGS are passed to `message'."
 
 (defcustom org-zettel-ref-python-file "~/Documents/emacs/package/org-zettel-ref-mode/convert_to_org.py"
   "Python script file path."
+  :type 'string
+  :group 'org-zettel-ref)
+
+(defcustom org-zettel-ref-python-path "python3"
+  "Path to Python executable."
   :type 'string
   :group 'org-zettel-ref)
 
@@ -201,7 +206,7 @@ Can be either 'venv or 'conda."
       (error "Archive folder does not exist: %s" archive-folder))
      (t
       (let ((command (format "%s %s --temp %s --reference %s --archive %s"
-                            (shell-quote-argument "python")
+                            (shell-quote-argument org-zettel-ref-python-path)
                             (shell-quote-argument script-path)
                             (shell-quote-argument temp-folder)
                             (shell-quote-argument reference-folder)
