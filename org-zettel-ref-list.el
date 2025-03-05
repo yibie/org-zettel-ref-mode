@@ -401,9 +401,7 @@ name and FLIP is non-nil if the sort order should be reversed."
       (when (and (boundp 'org-zettel-ref-active-filters)
                  org-zettel-ref-active-filters)
         (setq tabulated-list-entries
-              (org-zettel-ref-apply-filters 
-               tabulated-list-entries 
-               org-zettel-ref-active-filters)))
+              (org-zettel-ref-apply-filters tabulated-list-entries)))
       
       ;; 重新显示
       (tabulated-list-print t)
@@ -636,7 +634,7 @@ ENTRY is the org-zettel-ref-entry struct."
                 nil nil current)))
     (if (stringp input)
         (split-string input "[,\s]+" t)
-      input)))?
+      input)))
 
 (defun org-zettel-ref-rename--prompt-author (current-author)
   "Prompt for author input with completion, CURRENT-AUTHOR is the current author."
@@ -893,7 +891,7 @@ ENTRY is the org-zettel-ref-entry struct."
             (error
              (message "Error deleting file %s: %s" 
                      file (error-message-string err)))))
-        ;; Save database and refresh
+        ;; Save database
         (org-zettel-ref-db-save db)
         (when (called-interactively-p 'any)
           (message "Deleted %d entries" deleted)))

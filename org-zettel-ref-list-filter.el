@@ -371,24 +371,6 @@ Handles both column-specific and global filters."
         org-zettel-ref-active-filters))
      entries)))
 
-;; Update keybindings for filter functions
-;; 移除直接的键绑定定义，避免循环依赖
-
-;;;----------------------------------------------------------------------------
-;;; Apply Filters 
-;;;---------------------------------------------------------------------------- 
-
-(defun org-zettel-ref-apply-filters (entries)
-  "Apply filters to entries."
-  (if (null org-zettel-ref-active-filters)
-      entries
-    (cl-remove-if-not
-     (lambda (entry)
-       (cl-every (lambda (filter)
-                   (funcall (cdr filter) entry))
-                org-zettel-ref-active-filters))
-     entries)))
-
 ;;; Display Filter Status
 (defun org-zettel-ref-list--format-filter-info ()
   "Format current filter condition information."
