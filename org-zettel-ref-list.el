@@ -10,6 +10,7 @@
 (require 'org-zettel-ref-list-filter)
 (require 'org-zettel-ref-db)
 (require 'transient)
+(require 'cl-lib)  ;; 添加 cl-lib 库的引用
 
 ;;;----------------------------------------------------------------------------
 ;;; Variables
@@ -47,16 +48,260 @@
          ("Modified" 20 t)
          ("Keywords" 30 t)])
   (setq tabulated-list-padding 2)
+  
+  ;; 确保设置默认排序键
   (setq tabulated-list-sort-key (cons "Title" nil))
+  
+  ;; 初始化多级排序键
+  (setq org-zettel-ref-list-multi-sort-keys (list (cons "Title" nil)))
+  
   ;; Add mouse support
   (make-local-variable 'mouse-face-highlight-property)
   (setq mouse-face-highlight-property 'highlight)
+  ;; Set up filter keybindings
+  (when (fboundp 'org-zettel-ref-filter-setup-keybindings)
+    (org-zettel-ref-filter-setup-keybindings org-zettel-ref-list-mode-map))
   ;; Start file monitoring
   ;;(org-zettel-ref-watch-directory)
   ;; Stop monitoring when buffer is killed
   ;;(add-hook 'kill-buffer-hook #'org-zettel-ref-unwatch-directory nil t)
-  (tabulated-list-init-header))
+  (tabulated-list-init-header)
+  (org-zettel-ref-list-setup-sort-keybindings org-zettel-ref-list-mode-map))
 
+(defun org-zettel-ref-list-setup-sort-keybindings (mode-map)
+  "Set up sort keybindings in MODE-MAP."
+  (define-key mode-map (kbd "S") 'org-zettel-ref-list-sort-by-column)
+  (define-key mode-map (kbd "M-S") 'org-zettel-ref-list-add-sort-column)
+  (define-key mode-map (kbd "C-c C-s c") 'org-zettel-ref-list-clear-sort)
+  (define-key mode-map (kbd "C-c C-s s") 'org-zettel-ref-list-save-sort-config)
+  (define-key mode-map (kbd "C-c C-s l") 'org-zettel-ref-list-load-sort-config)
+  (define-key mode-map (kbd "?") 'org-zettel-ref-list-help))
+
+;;;----------------------------------------------------------------------------
+;;; Sorting Functions
+;;;----------------------------------------------------------------------------
+
+(defvar org-zettel-ref-list-multi-sort-keys nil
+  "List of sort keys for multi-column sorting.
+Each element is a cons cell (COLUMN . FLIP) where COLUMN is either
+a column name or index, and FLIP is a boolean indicating whether
+to reverse the sort order.")
+
+(defvar org-zettel-ref-list-sort-history nil
+  "History of saved sort configurations.")
+
+(defun tabulated-list-get-sort-key ()
+  "Get the current sort key from `tabulated-list-sort-key'.
+Returns the column name as a string."
+  (car tabulated-list-sort-key))
+    
+(defun tabulated-list-column-number (name)
+  "Return the column number for NAME in `tabulated-list-format'."
+  (let ((i 0)
+        (len (length tabulated-list-format)))
+    (while (and (< i len)
+                (not (string= name (car (aref tabulated-list-format i)))))
+      (setq i (1+ i)))
+    (if (< i len) i
+      (error "No column named %S" name))))
+
+(defun tabulated-list-column-at (x)
+  "Return the column name at position X."
+  (let ((columns (mapcar 'car tabulated-list-format))
+        (i 0)
+        (current-x 0)
+        found)
+    (while (and (not found) (< i (length columns)))
+      (let* ((col-name (nth i columns))
+             (col-width (nth 1 (aref tabulated-list-format i))))
+        (setq current-x (+ current-x col-width tabulated-list-padding))
+        (when (< x current-x)
+          (setq found col-name))
+        (setq i (1+ i))))
+    found))
+
+(defun org-zettel-ref-list-ensure-valid-sort-keys ()
+  "Ensure that sort keys are valid.
+If tabulated-list-sort-key is nil or invalid, reset it to default (Title)."
+  (unless (and tabulated-list-sort-key 
+               (car tabulated-list-sort-key)
+               (stringp (car tabulated-list-sort-key)))
+
+    (setq tabulated-list-sort-key (cons "Title" nil))
+    (setq org-zettel-ref-list-multi-sort-keys (list (cons "Title" nil)))
+    (setq tabulated-list-sort-key-function nil)
+    (message "Reset invalid sort key to default (Title)")))
+
+(defun org-zettel-ref-list-sort-by-column (&optional column)
+  "Sort the list by COLUMN.
+If COLUMN is nil, use the column at point."
+  (interactive)
+  ;; 确保排序键有效
+  (org-zettel-ref-list-ensure-valid-sort-keys)
+  
+  ;; 如果没有指定列，使用光标所在的列
+  (unless column
+    (let ((x (current-column)))
+      (setq column (tabulated-list-column-at x))))
+  
+  ;; 确保列是有效的
+  (if (null column)
+      (message "No column at point")
+    ;; 设置主排序键
+    (setq tabulated-list-sort-key (cons column nil))
+    
+    ;; 重置多级排序键，只保留主排序键
+    (setq org-zettel-ref-list-multi-sort-keys (list (cons column nil)))
+    
+    ;; 排序并重新显示
+    (tabulated-list-sort)
+    
+    ;; 将光标移到列表顶部
+    (goto-char (point-min))
+    
+    ;; 显示反馈
+    (message "Sorted by %s" column)))
+
+(defun org-zettel-ref-list-add-sort-column (&optional _column)
+  "Add a secondary sort column selected from a menu.
+The optional _COLUMN argument is ignored, as we always prompt for column selection."
+  (interactive)
+  ;; 获取所有可用的列
+  (let* ((columns (mapcar (lambda (col) (car col)) 
+                         (append tabulated-list-format nil)))
+         (current-sort-keys (mapcar #'car org-zettel-ref-list-multi-sort-keys))
+         ;; 过滤掉已经在排序键中的列
+         (available-columns
+          (cl-remove-if (lambda (col)
+                      (member col current-sort-keys))
+                     columns)))
+    
+    ;; 如果没有可用的列，提示用户
+    (if (null available-columns)
+        (message "No more columns available for sorting")
+      ;; 否则让用户选择一个列
+      (let ((column-name (completing-read "Add sort column: " available-columns nil t)))
+        ;; 确保选择了有效的列
+        (when (and column-name (not (string-empty-p column-name)))
+          ;; 添加到多级排序键
+          (push (cons column-name nil) org-zettel-ref-list-multi-sort-keys)
+          
+          ;; 应用多级排序
+          (org-zettel-ref-list-apply-multi-sort)
+          
+          ;; 将光标移到列表顶部
+          (goto-char (point-min))
+          
+          ;; 显示反馈
+          (message "Added secondary sort by %s" column-name))))))
+
+(defun org-zettel-ref-list-apply-multi-sort ()
+  "Apply multi-column sorting based on org-zettel-ref-list-multi-sort-keys."
+  (interactive)
+  (if (null org-zettel-ref-list-multi-sort-keys)
+      (message "No sort keys defined")
+    (let ((primary-key (car org-zettel-ref-list-multi-sort-keys)))
+      ;; 检查主排序键是否有效
+      (if (or (null primary-key) (null (car primary-key)))
+          (progn
+            (message "Error: Invalid primary sort key: %s" primary-key)
+            ;; 重置为默认排序
+            (setq org-zettel-ref-list-multi-sort-keys nil)
+            (setq tabulated-list-sort-key (cons "Title" nil))
+            (setq tabulated-list-sort-key-function nil))
+        
+        ;; 设置主排序键
+        (setq tabulated-list-sort-key primary-key)
+        
+        ;; 调试信息
+        (message "Setting primary sort key to: %s" tabulated-list-sort-key)
+        
+        ;; 如果有多个排序键，设置排序函数
+        (if (> (length org-zettel-ref-list-multi-sort-keys) 1)
+            (setq tabulated-list-sort-key-function 
+                  (lambda ()
+                    (setq tabulated-list-sort-key primary-key)
+                    org-zettel-ref-list-multi-sort-keys))
+          (setq tabulated-list-sort-key-function nil))
+        
+        ;; 排序并重新显示
+        (tabulated-list-sort)
+        
+        ;; 将光标移到列表顶部
+        (goto-char (point-min))
+        
+        ;; 显示反馈
+        (message "Applied multi-column sort with %d keys" 
+                 (length org-zettel-ref-list-multi-sort-keys))))))
+
+(defun org-zettel-ref-list--multi-column-sort-predicate (a b keys)
+  "Compare entries A and B using multiple sort KEYS.
+Each key in KEYS is a cons cell (COLUMN . FLIP) where COLUMN is the column
+name and FLIP is non-nil if the sort order should be reversed."
+  (let ((result 0)
+        (remaining-keys keys))
+    (while (and (= result 0) remaining-keys)
+      (let* ((key (car remaining-keys))
+             (column-name (car key))
+             (flip (cdr key))
+             (column-index (tabulated-list-column-number column-name))
+             (a-val (aref (cadr a) column-index))
+             (b-val (aref (cadr b) column-index)))
+        ;; 比较值
+        (setq result (if (string-lessp a-val b-val) -1 
+                       (if (string-lessp b-val a-val) 1 0)))
+        ;; 如果需要反转排序顺序
+        (when flip
+          (setq result (- result)))
+        ;; 移动到下一个键
+        (setq remaining-keys (cdr remaining-keys))))
+    result))
+
+(defun org-zettel-ref-list-clear-sort ()
+  "Clear all sort keys and reset to default sorting."
+  (interactive)
+  (setq org-zettel-ref-list-multi-sort-keys nil)
+  (setq tabulated-list-sort-key-function nil)
+  (setq tabulated-list-sort-key (cons "Title" nil))
+  (tabulated-list-sort)
+  
+  ;; 将光标移到列表顶部
+  (goto-char (point-min))
+  
+  (message "Reset to default sorting (by Title)"))
+
+(defun org-zettel-ref-list-save-sort-config (name)
+  "Save current sort configuration with NAME."
+  (interactive "sSort configuration name: ")
+  (let ((config (cons name org-zettel-ref-list-multi-sort-keys)))
+    (add-to-list 'org-zettel-ref-list-sort-history config)
+    (message "Saved sort configuration: %s" name)))
+
+(defun org-zettel-ref-list-load-sort-config ()
+  "Load a saved sort configuration."
+  (interactive)
+  (if (null org-zettel-ref-list-sort-history)
+      (message "No saved sort configurations")
+    (let* ((choices (mapcar #'car org-zettel-ref-list-sort-history))
+           (choice (completing-read "Load sort configuration: " choices nil t)))
+      (when choice
+        (setq org-zettel-ref-list-multi-sort-keys 
+              (cdr (assoc choice org-zettel-ref-list-sort-history)))
+        (org-zettel-ref-list-apply-multi-sort)
+        
+        ;; 将光标移到列表顶部
+        (goto-char (point-min))))))
+
+;; Add keybindings for sort functions
+(define-key org-zettel-ref-list-mode-map (kbd "S") 'org-zettel-ref-list-sort-by-column)
+(define-key org-zettel-ref-list-mode-map (kbd "M-S") 'org-zettel-ref-list-add-sort-column)
+(define-key org-zettel-ref-list-mode-map (kbd "C-c C-s c") 'org-zettel-ref-list-clear-sort)
+(define-key org-zettel-ref-list-mode-map (kbd "C-c C-s s") 'org-zettel-ref-list-save-sort-config)
+(define-key org-zettel-ref-list-mode-map (kbd "C-c C-s l") 'org-zettel-ref-list-load-sort-config)
+
+;; 为 org-zettel-ref-list-goto-column 函数添加键绑定
+(define-key org-zettel-ref-list-mode-map (kbd "C-c C-s g") 'org-zettel-ref-list-goto-column)
+(define-key org-zettel-ref-list-mode-map (kbd "C-c g") 'org-zettel-ref-list-goto-column)
 
 ;;;----------------------------------------------------------------------------
 ;;; File Name Parsing and Formatting
@@ -100,7 +345,6 @@
     
     (list author title keywords)))
 
-
 ;; Format file name
 (defun org-zettel-ref-format-filename (author title keywords)
   "Generate a standard file name: AUTHOR__TITLE==KEYWORDS.org"
@@ -125,7 +369,6 @@
           :author (nth 0 parsed)
           :keywords (nth 2 parsed))))
 
-
 ;;;----------------------------------------------------------------------------
 ;;; Display Interface
 ;;;----------------------------------------------------------------------------
@@ -139,28 +382,33 @@
     (let* ((marked-files org-zettel-ref-marked-files)
            (current-pos (point))
            (inhibit-read-only t))
-      ;; Clear all overlays
+      ;; 确保排序键有效
+      (org-zettel-ref-list-ensure-valid-sort-keys)
+      
+      ;; 清除所有覆盖层
       (when (boundp 'org-zettel-ref-mark-overlays)
         (dolist (ov org-zettel-ref-mark-overlays)
           (delete-overlay ov))
         (setq org-zettel-ref-mark-overlays nil))
       
-      ;; Clear buffer
+      ;; 清除缓冲区
       (erase-buffer)
       
-      ;; Get and filter entries
-      (condition-case err
-          (progn
-            (let ((entries (org-zettel-ref-list--get-entries)))
-              (when (fboundp 'org-zettel-ref-apply-filters)
-                (setq entries (org-zettel-ref-apply-filters entries)))
-              (setq tabulated-list-entries entries))
-            ;; Print list
-            (tabulated-list-print t))
-        (error
-         (message "Error refreshing list: %s" (error-message-string err))))
+      ;; 更新条目
+      (setq tabulated-list-entries (org-zettel-ref-list--get-entries))
       
-      ;; Restore marks if needed
+      ;; 应用过滤器
+      (when (and (boundp 'org-zettel-ref-active-filters)
+                 org-zettel-ref-active-filters)
+        (setq tabulated-list-entries
+              (org-zettel-ref-apply-filters 
+               tabulated-list-entries 
+               org-zettel-ref-active-filters)))
+      
+      ;; 重新显示
+      (tabulated-list-print t)
+      
+      ;; 恢复标记（如果需要）
       (when (and (boundp 'org-zettel-ref-marked-files)
                  marked-files)
         (save-excursion
@@ -176,12 +424,11 @@
                   (push ov org-zettel-ref-mark-overlays))))
             (forward-line 1))))
       
-      ;; Restore cursor position or move to beginning
+      ;; 恢复光标位置或移动到开头
       (if (< current-pos (point-max))
           (goto-char current-pos)
         (goto-char (point-min))))))
 
-;; Column Components
 (defun org-zettel-ref-column-author ()
   "Author column definition."
   (list "Author" 15 t))
@@ -206,16 +453,6 @@
         (org-zettel-ref-column-keywords)))
 
 ;;;----------------------------------------------------------------------------
-;;; Display: Sorting
-;;;----------------------------------------------------------------------------
-
-(defun org-zettel-ref-list-sort-by-column (&optional column)
-  "Sort the list by COLUMN."
-  (interactive)
-  (unless column
-    (setq column (tabulated-list-get-sort-key))))
-
-;;;----------------------------------------------------------------------------
 ;;; Display Content: Entry Formatting
 ;;;----------------------------------------------------------------------------
 
@@ -226,7 +463,7 @@ ENTRY is the org-zettel-ref-entry struct."
   (if (null entry)
       (progn 
         (message "Warning: Nil entry for id %s" id)
-        (make-vector (length (org-zettel-ref-list-columns)) " "))
+        (make-vector (length (org-zettel-ref-list-columns)) ""))
     (let* ((file-path (org-zettel-ref-ref-entry-file-path entry))
            (title (or (org-zettel-ref-ref-entry-title entry)
                      (file-name-base file-path)))
@@ -242,7 +479,6 @@ ENTRY is the org-zettel-ref-entry struct."
        (if-let* ((keywords (org-zettel-ref-ref-entry-keywords entry)))
            (string-join keywords ", ")
          "")))))
-
 
 (defun org-zettel-ref-list--get-entries ()
   "Get entries for tabulated list display."
@@ -347,7 +583,7 @@ ENTRY is the org-zettel-ref-entry struct."
   "Get a list of all existing authors from the database."
   (let ((authors '()))
     (maphash
-     (lambda (_id entry)
+     (lambda (id entry)
        (when-let* ((author (org-zettel-ref-ref-entry-author entry)))
          (push author authors)))
      (org-zettel-ref-db-refs db))
@@ -357,7 +593,7 @@ ENTRY is the org-zettel-ref-entry struct."
   "Get a list of all existing titles from the database."
   (let ((titles '()))
     (maphash
-     (lambda (_id entry)
+     (lambda (id entry)
        (when-let* ((title (org-zettel-ref-ref-entry-title entry)))
          (push title titles)))
      (org-zettel-ref-db-refs db))
@@ -367,7 +603,7 @@ ENTRY is the org-zettel-ref-entry struct."
   "Get a list of all existing keywords from the database."
   (let ((keywords '()))
     (maphash
-     (lambda (_id entry)
+     (lambda (id entry)
        (when-let* ((entry-keywords (org-zettel-ref-ref-entry-keywords entry)))
          (setq keywords (append keywords entry-keywords))))
      (org-zettel-ref-db-refs db))
@@ -456,6 +692,7 @@ ENTRY is the org-zettel-ref-entry struct."
                  (new-keywords (org-zettel-ref-rename--prompt-keywords current-keywords))
                  (new-file-name (org-zettel-ref-format-filename new-author new-title new-keywords))
                  (new-file-path (expand-file-name new-file-name dir)))
+            
             (when (and (not (equal old-file new-file-path))
                       (y-or-n-p (format "Rename %s to %s? "
                                       (file-name-nondirectory old-file)
@@ -468,15 +705,18 @@ ENTRY is the org-zettel-ref-entry struct."
                     ;; Rename file  
                     (rename-file old-file new-file-path t)
                     ;; Update database
-                    (org-zettel-ref-db-update-ref-path db old-file new-file-path)
-                    (setf (org-zettel-ref-ref-entry-file-path ref-entry) new-file-path
-                          (org-zettel-ref-ref-entry-title ref-entry) new-title
-                          (org-zettel-ref-ref-entry-author ref-entry) new-author
-                          (org-zettel-ref-ref-entry-keywords ref-entry) new-keywords)
-                    (org-zettel-ref-db-update-ref-entry db ref-entry)
-                    (org-zettel-ref-db-save db)
+                    (when-let* ((ref-id (org-zettel-ref-db-get-ref-id-by-path db old-file))
+                              (ref-entry (org-zettel-ref-db-get-ref-entry db ref-id)))
+                      (remhash old-file (org-zettel-ref-db-ref-paths db))
+                      (puthash new-file-path ref-id (org-zettel-ref-db-ref-paths db))
+                      (setf (org-zettel-ref-ref-entry-file-path ref-entry) new-file-path
+                            (org-zettel-ref-ref-entry-title ref-entry) new-title
+                            (org-zettel-ref-ref-entry-author ref-entry) new-author
+                            (org-zettel-ref-ref-entry-keywords ref-entry) new-keywords)
+                      (org-zettel-ref-db-update-ref-entry db ref-entry)
+                      (org-zettel-ref-db-save db))
                     ;; Update opened buffer
-                    (when-let ((buf (get-file-buffer old-file)))
+                    (when-let* ((buf (get-file-buffer old-file)))
                       (with-current-buffer buf
                         (set-visited-file-name new-file-path)
                         (set-buffer-modified-p nil)))
@@ -487,10 +727,36 @@ ENTRY is the org-zettel-ref-entry struct."
                             (file-name-nondirectory new-file-path)))
                 (error
                  (message "Error during rename: %s" (error-message-string err))))
-              ;; Restart file monitoring
-              (run-with-timer 0.5 nil #'org-zettel-ref-watch-directory))))))))
+              (org-zettel-ref-watch-directory))))))))
 
-;;;----------------------------------------------------------------------------
+(defun org-zettel-ref-list-goto-column ()
+  "Prompt for a column and move cursor to it."
+  (interactive)
+  ;; 获取所有列名
+  (let* ((columns (mapcar (lambda (col) (car col)) 
+                         (append tabulated-list-format nil)))
+         ;; 让用户选择一个列
+         (column-name (completing-read "Go to column: " columns nil t)))
+    
+    ;; 确保选择了有效的列
+    (if (or (null column-name) (string-empty-p column-name))
+        (message "No column selected")
+      ;; 找到列的位置
+      (let* ((column-index (tabulated-list-column-number column-name))
+             (column-pos 0)
+             (i 0))
+        ;; 计算列的位置
+        (while (< i column-index)
+          (let ((col-width (nth 1 (aref tabulated-list-format i))))
+            (setq column-pos (+ column-pos col-width tabulated-list-padding))
+            (setq i (1+ i))))
+        
+        ;; 移动到该列
+        (beginning-of-line)
+        (forward-char column-pos)
+        (message "Moved to column %s" column-name)))))
+
+;;;-------------------------------------------------------------------------- 
 ;;; File Operation: Edit Keywords 
 ;;;---------------------------------------------------------------------------- 
 
@@ -536,7 +802,7 @@ ENTRY is the org-zettel-ref-entry struct."
                  (signal (car err) (cdr err))))
               ;; Update database
               (when-let* ((ref-id (org-zettel-ref-db-get-ref-id-by-path db file))
-                        (ref-entry (org-zettel-ref-db-get-ref-entry db ref-id)))
+                         (ref-entry (org-zettel-ref-db-get-ref-entry db ref-id)))
                 (remhash file (org-zettel-ref-db-ref-paths db))
                 (puthash new-filepath ref-id (org-zettel-ref-db-ref-paths db))
                 (setf (org-zettel-ref-ref-entry-file-path ref-entry) new-filepath
@@ -609,7 +875,8 @@ ENTRY is the org-zettel-ref-entry struct."
                         file-count
                         (if (= file-count 1) "" "s"))))
       (dolist (file files)
-        (when-let* ((ref-id (org-zettel-ref-db-get-ref-id-by-path db file)))
+        (when-let* ((ref-id (org-zettel-ref-db-get-ref-id-by-path db file))
+                         (ref-entry (org-zettel-ref-db-get-ref-entry db ref-id)))
           ;; Delete mapping relationship
           (when-let* ((overview-id (org-zettel-ref-db-get-maps db ref-id)))
             (remhash ref-id (org-zettel-ref-db-map db))
@@ -625,15 +892,15 @@ ENTRY is the org-zettel-ref-entry struct."
                 (cl-incf deleted))
             (error
              (message "Error deleting file %s: %s" 
-                     file (error-message-string err))))))
+                     file (error-message-string err)))))
         ;; Save database and refresh
         (org-zettel-ref-db-save db)
-        (setq org-zettel-ref-marked-files nil)
-        (org-zettel-ref-list-refresh)
-        (message "Successfully deleted %d of %d files" 
-                deleted file-count))))
-
-
+        (when (called-interactively-p 'any)
+          (message "Deleted %d entries" deleted)))
+    (setq org-zettel-ref-marked-files nil)
+    (org-zettel-ref-list-refresh)
+    (message "Successfully deleted %d of %d files" 
+            deleted file-count))))
 
 
 ;;;----------------------------------------------------------------------------
@@ -660,7 +927,7 @@ ENTRY is the org-zettel-ref-entry struct."
   (let* ((choices (mapcar #'car org-zettel-ref-list-actions))
          (choice (completing-read "Select action: " choices nil t))
          (action (cdr (assoc choice org-zettel-ref-list-actions))))
-    (when action
+   (when action
       (call-interactively action))))
 
 ;; Add menu key binding while keeping existing bindings
@@ -677,6 +944,7 @@ ENTRY is the org-zettel-ref-entry struct."
 (define-key org-zettel-ref-list-mode-map (kbd "u") #'org-zettel-ref-unmark-file)
 (define-key org-zettel-ref-list-mode-map (kbd "D") #'org-zettel-ref-list-delete-marked-files)
 (define-key org-zettel-ref-list-mode-map (kbd "U") #'org-zettel-ref-unmark-all)
+(define-key org-zettel-ref-list-mode-map (kbd "/") nil)  ;; 清除现有绑定，使其成为前缀键
 (define-key org-zettel-ref-list-mode-map (kbd "/ r") #'org-zettel-ref-filter-by-regexp)
 (define-key org-zettel-ref-list-mode-map (kbd "/ c") #'org-zettel-ref-clear-all-filters)
 ;(define-key org-zettel-ref-list-mode-map (kbd "/ p") #'org-zettel-ref-filter-manage-presets)
@@ -903,5 +1171,52 @@ Return a list of file paths."
        (message "Error removing file watch: %s" (error-message-string err))
        (setq-local org-zettel-ref-file-watch-descriptor nil)))))
 
+
+;;;----------------------------------------------------------------------------
+;;; Help and Documentation
+;;;----------------------------------------------------------------------------
+
+(defun org-zettel-ref-list-help ()
+  "Display help for org-zettel-ref-list mode."
+  (interactive)
+  (with-help-window "*Org-Zettel-Ref Help*"
+    (princ "Org-Zettel-Ref List Mode Help\n")
+    (princ "==========================\n\n")
+    
+    (princ "FILTERING\n")
+    (princ "---------\n\n")
+    (princ "/ - Unified filter (recommended)\n")
+    (princ "    Syntax examples:\n")
+    (princ "    • emacs lisp       - entries with both 'emacs' and 'lisp' in any column\n")
+    (princ "    • title:emacs      - entries with 'emacs' in the title\n")
+    (princ "    • author:stallman  - entries with 'stallman' in the author field\n")
+    (princ "    • \"org mode\" -emacs - entries with exact phrase 'org mode' but not 'emacs'\n\n")
+    
+    (princ "f - Filter by regexp on a specific column\n")
+    (princ "F - Filter by multiple conditions\n")
+    (princ "h - Apply filter from history\n")
+    (princ "c - Clear all filters\n\n")
+    
+    (princ "SORTING\n")
+    (princ "-------\n\n")
+    (princ "S - Sort by column (primary sort)\n")
+    (princ "M-S - Add secondary sort column\n")
+    (princ "C-c C-s c - Clear all sort keys (reset to default)\n")
+    (princ "C-c C-s s - Save current sort configuration\n")
+    (princ "C-c C-s l - Load saved sort configuration\n\n")
+    
+    (princ "FILE OPERATIONS\n")
+    (princ "--------------\n\n")
+    (princ "RET - Open file at point\n")
+    (princ "o - Open file at point in other window\n")
+    (princ "r - Rename file at point\n")
+    (princ "k - Edit keywords for file at point\n")
+    (princ "m - Mark file for deletion\n")
+    (princ "u - Unmark file\n")
+    (princ "U - Unmark all files\n")
+    (princ "x - Delete marked files\n")
+    (princ "g - Refresh list\n\n")
+    
+    (princ "For more information, see the documentation in the source code.")))
 
 (provide 'org-zettel-ref-list)

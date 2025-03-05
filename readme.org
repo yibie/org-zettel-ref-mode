@@ -372,6 +372,17 @@ We welcome community contributions! Here are some ways you can get involved:
 - Share your experiences and tips for using org-zettel-ref-mode.
 
 ** Changlog
+*** Version 0.5.3 (2025-03-05)
+  - Enhanced: Improved sorting functionality in reference list management
+    - Added `org-zettel-ref-list-goto-column` function for quick column navigation
+    - Fixed cursor-based sorting to be more intuitive
+    - Added new keyboard shortcuts:
+      - `C-c g` and `C-c C-s g`: Jump to a specific column
+      - `/`: Prefix key for filter commands
+    - Improved error handling for sorting operations
+  - Fixed: Various bugs in file operations and sorting functionality
+  - Added: Better support for tabulated list navigation and column selection
+
 *** Version 0.5.2 (2024-11-24)
   - Fixed: Restored the feature of converting files to org files, retaining images from the original file
   - Optimized: Improved interaction logic - overview files now automatically close when their source file is switched or closed
@@ -499,5 +510,3 @@ org-zettel-ref-mode was inspired by my friend [[https://github.com/lijigang][@li
 - Optimize file association mechanisms, reducing reliance on specific filename suffixes
 
 If you like it, please Star.
-
-
