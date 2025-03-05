@@ -24,6 +24,24 @@ Each filter is a (column . predicate) cons cell.")
   :type 'file
   :group 'org-zettel-ref-filter)
 
+(defvar org-zettel-ref-filter-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "/") 'org-zettel-ref-filter-unified)
+    (define-key map (kbd "f") 'org-zettel-ref-filter-by-regexp)
+    (define-key map (kbd "F") 'org-zettel-ref-filter-by-multiple-conditions)
+    (define-key map (kbd "h") 'org-zettel-ref-filter-by-history)
+    (define-key map (kbd "c") 'org-zettel-ref-filter-clear-all)
+    map)
+  "Keymap for org-zettel-ref filter commands.")
+
+(defun org-zettel-ref-filter-setup-keybindings (mode-map)
+  "Set up filter keybindings in MODE-MAP."
+  (define-key mode-map (kbd "/") 'org-zettel-ref-filter-unified)
+  (define-key mode-map (kbd "f") 'org-zettel-ref-filter-by-regexp)
+  (define-key mode-map (kbd "F") 'org-zettel-ref-filter-by-multiple-conditions)
+  (define-key mode-map (kbd "h") 'org-zettel-ref-filter-by-history)
+  (define-key mode-map (kbd "c") 'org-zettel-ref-filter-clear-all))
+
 ;;; Filter Predicate Generation Functions
 (defun org-zettel-ref-make-string-filter (column pattern)
   "Create a string matching filter.
@@ -49,7 +67,9 @@ COLUMN is the column index, PATTERN is the pattern to match."
                                   (mapcar #'car columns)
                                   nil t)))
       (cdr (assoc choice columns)))))
-  (let* ((prompt (format "Filter by %s (regexp): "
+  (let* ((column-names '((0 . "title") (1 . "author") (2 . "modified") (3 . "keywords")))
+         (column-name (cdr (assoc column column-names)))
+         (prompt (format "Filter by %s (regexp): "
                         (aref tabulated-list-format column)))
          (history-key (format "column-%d" column))
          (pattern (completing-read prompt
@@ -67,9 +87,9 @@ COLUMN is the column index, PATTERN is the pattern to match."
         (add-to-history 'org-zettel-ref-filter-history-list pattern)
         ;; 保存历史记录到文件
         (org-zettel-ref-filter-save-history)
-        (org-zettel-ref-add-filter
-         (org-zettel-ref-make-string-filter column pattern))))
-    (org-zettel-ref-list-refresh)))
+        
+        ;; 使用统一过滤器
+        (org-zettel-ref-filter-unified (format "%s:%s" column-name pattern))))))
 
 (defun org-zettel-ref-filter-by-multiple-conditions ()
   "Filter entries by multiple conditions across different columns.
@@ -80,15 +100,14 @@ Use TAB to finish adding conditions and apply filters."
                    ("Author" . 1)
                    ("Modified" . 2)
                    ("Keywords" . 3)))
+         (column-names '((0 . "title") (1 . "author") (2 . "modified") (3 . "keywords")))
          ;; Add special completion option for finishing
          (completion-choices
           (append (mapcar #'car columns)
                   '("[Done] Apply Filters")))
          (conditions '())
+         (query-parts '())
          (continue t))
-    
-    ;; Clear existing filters
-    (setq org-zettel-ref-active-filters nil)
     
     ;; Show initial help message
     (message "Select columns to filter. Press TAB and select [Done] to finish.")
@@ -120,6 +139,11 @@ Use TAB to finish adding conditions and apply filters."
                   (add-to-history 'org-zettel-ref-filter-history-list pattern)
                   ;; 保存历史记录到文件
                   (org-zettel-ref-filter-save-history)
+                  
+                  ;; 构建查询部分
+                  (let ((column-name (cdr (assoc column column-names))))
+                    (push (format "%s:%s" column-name pattern) query-parts))
+                  
                   (push (org-zettel-ref-make-string-filter column pattern)
                         conditions)
                   (message "Added filter for %s: \"%s\"" col-name pattern)))))
@@ -128,27 +152,9 @@ Use TAB to finish adding conditions and apply filters."
         (quit (setq continue nil)
               (message "Filter selection cancelled."))))
     
-    ;; Apply all collected conditions
-    (when conditions
-      (dolist (condition conditions)
-        (org-zettel-ref-add-filter condition))
-      
-      ;; Refresh the display
-      (org-zettel-ref-list-refresh)
-      
-      ;; Show final feedback with correct column name access
-      (message "Applied %d filter(s): %s"
-               (length conditions)
-               (mapconcat
-                (lambda (f)
-                  (let ((col-idx (car f)))
-                    (format "%s" (car (aref tabulated-list-format col-idx)))))
-                conditions
-                ", ")))
-    
-    ;; Show message if no filters were applied
-    (when (null conditions)
-      (message "No filters applied"))))
+    ;; Apply all collected conditions using unified filter
+    (when query-parts
+      (org-zettel-ref-filter-unified (string-join (nreverse query-parts) " ")))))
 
 (defun org-zettel-ref-filter-by-history ()
   "Apply a filter from history."
@@ -160,10 +166,11 @@ Use TAB to finish adding conditions and apply filters."
     (when choice
       (let* ((entry (cdr (assoc choice entries)))
              (column (car entry))
-             (pattern (cdr entry)))
-        (org-zettel-ref-add-filter
-         (org-zettel-ref-make-string-filter column pattern))
-        (org-zettel-ref-list-refresh)
+             (pattern (cdr entry))
+             (column-names '((0 . "title") (1 . "author") (2 . "modified") (3 . "keywords")))
+             (column-name (cdr (assoc column column-names))))
+        ;; 使用统一过滤器
+        (org-zettel-ref-filter-unified (format "%s:%s" column-name pattern))
         (message "Applied filter: %s" choice)))))
 
 ;;;----------------------------------------------------------------------------   
@@ -191,7 +198,181 @@ Use TAB to finish adding conditions and apply filters."
   "Clear all filter conditions."
   (interactive)
   (setq org-zettel-ref-active-filters nil)
-  (org-zettel-ref-list-refresh))
+  (org-zettel-ref-list-refresh)
+  (message "All filters cleared"))
+
+;;;----------------------------------------------------------------------------
+;;; Enhanced Search and Filtering
+;;;----------------------------------------------------------------------------
+
+(defun org-zettel-ref-filter-unified (&optional initial-query)
+  "Unified filter interface supporting multiple conditions.
+INITIAL-QUERY is an optional starting query string.
+
+The query syntax supports:
+- Simple text: matches across all columns
+- Column specific: 'title:text' matches only in title column
+- Multiple terms: space-separated terms are treated as AND conditions
+- Quoted terms: \"exact phrase\" for exact matching
+- Negation: '-term' excludes entries containing the term
+
+Examples:
+  emacs lisp       - entries containing both 'emacs' and 'lisp' in any column
+  title:emacs      - entries with 'emacs' in the title
+  author:stallman  - entries with 'stallman' in the author field
+  \"org mode\" -emacs - entries with exact phrase 'org mode' but not 'emacs'"
+  (interactive)
+  (let* ((columns '(("title" . 0)
+                    ("author" . 1)
+                    ("modified" . 2)
+                    ("keywords" . 3)))
+         (query (or initial-query
+                    (read-string "Filter query: " nil 'org-zettel-ref-filter-history-list)))
+         (terms (org-zettel-ref-filter--parse-query query))
+         (filters '()))
+    
+    ;; Clear existing filters
+    (setq org-zettel-ref-active-filters nil)
+    
+    ;; Process each term and create appropriate filters
+    (dolist (term terms)
+      (let ((column-spec (car term))
+            (pattern (cdr term))
+            (is-negated (string-prefix-p "-" (cdr term))))
+        
+        ;; Handle negated terms
+        (when is-negated
+          (setq pattern (substring pattern 1)))
+        
+        (if column-spec
+            ;; Column-specific filter
+            (let ((column-idx (cdr (assoc column-spec columns))))
+              (if column-idx
+                  (push (cons column-idx
+                              (if is-negated
+                                  (lambda (entry)
+                                    (let ((value (aref (cadr entry) column-idx)))
+                                      (not (and value (string-match-p pattern value)))))
+                                (lambda (entry)
+                                  (let ((value (aref (cadr entry) column-idx)))
+                                    (and value (string-match-p pattern value))))))
+                        filters)
+                (message "Unknown column: %s" column-spec)))
+          
+          ;; Global search across all columns
+          (push (cons 'global
+                      (if is-negated
+                          (lambda (entry)
+                            (let ((values (cadr entry))
+                                  (found nil))
+                              (dotimes (i (length values))
+                                (when (and (aref values i)
+                                           (string-match-p pattern (aref values i)))
+                                  (setq found t)))
+                              (not found)))
+                        (lambda (entry)
+                          (let ((values (cadr entry))
+                                (found nil))
+                            (dotimes (i (length values))
+                              (when (and (aref values i)
+                                         (string-match-p pattern (aref values i)))
+                                (setq found t)))
+                            found))))
+                filters))))
+    
+    ;; Apply all filters
+    (dolist (filter filters)
+      (if (eq (car filter) 'global)
+          ;; Global filter (special case)
+          (push (cons 'global (cdr filter)) org-zettel-ref-active-filters)
+        ;; Column-specific filter
+        (push filter org-zettel-ref-active-filters)))
+    
+    ;; Save to history
+    (add-to-history 'org-zettel-ref-filter-history-list query)
+    (org-zettel-ref-filter-save-history)
+    
+    ;; Refresh display
+    (org-zettel-ref-list-refresh)
+    
+    ;; Show feedback
+    (message "Applied filter: %s" query)))
+
+(defun org-zettel-ref-filter--parse-query (query)
+  "Parse QUERY string into a list of search terms.
+Returns a list of (column . pattern) pairs, where column is nil for global search."
+  (let ((terms '())
+        (current-pos 0)
+        (query-length (length query)))
+    
+    (while (< current-pos query-length)
+      (let ((column nil)
+            (pattern nil)
+            (quoted nil))
+        
+        ;; Skip whitespace
+        (while (and (< current-pos query-length)
+                    (string-match-p "\\s-" (substring query current-pos (1+ current-pos))))
+          (setq current-pos (1+ current-pos)))
+        
+        (when (< current-pos query-length)
+          ;; Check for column specification (e.g., "title:")
+          (let ((colon-pos (string-match ":" query current-pos)))
+            (when (and colon-pos
+                       (< colon-pos query-length)
+                       (not (string-match-p "\\s-" (substring query current-pos colon-pos))))
+              (setq column (substring query current-pos colon-pos))
+              (setq current-pos (1+ colon-pos))))
+          
+          ;; Check for quoted string
+          (when (and (< current-pos query-length)
+                     (string= (substring query current-pos (1+ current-pos)) "\""))
+            (setq quoted t)
+            (setq current-pos (1+ current-pos))
+            (let ((end-quote (string-match "\"" query current-pos)))
+              (if end-quote
+                  (progn
+                    (setq pattern (substring query current-pos end-quote))
+                    (setq current-pos (1+ end-quote)))
+                (setq pattern (substring query current-pos))
+                (setq current-pos query-length))))
+          
+          ;; Non-quoted string (ends at next whitespace)
+          (unless quoted
+            (let ((space-pos (string-match "\\s-" query current-pos)))
+              (if space-pos
+                  (progn
+                    (setq pattern (substring query current-pos space-pos))
+                    (setq current-pos space-pos))
+                (setq pattern (substring query current-pos))
+                (setq current-pos query-length))))
+          
+          ;; Add the term if we found a pattern
+          (when (and pattern (not (string-empty-p pattern)))
+            (push (cons column pattern) terms)))))
+    
+    (nreverse terms)))
+
+;; Override the apply-filters function to handle global filters
+(defun org-zettel-ref-apply-filters (entries)
+  "Apply filters to ENTRIES.
+Handles both column-specific and global filters."
+  (if (null org-zettel-ref-active-filters)
+      entries
+    (cl-remove-if-not
+     (lambda (entry)
+       (cl-every
+        (lambda (filter)
+          (if (eq (car filter) 'global)
+              ;; Global filter
+              (funcall (cdr filter) entry)
+            ;; Column-specific filter
+            (funcall (cdr filter) entry)))
+        org-zettel-ref-active-filters))
+     entries)))
+
+;; Update keybindings for filter functions
+;; 移除直接的键绑定定义，避免循环依赖
 
 ;;;----------------------------------------------------------------------------
 ;;; Apply Filters 

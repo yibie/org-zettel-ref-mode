@@ -379,6 +379,7 @@ We welcome community contributions! Here are some ways you can get involved:
     - Added new keyboard shortcuts:
       - `C-c g` and `C-c C-s g`: Jump to a specific column
       - `/`: Prefix key for filter commands
+      - `?`: Prefix key for help commands
     - Improved error handling for sorting operations
   - Fixed: Various bugs in file operations and sorting functionality
   - Added: Better support for tabulated list navigation and column selection

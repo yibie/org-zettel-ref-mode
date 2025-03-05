@@ -129,7 +129,8 @@ For example, 0.3 means the overview window will take 30% of the source window wi
   target-file)
 
 (defun org-zettel-ref-cleanup-overview ()
-  "Close overview buffer if source buffer has changed."
+  "Close overview buffer if source buffer has changed.
+But keep both source and overview buffers when user is switching between them."
   (let ((current-buffer (current-buffer)))
     ;; Check all windows
     (dolist (window (window-list))
@@ -138,11 +139,15 @@ For example, 0.3 means the overview window will take 30% of the source window wi
           (with-current-buffer buffer
             ;; Check if it's an overview buffer
             (when (and (local-variable-p 'org-zettel-ref-source-buffer)
-                      org-zettel-ref-source-buffer
-                      (buffer-live-p org-zettel-ref-source-buffer)
-                      (not (eq org-zettel-ref-source-buffer current-buffer))
-                      org-zettel-ref-overview-file
-                      (file-exists-p org-zettel-ref-overview-file))
+                       org-zettel-ref-source-buffer
+                       (buffer-live-p org-zettel-ref-source-buffer)
+                       ;; 不要关闭 overview buffer 或者 source buffer
+                       ;; 只有当当前 buffer 不是 overview buffer 或 source buffer 时才关闭
+                       (not (or (eq buffer current-buffer) 
+                                (eq buffer org-zettel-ref-source-buffer)
+                                (eq current-buffer org-zettel-ref-source-buffer)))
+                       org-zettel-ref-overview-file
+                       (file-exists-p org-zettel-ref-overview-file))
               ;; Save if needed
               (when (buffer-modified-p)
                 (save-buffer))
@@ -365,14 +370,10 @@ Returns nil if no changes needed, or new filepath if changes required."
                       (y-or-n-p (format "Rename %s to %s? "
                                       (file-name-nondirectory old-file)
                                       (file-name-nondirectory new-file-path))))
-              ;; Suspend file monitoring
               (org-zettel-ref-unwatch-directory)
-              
               (condition-case err
                   (progn
-                    ;; Rename file
                     (rename-file old-file new-file-path t)
-                    ;; Update database
                     (org-zettel-ref-db-update-ref-path db old-file new-file-path)
                     (setf (org-zettel-ref-ref-entry-file-path ref-entry) new-file-path
                           (org-zettel-ref-ref-entry-title ref-entry) new-title
@@ -380,16 +381,13 @@ Returns nil if no changes needed, or new filepath if changes required."
                           (org-zettel-ref-ref-entry-keywords ref-entry) new-keywords)
                     (org-zettel-ref-db-update-ref-entry db ref-entry)
                     (org-zettel-ref-db-save db)
-                    ;; Update buffers
                     (set-visited-file-name new-file-path)
                     (set-buffer-modified-p nil)
-                    
                     (message "File renamed from %s to %s"
                             (file-name-nondirectory old-file)
                             (file-name-nondirectory new-file-path)))
                 (error
                  (message "Error during rename: %s" (error-message-string err))))
-              ;; 重启文件监控
               (run-with-timer 0.5 nil #'org-zettel-ref-watch-directory))))))))
 
 ;;------------------------------------------------------------------
