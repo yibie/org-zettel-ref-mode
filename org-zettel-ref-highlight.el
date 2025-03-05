@@ -199,9 +199,6 @@ Group 3: Content (for images including path and description)"
              (ref-entry (org-zettel-ref-db-get-ref-entry db ref-id)))
         (org-zettel-ref-ref-entry-file-path ref-entry)))))
 
-
-
-
 ;;----------------------------------------------------------------------------
 ;; Image Handling
 ;;----------------------------------------------------------------------------  

@@ -372,6 +372,16 @@ We welcome community contributions! Here are some ways you can get involved:
 - Share your experiences and tips for using org-zettel-ref-mode.
 
 ** Changlog
+*** Version 0.5.4 (2025-03-05)
+  - Enhanced: Improved highlight synchronization mechanism
+    - Changed highlight storage format from heading to property drawer
+    - New format uses `:HL_ID:` property to store highlight links
+    - Improved handling of existing entries with or without property drawers
+    - Prevents duplicate property entries
+    - Maintains existing content while updating highlight metadata
+  - Fixed: Various bugs in file operations and database handling
+  - Improved: More robust error checking and debugging for highlight operations
+
 *** Version 0.5.3 (2025-03-05)
   - Enhanced: Improved sorting functionality in reference list management
     - Added `org-zettel-ref-list-goto-column` function for quick column navigation
