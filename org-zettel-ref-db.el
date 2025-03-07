@@ -432,13 +432,13 @@ Return the updated reference entry object."
 ;;; Database Save & Load  
 ;;;----------------------------------------------------------------------------
 
-
-(defun org-zettel-ref-db-save (db)
-  "Save database DB to file.
+(cl-defun org-zettel-ref-db-save (db &optional file-path)
+  "Save database DB to FILE-PATH or default location.
 Return the saved database object."
   (let ((print-length nil)
-        (print-level nil))
-    (with-temp-file org-zettel-ref-db-file
+        (print-level nil)
+        (file (or file-path org-zettel-ref-db-file)))
+    (with-temp-file file
       (let ((print-circle t))  ; Handle circular references
         (prin1 (list :version org-zettel-ref-db-version
                      :timestamp (current-time)
@@ -451,7 +451,7 @@ Return the saved database object."
                (current-buffer))))
     (setf (org-zettel-ref-db-modified db) (current-time)
           (org-zettel-ref-db-dirty db) nil)
-    (message "Database saved to %s" org-zettel-ref-db-file)
+    (message "Database saved to %s" file)
     db))
 
 (defun org-zettel-ref-db-load (file)
@@ -660,7 +660,6 @@ Return the updated reference entry object."
          (let ((author (org-zettel-ref-ref-entry-author entry)))
            (when author
              (puthash author t authors))))
-       (org-zettel-ref-db-refs db))
       (maphash
        (lambda (author _)
          (insert (format "    \"%s\" [shape=ellipse];\n" author)))
@@ -694,7 +693,7 @@ Return the updated reference entry object."
                            author kw))))))
      (org-zettel-ref-db-refs db))
     
-    (insert "}\n")))
+    (insert "}\n"))))
 
 ;;;----------------------------------------------------------------------------
 ;;; Database Search and Filter Functions

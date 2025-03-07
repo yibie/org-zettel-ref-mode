@@ -1,7 +1,0 @@
-(with-current-buffer (find-file-noselect "org-zettel-ref-list.el")
-  (goto-char (point-min))
-  (while (search-forward "(when-let* ((ref-id (org-zettel-ref-db-get-ref-id-by-path db file)))" nil t)
-    (replace-match "(when-let* ((ref-id (org-zettel-ref-db-get-ref-id-by-path db file))
-                         (ref-entry (org-zettel-ref-db-get-ref-entry db ref-id)))" t t))
-  (save-buffer)
-  (kill-buffer))

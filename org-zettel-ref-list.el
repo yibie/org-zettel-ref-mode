@@ -10,7 +10,7 @@
 (require 'org-zettel-ref-list-filter)
 (require 'org-zettel-ref-db)
 (require 'transient)
-(require 'cl-lib)  ;; 添加 cl-lib 库的引用
+(require 'cl-lib)  
 
 ;;;----------------------------------------------------------------------------
 ;;; Variables
@@ -136,63 +136,37 @@ If tabulated-list-sort-key is nil or invalid, reset it to default (Title)."
   "Sort the list by COLUMN.
 If COLUMN is nil, use the column at point."
   (interactive)
-  ;; 确保排序键有效
   (org-zettel-ref-list-ensure-valid-sort-keys)
-  
-  ;; 如果没有指定列，使用光标所在的列
   (unless column
     (let ((x (current-column)))
       (setq column (tabulated-list-column-at x))))
-  
-  ;; 确保列是有效的
   (if (null column)
-      (message "No column at point")
-    ;; 设置主排序键
+    (message "No column at point")
     (setq tabulated-list-sort-key (cons column nil))
-    
-    ;; 重置多级排序键，只保留主排序键
     (setq org-zettel-ref-list-multi-sort-keys (list (cons column nil)))
-    
-    ;; 排序并重新显示
     (tabulated-list-sort)
-    
-    ;; 将光标移到列表顶部
     (goto-char (point-min))
-    
-    ;; 显示反馈
     (message "Sorted by %s" column)))
 
 (defun org-zettel-ref-list-add-sort-column (&optional _column)
   "Add a secondary sort column selected from a menu.
 The optional _COLUMN argument is ignored, as we always prompt for column selection."
   (interactive)
-  ;; 获取所有可用的列
   (let* ((columns (mapcar (lambda (col) (car col)) 
                          (append tabulated-list-format nil)))
          (current-sort-keys (mapcar #'car org-zettel-ref-list-multi-sort-keys))
-         ;; 过滤掉已经在排序键中的列
          (available-columns
           (cl-remove-if (lambda (col)
                       (member col current-sort-keys))
                      columns)))
     
-    ;; 如果没有可用的列，提示用户
     (if (null available-columns)
         (message "No more columns available for sorting")
-      ;; 否则让用户选择一个列
       (let ((column-name (completing-read "Add sort column: " available-columns nil t)))
-        ;; 确保选择了有效的列
         (when (and column-name (not (string-empty-p column-name)))
-          ;; 添加到多级排序键
           (push (cons column-name nil) org-zettel-ref-list-multi-sort-keys)
-          
-          ;; 应用多级排序
           (org-zettel-ref-list-apply-multi-sort)
-          
-          ;; 将光标移到列表顶部
           (goto-char (point-min))
-          
-          ;; 显示反馈
           (message "Added secondary sort by %s" column-name))))))
 
 (defun org-zettel-ref-list-apply-multi-sort ()
@@ -201,36 +175,22 @@ The optional _COLUMN argument is ignored, as we always prompt for column selecti
   (if (null org-zettel-ref-list-multi-sort-keys)
       (message "No sort keys defined")
     (let ((primary-key (car org-zettel-ref-list-multi-sort-keys)))
-      ;; 检查主排序键是否有效
       (if (or (null primary-key) (null (car primary-key)))
           (progn
             (message "Error: Invalid primary sort key: %s" primary-key)
-            ;; 重置为默认排序
             (setq org-zettel-ref-list-multi-sort-keys nil)
             (setq tabulated-list-sort-key (cons "Title" nil))
             (setq tabulated-list-sort-key-function nil))
-        
-        ;; 设置主排序键
         (setq tabulated-list-sort-key primary-key)
-        
-        ;; 调试信息
         (message "Setting primary sort key to: %s" tabulated-list-sort-key)
-        
-        ;; 如果有多个排序键，设置排序函数
         (if (> (length org-zettel-ref-list-multi-sort-keys) 1)
             (setq tabulated-list-sort-key-function 
                   (lambda ()
                     (setq tabulated-list-sort-key primary-key)
                     org-zettel-ref-list-multi-sort-keys))
           (setq tabulated-list-sort-key-function nil))
-        
-        ;; 排序并重新显示
         (tabulated-list-sort)
-        
-        ;; 将光标移到列表顶部
         (goto-char (point-min))
-        
-        ;; 显示反馈
         (message "Applied multi-column sort with %d keys" 
                  (length org-zettel-ref-list-multi-sort-keys))))))
 
@@ -247,13 +207,12 @@ name and FLIP is non-nil if the sort order should be reversed."
              (column-index (tabulated-list-column-number column-name))
              (a-val (aref (cadr a) column-index))
              (b-val (aref (cadr b) column-index)))
-        ;; 比较值
+        ;; compare values
         (setq result (if (string-lessp a-val b-val) -1 
                        (if (string-lessp b-val a-val) 1 0)))
-        ;; 如果需要反转排序顺序
+        ;; if need to reverse sort order
         (when flip
           (setq result (- result)))
-        ;; 移动到下一个键
         (setq remaining-keys (cdr remaining-keys))))
     result))
 
@@ -264,10 +223,7 @@ name and FLIP is non-nil if the sort order should be reversed."
   (setq tabulated-list-sort-key-function nil)
   (setq tabulated-list-sort-key (cons "Title" nil))
   (tabulated-list-sort)
-  
-  ;; 将光标移到列表顶部
   (goto-char (point-min))
-  
   (message "Reset to default sorting (by Title)"))
 
 (defun org-zettel-ref-list-save-sort-config (name)
@@ -288,8 +244,6 @@ name and FLIP is non-nil if the sort order should be reversed."
         (setq org-zettel-ref-list-multi-sort-keys 
               (cdr (assoc choice org-zettel-ref-list-sort-history)))
         (org-zettel-ref-list-apply-multi-sort)
-        
-        ;; 将光标移到列表顶部
         (goto-char (point-min))))))
 
 ;; Add keybindings for sort functions
@@ -298,8 +252,6 @@ name and FLIP is non-nil if the sort order should be reversed."
 (define-key org-zettel-ref-list-mode-map (kbd "C-c C-s c") 'org-zettel-ref-list-clear-sort)
 (define-key org-zettel-ref-list-mode-map (kbd "C-c C-s s") 'org-zettel-ref-list-save-sort-config)
 (define-key org-zettel-ref-list-mode-map (kbd "C-c C-s l") 'org-zettel-ref-list-load-sort-config)
-
-;; 为 org-zettel-ref-list-goto-column 函数添加键绑定
 (define-key org-zettel-ref-list-mode-map (kbd "C-c C-s g") 'org-zettel-ref-list-goto-column)
 (define-key org-zettel-ref-list-mode-map (kbd "C-c g") 'org-zettel-ref-list-goto-column)
 
@@ -382,32 +334,23 @@ name and FLIP is non-nil if the sort order should be reversed."
     (let* ((marked-files org-zettel-ref-marked-files)
            (current-pos (point))
            (inhibit-read-only t))
-      ;; 确保排序键有效
       (org-zettel-ref-list-ensure-valid-sort-keys)
-      
-      ;; 清除所有覆盖层
+      ;; clear all overlays
       (when (boundp 'org-zettel-ref-mark-overlays)
         (dolist (ov org-zettel-ref-mark-overlays)
           (delete-overlay ov))
         (setq org-zettel-ref-mark-overlays nil))
-      
-      ;; 清除缓冲区
+      ;; clear buffer
       (erase-buffer)
-      
-      ;; 更新条目
       (setq tabulated-list-entries (org-zettel-ref-list--get-entries))
-      
-      ;; 应用过滤器
+      ;; apply filters
       (when (and (boundp 'org-zettel-ref-active-filters)
                  org-zettel-ref-active-filters)
         (setq tabulated-list-entries
               (org-zettel-ref-apply-filters tabulated-list-entries)))
-      
-      ;; 重新显示
+       ;; redisplay
       (tabulated-list-print t)
-      
-      ;; 恢复标记（如果需要）
-      (when (and (boundp 'org-zettel-ref-marked-files)
+        (when (and (boundp 'org-zettel-ref-marked-files)
                  marked-files)
         (save-excursion
           (goto-char (point-min))
@@ -421,9 +364,7 @@ name and FLIP is non-nil if the sort order should be reversed."
                   (overlay-put ov 'org-zettel-ref-marked t)
                   (push ov org-zettel-ref-mark-overlays))))
             (forward-line 1))))
-      
-      ;; 恢复光标位置或移动到开头
-      (if (< current-pos (point-max))
+       (if (< current-pos (point-max))
           (goto-char current-pos)
         (goto-char (point-min))))))
 
@@ -730,26 +671,24 @@ ENTRY is the org-zettel-ref-entry struct."
 (defun org-zettel-ref-list-goto-column ()
   "Prompt for a column and move cursor to it."
   (interactive)
-  ;; 获取所有列名
+  ;; get all column names
   (let* ((columns (mapcar (lambda (col) (car col)) 
                          (append tabulated-list-format nil)))
-         ;; 让用户选择一个列
+         ;; let user choose a column
          (column-name (completing-read "Go to column: " columns nil t)))
-    
-    ;; 确保选择了有效的列
+    ;; ensure the selected column is valid
     (if (or (null column-name) (string-empty-p column-name))
         (message "No column selected")
-      ;; 找到列的位置
+      ;; find the column position
       (let* ((column-index (tabulated-list-column-number column-name))
              (column-pos 0)
              (i 0))
-        ;; 计算列的位置
+        ;; calculate the column position
         (while (< i column-index)
           (let ((col-width (nth 1 (aref tabulated-list-format i))))
             (setq column-pos (+ column-pos col-width tabulated-list-padding))
             (setq i (1+ i))))
-        
-        ;; 移动到该列
+        ;; move to the column
         (beginning-of-line)
         (forward-char column-pos)
         (message "Moved to column %s" column-name)))))
@@ -1006,7 +945,6 @@ DB is the database object."
                  (title (plist-get file-info :title))
                  (author (plist-get file-info :author))
                  (keywords (plist-get file-info :keywords)))
-            ;; 创建新条目
             (org-zettel-ref-db-ensure-ref-entry db file-path title author keywords)
             (cl-incf new-count)
             (cl-incf added)

@@ -382,6 +382,15 @@ We welcome community contributions! Here are some ways you can get involved:
   - Fixed: Various bugs in file operations and database handling
   - Improved: More robust error checking and debugging for highlight operations
 
+*** Version 0.5.4 (2025-03-10)
+  - Fixed: Critical bug in org-zettel-ref-sync-highlights causing "Emergency exit" error
+    - Added comprehensive error handling for Org element parsing issues
+    - Implemented fallback mechanisms when headings cannot be properly located
+    - Segmented error protection for finding, updating and image processing stages
+    - Graceful recovery from corrupted Org structures in overview files
+  - Enhanced: Overall stability when working with complex or large overview files
+  - Improved: More detailed error messaging for easier troubleshooting
+
 *** Version 0.5.3 (2025-03-05)
   - Enhanced: Improved sorting functionality in reference list management
     - Added `org-zettel-ref-list-goto-column` function for quick column navigation
@@ -442,7 +451,7 @@ We welcome community contributions! Here are some ways you can get involved:
 
 *** Version 0.4 (2024-11-04)
   - Attention!
-    - If you’ve previously used org-zettel-ref-mode, you need to run ~M-x org-zettel-ref-migrate~ the first time you use the new version to upgrade the data structure in the hash table.
+    - If you've previously used org-zettel-ref-mode, you need to run ~M-x org-zettel-ref-migrate~ the first time you use the new version to upgrade the data structure in the hash table.
   - New Feature: Provides a visual management panel for source files
     - ~org-zettel-ref-list~ (see Basic Usage -> Manage Source Files for details):
       - Visualization: Provides a reference management panel
@@ -480,7 +489,7 @@ After this period of development, the code for org-zettel-ref-mode has finally b
     - Automatically sets up a virtual environment via the python venv command and installs required libraries. 
       - *Note:* After updating to this version, running convert-to-org.py will reinstall third-party libraries. If you prefer a clean environment, you may want to manage this manually.
   - Improved synchronization mechanism for overview files, preventing multiple overview files from being created for the same source file. Also improved the robustness and stability of this feature.
-    - A hash table is now used to map source files to overview files. One great thing is that you don’t need to manually set the hash table file location.
+    - A hash table is now used to map source files to overview files. One great thing is that you don't need to manually set the hash table file location.
     - The overview file header now includes a new property block: ~#+SOURCE-FILE:~ to confirm the mapping.
     - New commands:
       - ~org-zettel-ref-check-and-repair-links~ - Check and repair links between source files and overview files.

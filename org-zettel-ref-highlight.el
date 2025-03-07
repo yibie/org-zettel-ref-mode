@@ -208,7 +208,7 @@ Group 3: Content (for images including path and description)"
   (unless (and org-zettel-ref-overview-file
                (stringp org-zettel-ref-overview-file)
                (file-exists-p org-zettel-ref-overview-file))
-    (user-error "请先运行 M-x org-zettel-ref-init 初始化系统")))
+    (user-error "Please run M-x org-zettel-ref-init to initialize the system")))
 
 (defun org-zettel-ref-highlight--ensure-image-dir ()
   "Ensure the Images directory exists in the overview file's directory."
@@ -244,7 +244,7 @@ Group 3: Content (for images including path and description)"
         (let* ((path (org-element-property :path context))
                (abs-path (expand-file-name path (file-name-directory (buffer-file-name))))
                (link-end (org-element-property :end context))
-               (description (read-string "图片描述 (可选): ")))
+               (description (read-string "Image description (optional): ")))
           (when (and (string-match-p "\\.\\(jpg\\|jpeg\\|png\\|gif\\|svg\\|webp\\)$" path)
                     (file-exists-p abs-path))
             ;; Copy the image to the Images directory
@@ -289,22 +289,22 @@ Group 3: Content (for images including path and description)"
              (new-number start-number))
         
         (message "Buffer size: %d" (buffer-size)) ;; Debug info
-        
+        ;; Move to the beginning of the buffer
         (goto-char (point-min))
         ;; Find and renumber all highlights
         (while (re-search-forward org-zettel-ref-highlight-regexp nil t)
-          (let* ((current-number (string-to-number (match-string 1)))  ; 使用组1获取编号
-                 (type-char (match-string 2))                          ; 使用组2获取类型
-                 (text (match-string 3)))                              ; 使用组3获取文本
+          (let* ((current-number (string-to-number (match-string 1)))  ; Get the number using group 1
+                 (type-char (match-string 2))                          ; Get the type using group 2
+                 (text (match-string 3)))                              ; Get the text using group 3
             
             (when (>= current-number start-number)
-              ;; 只替换编号部分，保持格式不变
+              ;; Replace only the number part, keep the format unchanged
               (goto-char (match-beginning 1))
               (delete-region (match-beginning 1) (match-end 1))
               (insert (number-to-string new-number))
               (setq new-number (1+ new-number)))))
         
-        ;; Update counter
+        ;; Update the counter
         (setq-local org-zettel-ref-highlight-counter (1- new-number))))))
 
 (defun org-zettel-ref-remove-marked ()
@@ -318,9 +318,9 @@ Group 3: Content (for images including path and description)"
       (when (re-search-forward org-zettel-ref-highlight-regexp (line-end-position) t)
         (let* ((target-start (match-beginning 0))
                (target-end (match-end 0))
-               (highlight-id (match-string 1))    ; 使用组1获取编号
-               (type-char (match-string 2))       ; 使用组2获取类型
-               (text (match-string 3))            ; 使用组3获取文本
+               (highlight-id (match-string 1))    ; Get the number using group 1
+               (type-char (match-string 2))       ; Get the type using group 2
+               (text (match-string 3))            ; Get the text using group 3
                (current-number (string-to-number highlight-id)))
           (setq found t)
           ;; Confirm deletion

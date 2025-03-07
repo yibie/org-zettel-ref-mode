@@ -236,105 +236,129 @@ But keep both source and overview buffers when user is switching between them."
         "Sync complete - processed %d highlights" 
         (length highlights))
       
-      ;; Update the overview file
-      (with-current-buffer (find-file-noselect org-zettel-ref-overview-file)
-        (org-with-wide-buffer
-         ;; Update or add each highlight
-         (dolist (highlight (sort highlights
+      ;; 更新概览文件，添加错误处理以防解析失败
+      (condition-case err
+          (with-current-buffer (find-file-noselect org-zettel-ref-overview-file)
+            (org-with-wide-buffer
+             ;; 更新或添加每个高亮
+             (dolist (highlight (sort highlights
                                 (lambda (a b)
                                   (< (string-to-number (car a))
                                      (string-to-number (car b))))))
-           (let* ((ref (nth 0 highlight))
-                  (type (nth 1 highlight))
-                  (text (nth 2 highlight))
-                  (name (nth 3 highlight))
-                  (prefix (nth 4 highlight))
-                  (img-path (nth 5 highlight))
-                  (img-desc (nth 6 highlight))
-                  (heading-regexp (format "^\\* .* \\[\\[hl:%s\\]" ref))
-                  (property-regexp (format ":HL_ID: \\[\\[hl:%s\\]" ref))
-                  (found-in-property nil)
-                  (entry-found nil))
-             
-             (message "DEBUG: Processing entry - ref: %s, type: %s" ref type)
-             
-             ;; 检查是否存在对应的条目
-             (goto-char (point-min))
-             (if (re-search-forward heading-regexp nil t)
-                 ;; 在标题中找到
-                 (progn
-                   (setq entry-found t)
-                   (beginning-of-line))
-               ;; 尝试在属性中查找
-               (goto-char (point-min))
-               (when (re-search-forward property-regexp nil t)
-                 (setq entry-found t)
-                 (setq found-in-property t)
-                 ;; 我们在属性抽屉中找到了匹配项，需要回到标题
-                 (org-back-to-heading t)))
-             
-             (if entry-found
-                 ;; 更新现有条目
-                 (progn
-                   ;; 更新标题
-                   (beginning-of-line)
-                   (let ((heading-end (line-end-position)))
-                     (delete-region (point) heading-end)
-                     (insert (format "* %s %s"
-                                    prefix
-                                    (if (string= type "image") 
-                                        (or img-desc "")
-                                        text))))
-                   
-                   ;; 检查属性抽屉是否存在
-                   (forward-line)
-                   (if (looking-at "^[ \t]*:PROPERTIES:")
-                       ;; 属性抽屉存在，更新 HL_ID 属性
-                       (let ((drawer-start (point))
-                             (hl-id-found nil))
-                         ;; 查找 HL_ID 属性或 :END: 标记
-                         (while (and (not (looking-at "^[ \t]*:END:"))
-                                    (not (eobp)))
-                           (when (looking-at "^[ \t]*:HL_ID:")
-                             (setq hl-id-found t)
-                             (beginning-of-line)
-                             (delete-region (point) (line-end-position))
-                             (insert (format ":HL_ID: [[hl:%s][hl-%s]]" ref ref)))
-                           (forward-line))
-                         
-                         ;; 如果没有找到 HL_ID 属性，在 :END: 之前添加
-                         (when (and (not hl-id-found) (looking-at "^[ \t]*:END:"))
+               (let* ((ref (nth 0 highlight))
+                      (type (nth 1 highlight))
+                      (text (nth 2 highlight))
+                      (name (nth 3 highlight))
+                      (prefix (nth 4 highlight))
+                      (img-path (nth 5 highlight))
+                      (img-desc (nth 6 highlight))
+                      (heading-regexp (format "^\\* .* \\[\\[hl:%s\\]" ref))
+                      (property-regexp (format ":HL_ID: \\[\\[hl:%s\\]" ref))
+                      (found-in-property nil)
+                      (entry-found nil))
+                 
+                 (message "DEBUG: Processing entry - ref: %s, type: %s" ref type)
+                 
+                 ;; 检查是否存在对应的条目，添加错误处理
+                 (condition-case find-err
+                     (progn
+                       (goto-char (point-min))
+                       (if (re-search-forward heading-regexp nil t)
+                           ;; 在标题中找到
+                           (progn
+                             (setq entry-found t)
+                             (beginning-of-line))
+                         ;; 尝试在属性中查找
+                         (goto-char (point-min))
+                         (when (re-search-forward property-regexp nil t)
+                           (setq entry-found t)
+                           (setq found-in-property t)
+                           ;; 我们在属性抽屉中找到了匹配项，需要回到标题
+                           (condition-case heading-err
+                               (org-back-to-heading t)
+                             (error
+                              ;; 如果无法找到标题，创建一个新条目
+                              (setq entry-found nil)
+                              (message "Warning: Failed to locate proper heading for ref %s: %s" 
+                                      ref (error-message-string heading-err)))))))
+                   (error
+                    (message "Error finding entry for ref %s: %s" 
+                            ref (error-message-string find-err))
+                    (setq entry-found nil)))
+                 
+                 (condition-case update-err
+                     (if entry-found
+                         ;; 更新现有条目
+                         (progn
+                           ;; 更新标题
                            (beginning-of-line)
-                           (insert (format ":HL_ID: [[hl:%s][hl-%s]]\n" ref ref))))
-                     ;; 没有属性抽屉，添加一个
-                     (insert (format ":PROPERTIES:\n:HL_ID: [[hl:%s][hl-%s]]\n:END:\n" ref ref))))
-               
-               ;; 添加新条目
-               (goto-char (point-max))
-               (insert (format "\n* %s %s\n:PROPERTIES:\n:HL_ID: [[hl:%s][hl-%s]]\n:END:"
-                             prefix
-                             (if (string= type "image")
-                                 (or img-desc "")
-                                 text)
-                             ref
-                             ref)))
+                           (let ((heading-end (line-end-position)))
+                             (delete-region (point) heading-end)
+                             (insert (format "* %s %s"
+                                            prefix
+                                            (if (string= type "image") 
+                                                (or img-desc "")
+                                                text))))
+                           
+                           ;; 检查属性抽屉是否存在
+                           (forward-line)
+                           (if (looking-at "^[ \t]*:PROPERTIES:")
+                               ;; 属性抽屉存在，更新 HL_ID 属性
+                               (let ((drawer-start (point))
+                                     (hl-id-found nil))
+                                 ;; 查找 HL_ID 属性或 :END: 标记
+                                 (while (and (not (looking-at "^[ \t]*:END:"))
+                                            (not (eobp)))
+                                   (when (looking-at "^[ \t]*:HL_ID:")
+                                     (setq hl-id-found t)
+                                     (beginning-of-line)
+                                     (delete-region (point) (line-end-position))
+                                     (insert (format ":HL_ID: [[hl:%s][hl-%s]]" ref ref)))
+                                   (forward-line))
+                                 
+                                 ;; 如果没有找到 HL_ID 属性，在 :END: 之前添加
+                                 (when (and (not hl-id-found) (looking-at "^[ \t]*:END:"))
+                                   (beginning-of-line)
+                                   (insert (format ":HL_ID: [[hl:%s][hl-%s]]\n" ref ref))))
+                             ;; 没有属性抽屉，添加一个
+                             (insert (format ":PROPERTIES:\n:HL_ID: [[hl:%s][hl-%s]]\n:END:\n" ref ref))))
+                       
+                       ;; 添加新条目
+                       (goto-char (point-max))
+                       (insert (format "\n* %s %s\n:PROPERTIES:\n:HL_ID: [[hl:%s][hl-%s]]\n:END:"
+                                     prefix
+                                     (if (string= type "image")
+                                         (or img-desc "")
+                                         text)
+                                     ref
+                                     ref)))
+                   (error
+                    (message "Error updating entry for ref %s: %s" 
+                            ref (error-message-string update-err))))
+                 
+                 ;; 处理图片特定内容
+                 (condition-case img-err
+                     (when (and (string= type "image") img-path)
+                       ;; 转到条目末尾（:END: 之后）
+                       (while (and (not (looking-at "^[ \t]*:END:"))
+                                  (not (eobp)))
+                         (forward-line))
+                       (when (looking-at "^[ \t]*:END:")
+                         (forward-line))
+                       
+                       ;; 检查图片是否已存在
+                       (unless (looking-at "\\(#\\+ATTR_ORG:.*\n\\)?\\[\\[file:")
+                         (insert "\n#+ATTR_ORG: :width 300\n")
+                         (insert (format "[[file:%s]]\n" img-path))))
+                   (error
+                    (message "Error processing image for ref %s: %s" 
+                            ref (error-message-string img-err))))))
              
-             ;; 处理图片特定内容
-             (when (and (string= type "image") img-path)
-               ;; 转到条目末尾（:END: 之后）
-               (while (and (not (looking-at "^[ \t]*:END:"))
-                          (not (eobp)))
-                 (forward-line))
-               (when (looking-at "^[ \t]*:END:")
-                 (forward-line))
-               
-               ;; 检查图片是否已存在
-               (unless (looking-at "\\(#\\+ATTR_ORG:.*\n\\)?\\[\\[file:")
-                 (insert "\n#+ATTR_ORG: :width 300\n")
-                 (insert (format "[[file:%s]]\n" img-path))))))
-         
-         ;; 保存更新后的文件
-         (save-buffer))))))
+             ;; 保存更新后的文件
+             (save-buffer)))
+        (error
+         (message "Error in org-zettel-ref-sync-highlights: %s" (error-message-string err)))))))
+
 ;;----------------------------------------------------------------
 ;; File namming
 ;;----------------------------------------------------------------
@@ -379,7 +403,7 @@ Returns nil if no changes needed, or new filepath if changes required."
               (org-zettel-ref-db-update-ref-path db file new-filepath)
               (setf (org-zettel-ref-ref-entry-file-path ref-entry) new-filepath)
               (org-zettel-ref-db-update-ref-entry db ref-entry)
-              (org-zettel-ref-db-save db org-zettel-ref-db-file)
+              (org-zettel-ref-db-save db)
               (set-visited-file-name new-filepath)
               (set-buffer-modified-p nil))
             (message "File renamed from %s to %s"
@@ -424,7 +448,7 @@ Returns nil if no changes needed, or new filepath if changes required."
                           (org-zettel-ref-ref-entry-author ref-entry) new-author
                           (org-zettel-ref-ref-entry-keywords ref-entry) new-keywords)
                     (org-zettel-ref-db-update-ref-entry db ref-entry)
-                    (org-zettel-ref-db-save db org-zettel-ref-db-file)
+                    (org-zettel-ref-db-save db)
                     (set-visited-file-name new-file-path)
                     (set-buffer-modified-p nil)
                     (message "File renamed from %s to %s"
@@ -432,12 +456,14 @@ Returns nil if no changes needed, or new filepath if changes required."
                              (file-name-nondirectory new-file-path)))
                 (error
                  (message "Error during rename: %s" (error-message-string err))))
-              (run-with-timer 0.5 nil #'org-zettel-ref-watch-directory)))))))
+              (run-with-timer 0.5 nil #'org-zettel-ref-watch-directory))))))))
 
 ;;------------------------------------------------------------------
 ;; Initialization
 ;;------------------------------------------------------------------
 
+
+;;;###autoload
 (defun org-zettel-ref-init ()
   "Initialize org-zettel-ref-mode."
   (interactive)
@@ -502,7 +528,7 @@ Return (ref-entry . overview-file) pair."
               (org-zettel-ref-db-add-overview-entry db new-entry)
               (org-zettel-ref-db-add-map db ref-id (org-zettel-ref-overview-entry-id new-entry))
               new-file)))
-    (org-zettel-ref-db-save db org-zettel-ref-db-file)
+    (org-zettel-ref-db-save db)
     (cons ref-entry overview-file)))
 
 (defun org-zettel-ref-setup-overview-window (overview-file buffer-name)
@@ -574,7 +600,7 @@ Returns the overview buffer."
   `(let ((db (org-zettel-ref-ensure-db)))
      (unwind-protect
          (progn ,@body
-                (org-zettel-ref-db-save db org-zettel-ref-db-file))
+                (org-zettel-ref-db-save db))
        (setf (org-zettel-ref-db-dirty db) t))))
 
 (defun org-zettel-ref-db--around-dired-do-rename (orig-fun &optional arg)
@@ -603,7 +629,7 @@ ARG is the prefix argument."
                                (remhash old-file (org-zettel-ref-db-ref-paths db))
                                (puthash new-file ref-id (org-zettel-ref-db-ref-paths db))
                                (org-zettel-ref-db-update-ref-entry db ref-entry)
-                               (org-zettel-ref-db-save db org-zettel-ref-db-file)
+                               (org-zettel-ref-db-save db)
                                (message "Updated database for reference file rename: %s -> %s" 
                                       old-file new-file)))
                           (error
@@ -620,7 +646,7 @@ ARG is the prefix argument."
                                (remhash old-file (org-zettel-ref-db-overview-paths db))
                                (puthash new-file overview-id (org-zettel-ref-db-overview-paths db))
                                (org-zettel-ref-db-update-overview-entry db overview-entry)
-                               (org-zettel-ref-db-save db org-zettel-ref-db-file)
+                               (org-zettel-ref-db-save db)
                                (message "Updated database for overview file rename: %s -> %s" 
                                       old-file new-file)))
                           (error
@@ -628,7 +654,7 @@ ARG is the prefix argument."
                                    old-file new-file (error-message-string err))))))))))
     
     ;; Save database
-    (org-zettel-ref-db-save db org-zettel-ref-db-file)))
+    (org-zettel-ref-db-save db))
 
 (defun org-zettel-ref-db--around-dired-do-delete (orig-fun &optional arg)
   "Handle database updates during dired delete.
@@ -684,7 +710,7 @@ ARG is the prefix argument."
     (funcall orig-fun arg)
     
     ;; Save database
-    (org-zettel-ref-db-save db org-zettel-ref-db-file)))
+    (org-zettel-ref-db-save db)))
 
 ;; Rename handling
 (advice-remove 'dired-do-rename #'org-zettel-ref-db--around-dired-do-rename)
