@@ -193,7 +193,7 @@ But keep both source and overview buffers when user is switching between them."
 ;;------------------------------------------------------------------
 
 (defun org-zettel-ref-sync-overview ()
-  "使用高亮系统同步当前 buffer 到 overview 文件."
+  "Synchronize the current buffer to the overview file."
   (interactive)
   (when (and org-zettel-ref-overview-file
              (file-exists-p org-zettel-ref-overview-file))
@@ -207,7 +207,7 @@ But keep both source and overview buffers when user is switching between them."
     (let ((highlights '())
           (notes '()))
       
-      ;; 收集所有高亮和笔记
+      ;; collect all the highlights
       (save-excursion
         (goto-char (point-min))
         (while (re-search-forward org-zettel-ref-highlight-regexp nil t)
@@ -236,128 +236,66 @@ But keep both source and overview buffers when user is switching between them."
         "Sync complete - processed %d highlights" 
         (length highlights))
       
-      ;; 更新概览文件，添加错误处理以防解析失败
-      (condition-case err
-          (with-current-buffer (find-file-noselect org-zettel-ref-overview-file)
-            (org-with-wide-buffer
-             ;; 更新或添加每个高亮
-             (dolist (highlight (sort highlights
+      ;; Update the overview file
+      (with-current-buffer (find-file-noselect org-zettel-ref-overview-file)
+        (org-with-wide-buffer
+         ;; Update or add each highlight
+         (dolist (highlight (sort highlights
                                 (lambda (a b)
                                   (< (string-to-number (car a))
                                      (string-to-number (car b))))))
-               (let* ((ref (nth 0 highlight))
-                      (type (nth 1 highlight))
-                      (text (nth 2 highlight))
-                      (name (nth 3 highlight))
-                      (prefix (nth 4 highlight))
-                      (img-path (nth 5 highlight))
-                      (img-desc (nth 6 highlight))
-                      (heading-regexp (format "^\\* .* \\[\\[hl:%s\\]" ref))
-                      (property-regexp (format ":HL_ID: \\[\\[hl:%s\\]" ref))
-                      (found-in-property nil)
-                      (entry-found nil))
-                 
-                 (message "DEBUG: Processing entry - ref: %s, type: %s" ref type)
-                 
-                 ;; 检查是否存在对应的条目，添加错误处理
-                 (condition-case find-err
-                     (progn
-                       (goto-char (point-min))
-                       (if (re-search-forward heading-regexp nil t)
-                           ;; 在标题中找到
-                           (progn
-                             (setq entry-found t)
-                             (beginning-of-line))
-                         ;; 尝试在属性中查找
-                         (goto-char (point-min))
-                         (when (re-search-forward property-regexp nil t)
-                           (setq entry-found t)
-                           (setq found-in-property t)
-                           ;; 我们在属性抽屉中找到了匹配项，需要回到标题
-                           (condition-case heading-err
-                               (org-back-to-heading t)
-                             (error
-                              ;; 如果无法找到标题，创建一个新条目
-                              (setq entry-found nil)
-                              (message "Warning: Failed to locate proper heading for ref %s: %s" 
-                                      ref (error-message-string heading-err)))))))
-                   (error
-                    (message "Error finding entry for ref %s: %s" 
-                            ref (error-message-string find-err))
-                    (setq entry-found nil)))
-                 
-                 (condition-case update-err
-                     (if entry-found
-                         ;; 更新现有条目
-                         (progn
-                           ;; 更新标题
-                           (beginning-of-line)
-                           (let ((heading-end (line-end-position)))
-                             (delete-region (point) heading-end)
-                             (insert (format "* %s %s"
-                                            prefix
-                                            (if (string= type "image") 
-                                                (or img-desc "")
-                                                text))))
-                           
-                           ;; 检查属性抽屉是否存在
-                           (forward-line)
-                           (if (looking-at "^[ \t]*:PROPERTIES:")
-                               ;; 属性抽屉存在，更新 HL_ID 属性
-                               (let ((drawer-start (point))
-                                     (hl-id-found nil))
-                                 ;; 查找 HL_ID 属性或 :END: 标记
-                                 (while (and (not (looking-at "^[ \t]*:END:"))
-                                            (not (eobp)))
-                                   (when (looking-at "^[ \t]*:HL_ID:")
-                                     (setq hl-id-found t)
-                                     (beginning-of-line)
-                                     (delete-region (point) (line-end-position))
-                                     (insert (format ":HL_ID: [[hl:%s][hl-%s]]" ref ref)))
-                                   (forward-line))
-                                 
-                                 ;; 如果没有找到 HL_ID 属性，在 :END: 之前添加
-                                 (when (and (not hl-id-found) (looking-at "^[ \t]*:END:"))
-                                   (beginning-of-line)
-                                   (insert (format ":HL_ID: [[hl:%s][hl-%s]]\n" ref ref))))
-                             ;; 没有属性抽屉，添加一个
-                             (insert (format ":PROPERTIES:\n:HL_ID: [[hl:%s][hl-%s]]\n:END:\n" ref ref))))
-                       
-                       ;; 添加新条目
-                       (goto-char (point-max))
-                       (insert (format "\n* %s %s\n:PROPERTIES:\n:HL_ID: [[hl:%s][hl-%s]]\n:END:"
-                                     prefix
-                                     (if (string= type "image")
-                                         (or img-desc "")
-                                         text)
-                                     ref
-                                     ref)))
-                   (error
-                    (message "Error updating entry for ref %s: %s" 
-                            ref (error-message-string update-err))))
-                 
-                 ;; 处理图片特定内容
-                 (condition-case img-err
-                     (when (and (string= type "image") img-path)
-                       ;; 转到条目末尾（:END: 之后）
-                       (while (and (not (looking-at "^[ \t]*:END:"))
-                                  (not (eobp)))
-                         (forward-line))
-                       (when (looking-at "^[ \t]*:END:")
-                         (forward-line))
-                       
-                       ;; 检查图片是否已存在
-                       (unless (looking-at "\\(#\\+ATTR_ORG:.*\n\\)?\\[\\[file:")
-                         (insert "\n#+ATTR_ORG: :width 300\n")
-                         (insert (format "[[file:%s]]\n" img-path))))
-                   (error
-                    (message "Error processing image for ref %s: %s" 
-                            ref (error-message-string img-err))))))
+           (let* ((ref (nth 0 highlight))
+                  (type (nth 1 highlight))
+                  (text (nth 2 highlight))
+                  (name (nth 3 highlight))
+                  (prefix (nth 4 highlight))
+                  (img-path (nth 5 highlight))
+                  (img-desc (nth 6 highlight))
+                  (heading-regexp (format "^\\* .* \\[\\[hl:%s\\]" ref)))
              
-             ;; 保存更新后的文件
-             (save-buffer)))
-        (error
-         (message "Error in org-zettel-ref-sync-highlights: %s" (error-message-string err)))))))
+             (message "DEBUG: Processing entry - ref: %s, type: %s" ref type)
+             
+             ;; Check if the corresponding entry exists
+             (goto-char (point-min))
+             (if (re-search-forward heading-regexp nil t)
+                 ;; Update existing entry
+                 (progn
+                   ;; delete the whole entry and recreate it  
+                   (beginning-of-line)
+                   (let ((start (point)))
+                     ;; find the next heading or end of file
+                     (if (re-search-forward "^\\*" nil t)
+                         (beginning-of-line)
+                       (goto-char (point-max)))
+                     (delete-region start (point)))
+                   
+                   ;; insert the new entry with property drawer containing the link
+                   (insert (format "* %s\n:PROPERTIES:\n:HI_ID: [[hl:%s][hl-%s]]\n:END:\n%s"
+                                  (if (string= type "image") 
+                                      (or img-desc name)
+                                      text)
+                                  ref
+                                  ref
+                                  "")))
+               
+               ;; Add new entry
+               (goto-char (point-max))
+               (insert (format "\n* %s\n:PROPERTIES:\n:HI_ID: [[hl:%s][hl-%s]]\n:END:\n"
+                             (if (string= type "image")
+                                 (or img-desc name)
+                                 text)
+                             ref
+                             ref)))
+             
+             ;; Handle image specific content
+             (when (and (string= type "image") img-path)
+               ;; image content should be added after the properties drawer
+               (unless (looking-at "\\(#\\+ATTR_ORG:.*\n\\)?\\[\\[file:")
+                 (insert "\n#+ATTR_ORG: :width 300\n")
+                 (insert (format "[[file:%s]]\n" img-path))))))
+         
+         ;; Save the updated file
+         (save-buffer))))))
 
 ;;----------------------------------------------------------------
 ;; File namming
@@ -406,12 +344,9 @@ Returns nil if no changes needed, or new filepath if changes required."
               (org-zettel-ref-db-save db)
               (set-visited-file-name new-filepath)
               (set-buffer-modified-p nil))
-            (message "File renamed from %s to %s"
-                     (file-name-nondirectory file)
-                     (file-name-nondirectory new-filepath)))
         (error
          (message "Error during rename: %s" (error-message-string err))))
-      (run-with-timer 0.5 nil #'org-zettel-ref-watch-directory))))
+      (run-with-timer 0.5 nil #'org-zettel-ref-watch-directory)))))
 
 (defun org-zettel-ref-rename-source-file ()
   "Rename the current source file according to the standard format."
@@ -591,134 +526,7 @@ Returns the overview buffer."
         (insert (format "#+title: Overview - %s\n#+startup: showall\n#+filetags: :overview:\n\n" title))))
     overview-file))
 
-;;----------------------------------------------------------------------------
-;; Hooks
-;;----------------------------------------------------------------------------
 
-(defmacro org-zettel-ref-with-transaction (&rest body)
-  "Execute operations within a database transaction."
-  `(let ((db (org-zettel-ref-ensure-db)))
-     (unwind-protect
-         (progn ,@body
-                (org-zettel-ref-db-save db))
-       (setf (org-zettel-ref-db-dirty db) t))))
-
-(defun org-zettel-ref-db--around-dired-do-rename (orig-fun &optional arg)
-  "Handle database updates during dired rename.
-ORIG-FUN is the original `dired-do-rename' function.
-ARG is the prefix argument."
-  (let* ((marked-files (dired-get-marked-files))
-         (db (org-zettel-ref-ensure-db))
-         (ref-dir (expand-file-name org-zettel-ref-directory))
-         (overview-dir (expand-file-name org-zettel-ref-overview-directory)))
-    
-    ;; Execute the original function
-    (funcall orig-fun arg)
-    
-    ;; Get the new list of files
-    (let ((new-files (dired-get-marked-files)))
-      (cl-loop for old-file in marked-files
-               for new-file in new-files
-               do (progn
-                    (when (string-prefix-p ref-dir (expand-file-name old-file))
-                      (when-let* ((ref-id (gethash old-file (org-zettel-ref-db-ref-paths db))))
-                        (condition-case err
-                            (org-zettel-ref-with-transaction
-                             (when-let* ((ref-entry (gethash ref-id (org-zettel-ref-db-refs db))))
-                               (setf (org-zettel-ref-ref-entry-file-path ref-entry) new-file)
-                               (remhash old-file (org-zettel-ref-db-ref-paths db))
-                               (puthash new-file ref-id (org-zettel-ref-db-ref-paths db))
-                               (org-zettel-ref-db-update-ref-entry db ref-entry)
-                               (org-zettel-ref-db-save db)
-                               (message "Updated database for reference file rename: %s -> %s" 
-                                      old-file new-file)))
-                          (error
-                           (message "Failed to update database for reference file %s -> %s: %s"
-                                   old-file new-file (error-message-string err))))))
-                    
-                    (when (string-prefix-p overview-dir (expand-file-name old-file))
-                      (when-let* ((overview-id (gethash old-file (org-zettel-ref-db-overview-paths db))))
-                        (condition-case err
-                            (org-zettel-ref-with-transaction
-                             (when-let* ((overview-entry (gethash overview-id 
-                                                               (org-zettel-ref-db-overviews db))))
-                               (setf (org-zettel-ref-overview-entry-file-path overview-entry) new-file)
-                               (remhash old-file (org-zettel-ref-db-overview-paths db))
-                               (puthash new-file overview-id (org-zettel-ref-db-overview-paths db))
-                               (org-zettel-ref-db-update-overview-entry db overview-entry)
-                               (org-zettel-ref-db-save db)
-                               (message "Updated database for overview file rename: %s -> %s" 
-                                      old-file new-file)))
-                          (error
-                           (message "Failed to update database for overview file %s -> %s: %s"
-                                   old-file new-file (error-message-string err))))))))))
-    
-    ;; Save database
-    (org-zettel-ref-db-save db))
-
-(defun org-zettel-ref-db--around-dired-do-delete (orig-fun &optional arg)
-  "Handle database updates during dired delete.
-ORIG-FUN is the original `dired-do-delete' function.
-ARG is the prefix argument."
-  (let* ((marked-files (dired-get-marked-files))
-         (db (org-zettel-ref-ensure-db))
-         (ref-dir (expand-file-name org-zettel-ref-directory))
-         (overview-dir (expand-file-name org-zettel-ref-overview-directory)))
-    
-    ;; Check and process database first
-    (dolist (file marked-files)
-      (let ((full-path (expand-file-name file)))
-        (cond
-         ;; Process reference files
-         ((string-prefix-p ref-dir full-path)
-          (when-let* ((ref-id (gethash full-path (org-zettel-ref-db-ref-paths db))))
-            (condition-case err
-                (org-zettel-ref-with-transaction
-                 (when-let* ((ref-entry (gethash ref-id (org-zettel-ref-db-refs db))))
-                   (remhash ref-id (org-zettel-ref-db-refs db))
-                   (remhash full-path (org-zettel-ref-db-ref-paths db))
-                   (when-let* ((overview-id (gethash ref-id (org-zettel-ref-db-map db))))
-                     (remhash ref-id (org-zettel-ref-db-map db))
-                     (message "Removed ref entry and related mappings for: %s" file))
-                   (setf (org-zettel-ref-db-modified db) (current-time)
-                         (org-zettel-ref-db-dirty db) t)))
-              (error
-               (message "Failed to update database for deleted ref file %s: %s"
-                       file (error-message-string err))))))
-         
-         ;; Process overview files
-         ((string-prefix-p overview-dir full-path)
-          (when-let* ((overview-id (gethash full-path (org-zettel-ref-db-overview-paths db))))
-            (condition-case err
-                (org-zettel-ref-with-transaction
-                 (when-let* ((overview-entry (gethash overview-id 
-                                                     (org-zettel-ref-db-overviews db))))
-                   (remhash overview-id (org-zettel-ref-db-overviews db))
-                   (remhash full-path (org-zettel-ref-db-overview-paths db))
-                   (maphash (lambda (ref-id mapped-overview-id)
-                             (when (equal mapped-overview-id overview-id)
-                               (remhash ref-id (org-zettel-ref-db-map db))))
-                           (org-zettel-ref-db-map db))
-                   (message "Removed overview entry and related mappings for: %s" file)
-                   (setf (org-zettel-ref-db-modified db) (current-time)
-                         (org-zettel-ref-db-dirty db) t)))
-              (error
-               (message "Failed to update database for deleted overview file %s: %s"
-                       file (error-message-string err)))))))))
-    
-    ;; Execute the original delete function
-    (funcall orig-fun arg)
-    
-    ;; Save database
-    (org-zettel-ref-db-save db)))
-
-;; Rename handling
-(advice-remove 'dired-do-rename #'org-zettel-ref-db--around-dired-do-rename)
-(advice-add 'dired-do-rename :around #'org-zettel-ref-db--around-dired-do-rename)
-
-;; Delete handling
-(advice-remove 'dired-do-delete #'org-zettel-ref-db--around-dired-do-delete)
-(advice-add 'dired-do-delete :around #'org-zettel-ref-db--around-dired-do-delete)
 
 
 (provide 'org-zettel-ref-core)
