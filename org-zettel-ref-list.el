@@ -47,24 +47,13 @@
          ("Author" 20 t)
          ("Modified" 20 t)
          ("Keywords" 30 t)])
-  (setq tabulated-list-padding 2)
-  
-  ;; 确保设置默认排序键
-  (setq tabulated-list-sort-key (cons "Title" nil))
-  
-  ;; 初始化多级排序键
-  (setq org-zettel-ref-list-multi-sort-keys (list (cons "Title" nil)))
-  
-  ;; Add mouse support
+  (setq tabulated-list-padding 2)  
+  (setq tabulated-list-sort-key (cons "Modified" t))
+  (setq org-zettel-ref-list-multi-sort-keys (list (cons "Modified" t)))
   (make-local-variable 'mouse-face-highlight-property)
   (setq mouse-face-highlight-property 'highlight)
-  ;; Set up filter keybindings
   (when (fboundp 'org-zettel-ref-filter-setup-keybindings)
     (org-zettel-ref-filter-setup-keybindings org-zettel-ref-list-mode-map))
-  ;; Start file monitoring
-  ;;(org-zettel-ref-watch-directory)
-  ;; Stop monitoring when buffer is killed
-  ;;(add-hook 'kill-buffer-hook #'org-zettel-ref-unwatch-directory nil t)
   (tabulated-list-init-header)
   (org-zettel-ref-list-setup-sort-keybindings org-zettel-ref-list-mode-map))
 
@@ -122,15 +111,15 @@ Returns the column name as a string."
 
 (defun org-zettel-ref-list-ensure-valid-sort-keys ()
   "Ensure that sort keys are valid.
-If tabulated-list-sort-key is nil or invalid, reset it to default (Title)."
+If tabulated-list-sort-key is nil or invalid, reset it to default (Modified, newest first)."
   (unless (and tabulated-list-sort-key 
                (car tabulated-list-sort-key)
                (stringp (car tabulated-list-sort-key)))
 
-    (setq tabulated-list-sort-key (cons "Title" nil))
-    (setq org-zettel-ref-list-multi-sort-keys (list (cons "Title" nil)))
+    (setq tabulated-list-sort-key (cons "Modified" t))
+    (setq org-zettel-ref-list-multi-sort-keys (list (cons "Modified" t)))
     (setq tabulated-list-sort-key-function nil)
-    (message "Reset invalid sort key to default (Title)")))
+    (message "Reset invalid sort key to default (Modified, newest first)")))
 
 (defun org-zettel-ref-list-sort-by-column (&optional column)
   "Sort the list by COLUMN.
@@ -221,10 +210,10 @@ name and FLIP is non-nil if the sort order should be reversed."
   (interactive)
   (setq org-zettel-ref-list-multi-sort-keys nil)
   (setq tabulated-list-sort-key-function nil)
-  (setq tabulated-list-sort-key (cons "Title" nil))
+  (setq tabulated-list-sort-key (cons "Modified" t))
   (tabulated-list-sort)
   (goto-char (point-min))
-  (message "Reset to default sorting (by Title)"))
+  (message "Reset to default sorting (by Modified, newest first)"))
 
 (defun org-zettel-ref-list-save-sort-config (name)
   "Save current sort configuration with NAME."
@@ -881,7 +870,7 @@ ENTRY is the org-zettel-ref-entry struct."
 (define-key org-zettel-ref-list-mode-map (kbd "u") #'org-zettel-ref-unmark-file)
 (define-key org-zettel-ref-list-mode-map (kbd "D") #'org-zettel-ref-list-delete-marked-files)
 (define-key org-zettel-ref-list-mode-map (kbd "U") #'org-zettel-ref-unmark-all)
-(define-key org-zettel-ref-list-mode-map (kbd "/") nil)  ;; 清除现有绑定，使其成为前缀键
+(define-key org-zettel-ref-list-mode-map (kbd "/") nil)  
 (define-key org-zettel-ref-list-mode-map (kbd "/ r") #'org-zettel-ref-filter-by-regexp)
 (define-key org-zettel-ref-list-mode-map (kbd "/ c") #'org-zettel-ref-clear-all-filters)
 ;(define-key org-zettel-ref-list-mode-map (kbd "/ p") #'org-zettel-ref-filter-manage-presets)

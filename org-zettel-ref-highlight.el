@@ -610,4 +610,23 @@ Group 3: Content (for images including path and description)"
 
 (add-hook 'after-init-hook #'org-zettel-ref-highlight-initialize)
 
+(defun org-zettel-ref-reset-org-element-cache ()
+  "Reset the org-element cache for the current buffer."
+  (interactive)
+  (when (fboundp 'org-element-cache-reset)
+    (org-element-cache-reset)
+    (message "Org element cache has been reset for current buffer.")))
+
+(defun org-zettel-ref-ensure-org-element-cache ()
+  "Ensure the org-element cache is in a good state."
+  (condition-case err
+      (progn
+        (when (and (boundp 'org-element-use-cache)
+                   org-element-use-cache)
+          (org-element-cache-reset)))
+    (error
+     (message "Error resetting org-element cache: %s" (error-message-string err))
+     (when (boundp 'org-element-use-cache)
+       (setq-local org-element-use-cache nil)))))
+
 (provide 'org-zettel-ref-highlight)

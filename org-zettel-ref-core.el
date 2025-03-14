@@ -42,15 +42,15 @@ This mode indicates that the buffer is part of an org-zettel-ref pair."
   :group 'org-zettel-ref
   (if org-zettel-ref-minor-mode
       (progn
-        ;; 启用时的操作
+        (org-zettel-ref-ensure-org-element-cache)
         (org-zettel-ref-highlight-refresh)
         (add-hook 'after-save-hook #'org-zettel-ref-sync-highlights nil t)
         (add-hook 'after-change-functions #'org-zettel-ref-highlight-after-change nil t))
-    ;; 禁用时的操作
     (progn
       (remove-overlays nil nil 'org-zettel-ref-highlight t)
       (remove-hook 'after-save-hook #'org-zettel-ref-sync-highlights t)
-      (remove-hook 'after-change-functions #'org-zettel-ref-highlight-after-change t))))
+      (remove-hook 'after-change-functions #'org-zettel-ref-highlight-after-change t)
+      (org-zettel-ref-reset-org-element-cache))))
 
 
 ;;-------------------------
@@ -236,66 +236,86 @@ But keep both source and overview buffers when user is switching between them."
         "Sync complete - processed %d highlights" 
         (length highlights))
       
-      ;; Update the overview file
-      (with-current-buffer (find-file-noselect org-zettel-ref-overview-file)
-        (org-with-wide-buffer
-         ;; Update or add each highlight
-         (dolist (highlight (sort highlights
-                                (lambda (a b)
-                                  (< (string-to-number (car a))
-                                     (string-to-number (car b))))))
-           (let* ((ref (nth 0 highlight))
-                  (type (nth 1 highlight))
-                  (text (nth 2 highlight))
-                  (name (nth 3 highlight))
-                  (prefix (nth 4 highlight))
-                  (img-path (nth 5 highlight))
-                  (img-desc (nth 6 highlight))
-                  (heading-regexp (format "^\\* .* \\[\\[hl:%s\\]" ref)))
-             
-             (message "DEBUG: Processing entry - ref: %s, type: %s" ref type)
-             
-             ;; Check if the corresponding entry exists
-             (goto-char (point-min))
-             (if (re-search-forward heading-regexp nil t)
-                 ;; Update existing entry
-                 (progn
-                   ;; delete the whole entry and recreate it  
-                   (beginning-of-line)
-                   (let ((start (point)))
-                     ;; find the next heading or end of file
-                     (if (re-search-forward "^\\*" nil t)
-                         (beginning-of-line)
-                       (goto-char (point-max)))
-                     (delete-region start (point)))
+      ;; Update the overview file with cache handling
+      (let ((overview-buffer (find-file-noselect org-zettel-ref-overview-file)))
+        (with-current-buffer overview-buffer
+          ;; Disable org element cache before modifications
+          (when (boundp 'org-element-use-cache)
+            (let ((org-element-use-cache nil))
+              (org-with-wide-buffer
+               ;; Update or add each highlight
+               (dolist (highlight (sort highlights
+                                      (lambda (a b)
+                                        (< (string-to-number (car a))
+                                           (string-to-number (car b))))))
+                 (let* ((ref (nth 0 highlight))
+                        (type (nth 1 highlight))
+                        (text (nth 2 highlight))
+                        (name (nth 3 highlight))
+                        (prefix (nth 4 highlight))
+                        (img-path (nth 5 highlight))
+                        (img-desc (nth 6 highlight))
+                        (heading-regexp (format "^\\* .* \\[\\[hl:%s\\]" ref))
+                        (property-regexp (format ":HI_ID: \\[\\[hl:%s\\]" ref)))
                    
-                   ;; insert the new entry with property drawer containing the link
-                   (insert (format "* %s\n:PROPERTIES:\n:HI_ID: [[hl:%s][hl-%s]]\n:END:\n%s"
-                                  (if (string= type "image") 
-                                      (or img-desc name)
-                                      text)
-                                  ref
-                                  ref
-                                  "")))
-               
-               ;; Add new entry
-               (goto-char (point-max))
-               (insert (format "\n* %s\n:PROPERTIES:\n:HI_ID: [[hl:%s][hl-%s]]\n:END:\n"
-                             (if (string= type "image")
-                                 (or img-desc name)
-                                 text)
-                             ref
-                             ref)))
-             
-             ;; Handle image specific content
-             (when (and (string= type "image") img-path)
-               ;; image content should be added after the properties drawer
-               (unless (looking-at "\\(#\\+ATTR_ORG:.*\n\\)?\\[\\[file:")
-                 (insert "\n#+ATTR_ORG: :width 300\n")
-                 (insert (format "[[file:%s]]\n" img-path))))))
-         
-         ;; Save the updated file
-         (save-buffer))))))
+                   (message "DEBUG: Processing entry - ref: %s, type: %s" ref type)
+                   
+                   ;; Check if the corresponding entry exists by searching for property
+                   (goto-char (point-min))
+                   (if (or (re-search-forward heading-regexp nil t)
+                           (re-search-forward property-regexp nil t))
+                       ;; Entry exists - update only if needed
+                       (progn
+                         ;; Find the heading
+                         (org-back-to-heading t)
+                         ;; Get current heading text
+                         (let* ((heading-start (point))
+                                (heading-end (line-end-position))
+                                (current-heading (buffer-substring-no-properties heading-start heading-end))
+                                (display-text (if (string= type "image") 
+                                                 (or img-desc name)
+                                               text))
+                                (expected-heading (format "* %s %s"
+                                                        prefix
+                                                        display-text)))
+                           
+                           ;; Only update heading if it's different
+                           (unless (string-match-p (regexp-quote expected-heading) current-heading)
+                             (delete-region heading-start heading-end)
+                             (insert expected-heading))
+                           
+                           ;; For images, check if we need to update the image
+                           (when (and (string= type "image") img-path)
+                             ;; Move past properties drawer
+                             (org-end-of-meta-data t)
+                             ;; Check if image already exists
+                             (let ((has-image (looking-at "\\(#\\+ATTR_ORG:.*\n\\)?\\[\\[file:")))
+                               (unless has-image
+                                 ;; Add image if not present
+                                 (insert "\n#+ATTR_ORG: :width 300\n")
+                                 (insert (format "[[file:%s]]\n" img-path)))))))
+                     
+                     ;; Add new entry
+                     (goto-char (point-max))
+                     (insert (format "\n* %s %s\n:PROPERTIES:\n:HI_ID: [[hl:%s][hl-%s]]\n:END:\n"
+                                   prefix
+                                   (if (string= type "image")
+                                       (or img-desc name)
+                                     text)
+                                   ref
+                                   ref))
+                     
+                     ;; Handle image specific content for new entries
+                     (when (and (string= type "image") img-path)
+                       (insert "\n#+ATTR_ORG: :width 300\n")
+                       (insert (format "[[file:%s]]\n" img-path))))))))))
+          
+          ;; Reset org element cache after modifications
+          (when (fboundp 'org-element-cache-reset)
+            (org-element-cache-reset))
+          
+          ;; Save the updated file
+          (save-buffer)))))
 
 ;;----------------------------------------------------------------
 ;; File namming
