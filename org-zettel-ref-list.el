@@ -241,8 +241,7 @@ name and FLIP is non-nil if the sort order should be reversed."
 (define-key org-zettel-ref-list-mode-map (kbd "C-c C-s c") 'org-zettel-ref-list-clear-sort)
 (define-key org-zettel-ref-list-mode-map (kbd "C-c C-s s") 'org-zettel-ref-list-save-sort-config)
 (define-key org-zettel-ref-list-mode-map (kbd "C-c C-s l") 'org-zettel-ref-list-load-sort-config)
-(define-key org-zettel-ref-list-mode-map (kbd "C-c C-s g") 'org-zettel-ref-list-goto-column)
-(define-key org-zettel-ref-list-mode-map (kbd "C-c g") 'org-zettel-ref-list-goto-column)
+(define-key org-zettel-ref-list-mode-map (kbd "TAB") 'org-zettel-ref-list-goto-column)
 
 ;;;----------------------------------------------------------------------------
 ;;; File Name Parsing and Formatting

@@ -14,6 +14,8 @@ Invoke the command `M-x org-zettel-ref-init` to open the "Overview Window," disp
 6. Supports integration with knowledge management tools like org-roam and denote.
 7. Flexible file association mechanisms that support multiple knowledge management modes (Normal, Denote, Org-roam).
 8. Directly call external Python scripts from within Emacs to convert various document formats into org files.
+9. AI-powered summary generation: automatically generate concise summaries of your documents using GPT models.
+
 ** Demo
 As shown, the left window displays the original text, while the right window displays the overview.
 
@@ -336,6 +338,11 @@ Here are the main configurable variables for org-zettel-ref-mode:
 - `setq org-zettel-ref-overview-min-width 30`: Set the overview window minimum width
 - `setq org-zettel-ref-highlight-types`: Set text marking types and highlight styles
 - `setq org-zettel-ref-overview-image-directory="~/Documents/org-zettel-ref-images/"`: Set the image save path for overview notes
+- `setq org-zettel-ref-enable-ai-summary t`: Enable/disable AI-powered summary generation
+- `setq org-zettel-ref-ai-backend 'gptel`: Set the AI backend (currently only supports gptel)
+- `setq org-zettel-ref-ai-max-content-length 32000`: Maximum content length for AI summary generation
+- `setq org-zettel-ref-ai-stream t`: Enable/disable streaming responses from AI
+- `setq org-zettel-ref-ai-prompt "..."`: Customize the prompt template for summary generation
 
 ** FAQ
 
@@ -372,7 +379,14 @@ We welcome community contributions! Here are some ways you can get involved:
 - Share your experiences and tips for using org-zettel-ref-mode.
 
 ** Changlog
-*** Version 0.5.4 (2025-03-05)
+*** Version 0.5.6 (2025-03-20)
+  - Added: AI summary generation
+    - Added `org-zettel-ref-ai-generate-summary` command for manual summary generation
+    - Added `org-zettel-ref-ai-reset` command for resetting AI summary status
+    - Added `org-zettel-ref-enable-ai-summary` configuration variable for enabling/disabling AI summary generation
+    - Added `org-zettel-ref-ai-backend` configuration variable for selecting AI backend
+    
+*** Version 0.5.5 (2025-03-05)
   - Enhanced: Improved highlight synchronization mechanism
     - Changed highlight storage format from heading to property drawer
     - New format uses `:HL_ID:` property to store highlight links

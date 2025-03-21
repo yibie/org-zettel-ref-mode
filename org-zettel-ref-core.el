@@ -31,7 +31,6 @@ This mode indicates that the buffer is part of an org-zettel-ref pair."
   :init-value nil
   :lighter " Zettel"
   :keymap (let ((map (make-sparse-keymap)))
-            ;; 整合高亮功能的快捷键
             (define-key map (kbd "C-c h h") #'org-zettel-ref-highlight-region)
             (define-key map (kbd "C-c h r") #'org-zettel-ref-highlight-refresh)
             (define-key map (kbd "C-c h e") #'org-zettel-ref-highlight-edit)
@@ -98,6 +97,13 @@ For example, 0.3 means the overview window will take 30% of the source window wi
   :type 'integer
   :group 'org-zettel-ref)
 
+(defcustom org-zettel-ref-enable-ai-summary nil
+  "Enable AI summary generation feature.
+When enabled, summaries can be automatically generated for new notes
+and can be manually triggered with `org-zettel-ref-ai-generate-summary'."
+  :type 'boolean
+  :group 'org-zettel-ref)
+
 ;;------------------------------------------------------------------  
 ;; Variables
 ;;------------------------------------------------------------------
@@ -112,7 +118,10 @@ For example, 0.3 means the overview window will take 30% of the source window wi
   "The persistent database instance for org-zettel-ref.")
 
 (defvar-local org-zettel-ref-source-buffer nil
-  "存储当前高亮源文件的buffer.")
+  "store the source buffer.")
+
+(defvar org-zettel-ref-init-hook nil
+  "Hook run after `org-zettel-ref-init` completes successfully.")
 
 ;;------------------------------------------------------------------
 ;; Overview File Management
@@ -417,6 +426,7 @@ Returns nil if no changes needed, or new filepath if changes required."
 ;; Initialization
 ;;------------------------------------------------------------------
 
+ 
 
 ;;;###autoload
 (defun org-zettel-ref-init ()
@@ -454,7 +464,10 @@ Returns nil if no changes needed, or new filepath if changes required."
                                overview-buffer-name)))
           (org-zettel-ref-setup-buffers source-buffer overview-buffer)
           (setq org-zettel-ref-current-overview-buffer overview-buffer)
-          (setq org-zettel-ref-overview-file overview-file))))))
+          (setq org-zettel-ref-overview-file overview-file)
+          
+          ;; 运行hook让其他模块可以介入初始化过程
+          (run-hooks 'org-zettel-ref-init-hook))))))
 
 (defun org-zettel-ref-ensure-entry (source-buffer)
   "Ensure source-buffer has corresponding reference and overview entries.

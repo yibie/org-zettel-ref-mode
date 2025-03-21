@@ -9,6 +9,8 @@
 5. 提供快速标记功能, 快速高亮标记
 6. 支持与 org-roam 和 denote 等知识管理工具的集成
 7. 灵活的文件关联机制，支持多种知识管理模式（普通模式、Denote、Org-roam）
+8. 直接从 Emacs 中调用外部 Python 脚本，将各种文档格式转换为 org 文件
+9. AI 摘要生成：使用 GPT 模型自动生成文档的简洁摘要
 
 * Demo
 如题所示, 左边是窗口显示的是原文, 右边窗口显示的是概览.
@@ -322,7 +324,7 @@ org-zettel-ref-mode 现在支持直接通过 Emacs 调用外部 Python 脚本，
 
 - =setq org-zettel-ref-overview-directory "~/org-zettel-ref-overviews/"=: 设置概览文件存储目录
 - =setq org-zettel-ref-mode-type 'normal=: 设置模式类型（可选：'normal, 'denote, 'org-roam）
-+- =setq org-zettel-ref-include-empty-notes nil=: 设置是否包含空的快速笔记+
+- =setq org-zettel-ref-include-empty-notes nil=: 设置是否包含空的快速笔记
 - =setq org-zettel-ref-quick-markup-key "C-c m"=: 设置快速标记的快捷键
 - =setq org-zettel-ref-add-quick-note "C-c n"=: 设置快速笔记的快捷键
 - =setq org-zettel-ref-python-environment 'system=: 设置 Python 环境类型（可选：'system, 'conda, 'venv）
@@ -336,6 +338,11 @@ org-zettel-ref-mode 现在支持直接通过 Emacs 调用外部 Python 脚本，
 - =setq org-zettel-ref-overview-min-width 30=: 设置概览窗口最小宽度
 - =setq org-zettel-ref-highlight-types=: 设置标记文本的类型与高亮样式
 - =setq org-zettel-ref-overview-image-directory="~/Documents/org-zettel-ref-images/"=: 设置概览笔记中图片的保存路径
+- =setq org-zettel-ref-enable-ai-summary t=: 启用/禁用 AI 摘要生成功能
+- =setq org-zettel-ref-ai-backend 'gptel=: 设置 AI 后端（目前仅支持 gptel）
+- =setq org-zettel-ref-ai-max-content-length 32000=: AI 摘要生成的最大内容长度
+- =setq org-zettel-ref-ai-stream t=: 启用/禁用 AI 流式响应
+- =setq org-zettel-ref-ai-prompt "..."=: 自定义摘要生成的提示模板
 
 * 常见问题解答
 
@@ -364,7 +371,14 @@ A: 您可以使用 =M-x org-zettel-ref-check-roam-db= 命令来检查org-roam数
 如果问题持续存在，请通过 GitHub 仓库提交 issue，附上问题描述、重现步骤和调试日志。
 
 * 版本历史
-- v0.5.4 (2025-03-05)
+- v0.5.6 (2025-03-20)
+  - 增强：AI 摘要生成
+    - 添加 `org-zettel-ref-ai-generate-summary` 命令用于手动生成摘要
+    - 添加 `org-zettel-ref-ai-reset` 命令用于重置 AI 摘要状态
+    - 添加 `org-zettel-ref-enable-ai-summary` 配置变量用于启用/禁用 AI 摘要生成
+    - 添加 `org-zettel-ref-ai-backend` 配置变量用于选择 AI 后端
+
+- v0.5.5 (2025-03-05)
   - 增强：改进高亮同步机制
     - 将高亮存储格式从标题改为属性抽屉
     - 新格式使用 `:HL_ID:` 属性存储高亮链接
