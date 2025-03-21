@@ -91,6 +91,16 @@ Luhmann 有一个习惯, 是一边读, 一边记文献笔记. 他的书或者资
 在任何 org-mode 缓冲区中，运行：
 =M-x org-zettel-ref-init=
 
+** AI 摘要生成
+1. 自动生成：当打开新的源文件时，系统会自动生成摘要（如果启用了该功能）
+2. 手动生成：在源文件中运行 =M-x org-zettel-ref-ai-generate-summary=
+3. 重置状态：如果摘要生成过程中断，可以运行 =M-x org-zettel-ref-ai-reset= 重置状态
+
+注意：使用前请确保：
+1. 已安装并配置 gptel
+2. 已设置 =org-zettel-ref-enable-ai-summary= 为 =t=
+
+
 ** 清理源文件中的多余格式
 
 由于添加笔记的核心功能是在原文里添加 <<>> 目标链接(target link)，但很多资料转换成 org 格式之后, 会自带很多 <<>> 的文本。

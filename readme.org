@@ -106,6 +106,16 @@ Configuration Method:
 
 =(setq org-zettel-ref-mode-type 'normal) ; Options: 'normal, 'denote, 'org-roam)=
 
+*** AI Summary Generation
+1. Automatic Generation: When opening a new source file, the system will automatically generate a summary (if the feature is enabled)
+2. Manual Generation: Run =M-x org-zettel-ref-ai-generate-summary= in the source file
+3. Reset Status: If the summary generation process is interrupted, run =M-x org-zettel-ref-ai-reset= to reset the status
+
+Note: Before using, please ensure:
+1. gptel is installed and configured
+2. =org-zettel-ref-enable-ai-summary= is set to =t=
+
+
 *** Activating the Mode
 In any org-mode buffer, run:
 `M-x org-zettel-ref-init`
