@@ -81,6 +81,9 @@ Other database modes may be supported in the future."
   "The current mode type for org-zettel-ref.
 Can be 'org-roam, 'denote, or nil for standalone mode.")
 
+(defvar org-zettel-ref-db nil
+  "The global database instance for org-zettel-ref.")
+
 ;;;----------------------------------------------------------------------------
 ;;; Database Structures
 ;;;----------------------------------------------------------------------------
@@ -99,35 +102,38 @@ Can be 'org-roam, 'denote, or nil for standalone mode.")
   (dirty nil))                        ; Whether there are unsaved changes
 
 ;; 2. Reference entry structure
-(cl-defstruct org-zettel-ref-ref-entry
+(cl-defstruct (org-zettel-ref-ref-entry
+               (:constructor org-zettel-ref-ref-entry-create)
+               (:copier org-zettel-ref-ref-entry-copy))
   "Reference entry structure."
-  id                                  ; Reference ID
-  file-path                          ; File path
-  title                              ; Title
-  author                             ; Author
-  keywords                           ; Keywords list
-  created                            ; Creation time
-  modified)                          ; Modified time
+  (id nil :type string)                                  ; Reference ID
+  (file-path nil :type string)                          ; File path
+  (title nil :type string)                              ; Title
+  (author nil :type string)                             ; Author
+  (keywords nil :type list)                           ; Keywords list
+  (created nil)                            ; Creation time
+  (modified nil)                           ; Modified time
+  (read-status 'unread :type symbol)              ; Reading status: unread, reading, done
+  (rating 0 :type number))                        ; Rating: 0-5 stars
 
 ;; 3. Overview entry structure
-(cl-defstruct org-zettel-ref-overview-entry
+(cl-defstruct (org-zettel-ref-overview-entry
+               (:constructor org-zettel-ref-overview-entry-create)
+               (:copier org-zettel-ref-overview-entry-copy))
   "Overview entry structure."
-  id                                  ; Overview ID
-  ref-id                              ; Corresponding reference ID
-  file-path                           ; File path
-  title                               ; Title
-  created                             ; Creation time
-  modified                            ; Modified time
-)
+  (id nil :type string)                ; Overview ID
+  (ref-id nil :type string)           ; Corresponding reference ID
+  (file-path nil :type string)        ; File path
+  (title nil :type string)            ; Title
+  (created nil)                       ; Creation time
+  (modified nil))                     ; Modified time
+
 ;;;----------------------------------------------------------------------------
 ;;; Database Initialization
 ;;;----------------------------------------------------------------------------
 
 (defun org-zettel-ref-init-db ()
   "Initialize a new database with proper structure."
-  ;; Ensure the directory exists
-  (org-zettel-ref-ensure-directory)
-  
   ;; Create a new database instance
   (let ((db (make-org-zettel-ref-db
              :version "1.0"
@@ -154,10 +160,18 @@ Can be 'org-roam, 'denote, or nil for standalone mode.")
 (defun org-zettel-ref-ensure-db ()
   "Ensure the database is loaded. Create it if it doesn't exist."
   (unless org-zettel-ref-db
+    (message "DEBUG: Loading database from %s" org-zettel-ref-db-file)
     (setq org-zettel-ref-db
           (if (file-exists-p org-zettel-ref-db-file)
-              (org-zettel-ref-db-load org-zettel-ref-db-file)
-            (org-zettel-ref-init-db))))
+              (or (org-zettel-ref-db-load org-zettel-ref-db-file)
+                  (progn
+                    (message "DEBUG: Failed to load database, initializing new one")
+                    (org-zettel-ref-init-db)))
+            (progn
+              (message "DEBUG: Database file does not exist, creating new one")
+              (org-zettel-ref-init-db)))))
+  (unless org-zettel-ref-db
+    (error "Failed to initialize or load database"))
   org-zettel-ref-db)
 ;;;----------------------------------------------------------------------------
 ;;; Database Creation Functions
@@ -178,14 +192,16 @@ AUTHOR is the author, KEYWORDS is the keywords list."
             id (format "%s-%03d" base-id counter)))
     ;; Print debug information
     (message "DEBUG: Creating ref entry - ID: %s, Title: %s" id title)
-    (make-org-zettel-ref-ref-entry
+    (org-zettel-ref-ref-entry-create
      :id id
      :file-path file-path
      :title title
      :author author
      :keywords keywords
      :created now
-     :modified now)))
+     :modified now
+     :read-status 'unread
+     :rating 0)))
 
 (defun org-zettel-ref-db-create-overview-entry (db ref-id file-path &optional title)
   "Create a new overview entry.
@@ -193,7 +209,7 @@ DB is the database object, REF-ID is the corresponding reference ID,
 FILE-PATH is the file path, TITLE is the title."
   (let* ((id (format-time-string "%Y%m%dT%H%M%S"))
          (timestamp (current-time)))
-    (make-org-zettel-ref-overview-entry
+    (org-zettel-ref-overview-entry-create
      :id id
      :ref-id ref-id
      :file-path file-path
@@ -243,6 +259,16 @@ DB is the database object, ENTRY is the overview entry."
              (hash-table-count (org-zettel-ref-db-overviews db)))
     id))
 
+(defun org-zettel-ref-ref-entry-set-read-status (entry status)
+  "Set the read status of ENTRY to STATUS.
+STATUS should be one of: 'unread, 'reading, 'done."
+  (setf (org-zettel-ref-ref-entry-read-status entry) status))
+
+(defun org-zettel-ref-ref-entry-set-rating (entry rating)
+  "Set the rating of ENTRY to RATING.
+RATING should be a number between 0 and 5."
+  (setf (org-zettel-ref-ref-entry-rating entry) rating))
+  
 ;;;----------------------------------------------------------------------------
 ;;; Database Entry Operations: Ensure
 ;;;---------------------------------------------------------------------------- 
@@ -268,17 +294,30 @@ Return the reference entry object."
          (ref-id (org-zettel-ref-db-get-ref-id-by-path db file-path)))
     (if ref-id
         ;; Entry exists, return it
-        (org-zettel-ref-db-get-ref-entry db ref-id)
+        (let ((entry (org-zettel-ref-db-get-ref-entry db ref-id)))
+          ;; Only update metadata if provided
+          (when (or title author keywords)
+            (when title
+              (setf (org-zettel-ref-ref-entry-title entry) title))
+            (when author
+              (setf (org-zettel-ref-ref-entry-author entry) author))
+            (when keywords
+              (setf (org-zettel-ref-ref-entry-keywords entry) keywords))
+            ;; Save changes if any updates were made
+            (org-zettel-ref-db-update-ref-entry db entry))
+          entry)
       ;; Create new entry
       (let* ((new-id (org-zettel-ref-generate-id))
-             (entry (make-org-zettel-ref-ref-entry
+             (entry (org-zettel-ref-ref-entry-create
                     :id new-id
                     :file-path file-path
                     :title (or title (file-name-base file-path))
                     :author author
                     :keywords keywords
                     :created (current-time)
-                    :modified (current-time))))
+                    :modified (current-time)
+                    :read-status 'unread
+                    :rating 0)))
         ;; Add to database
         (puthash new-id entry (org-zettel-ref-db-refs db))
         (puthash file-path new-id (org-zettel-ref-db-ref-paths db))
@@ -454,6 +493,38 @@ Return the saved database object."
     (message "Database saved to %s" file)
     db))
 
+(defun org-zettel-ref-db-migrate-entries (db)
+  "Migrate old database entries to the new format.
+DB is the database object."
+  (let ((modified nil))
+    (maphash
+     (lambda (id entry)
+       (when (org-zettel-ref-ref-entry-p entry)
+         ;; Check if entry needs migration
+         (unless (and (slot-exists-p entry 'read-status)
+                     (slot-exists-p entry 'rating))
+           ;; Create a new entry with all fields
+           (let* ((new-entry (org-zettel-ref-ref-entry-create
+                             :id (org-zettel-ref-ref-entry-id entry)
+                             :file-path (org-zettel-ref-ref-entry-file-path entry)
+                             :title (org-zettel-ref-ref-entry-title entry)
+                             :author (org-zettel-ref-ref-entry-author entry)
+                             :keywords (org-zettel-ref-ref-entry-keywords entry)
+                             :created (org-zettel-ref-ref-entry-created entry)
+                             :modified (org-zettel-ref-ref-entry-modified entry)
+                             :read-status 'unread
+                             :rating 0)))
+             ;; Replace old entry with new one
+             (puthash id new-entry (org-zettel-ref-db-refs db))
+             (setq modified t)))))
+     (org-zettel-ref-db-refs db))
+    ;; Save if modified
+    (when modified
+      (setf (org-zettel-ref-db-modified db) (current-time)
+            (org-zettel-ref-db-dirty db) t)
+      (org-zettel-ref-db-save db))
+    modified))
+
 (defun org-zettel-ref-db-load (file)
   "Load the database from FILE.
 Return the database object or nil if loading fails."
@@ -485,6 +556,9 @@ Return the database object or nil if loading fails."
                       :overview-paths (or overview-paths (make-hash-table :test 'equal))
                       :modified timestamp
                       :dirty nil)))
+              
+              ;; Migrate old entries if needed
+              (org-zettel-ref-db-migrate-entries db)
               
               (message "DEBUG: Loaded database from %s" file)
               (message "DEBUG: Version: %s, ID Counter: %d"
@@ -863,3 +937,6 @@ Return the statistics result."
 
 (provide 'org-zettel-ref-db)
 ;;; org-zettel-ref-db.el ends here
+
+;; Setter functions for ref-entry fields
+

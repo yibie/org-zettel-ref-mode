@@ -45,6 +45,8 @@
   (setq tabulated-list-format
         [("Title" 60 t)
          ("Author" 20 t)
+         ("Status" 10 t)
+         ("Rating" 20 t)
          ("Modified" 20 t)
          ("Keywords" 30 t)])
   (setq tabulated-list-padding 2)  
@@ -364,6 +366,14 @@ name and FLIP is non-nil if the sort order should be reversed."
   "Title column definition."
   (list "Title" 50 t))
 
+(defun org-zettel-ref-column-status ()
+  "Status column definition."
+  (list "Status" 10 t))
+
+(defun org-zettel-ref-column-rating ()
+  "Rating column definition."
+  (list "Rating" 10 t))
+
 (defun org-zettel-ref-column-modified ()
   "Modified time column definition."
   (list "Modified" 20 t))
@@ -376,6 +386,8 @@ name and FLIP is non-nil if the sort order should be reversed."
   "Return a list of column definitions."
   (list (org-zettel-ref-column-title)
         (org-zettel-ref-column-author)
+        (org-zettel-ref-column-status)
+        (org-zettel-ref-column-rating)
         (org-zettel-ref-column-modified)
         (org-zettel-ref-column-keywords)))
 
@@ -397,10 +409,19 @@ ENTRY is the org-zettel-ref-entry struct."
            (title-with-props  ; Add file path property to title
             (propertize title
                        'file-path file-path
-                       'help-echo file-path)))
+                       'help-echo file-path))
+           (status-str (pcase (org-zettel-ref-ref-entry-read-status entry)
+                        ('unread "⚪")
+                        ('reading "🔵")
+                        ('done "✅")
+                        (_ "⚪")))
+           (rating (org-zettel-ref-ref-entry-rating entry))
+           (rating-str (make-string (or rating 0) ?⭐)))
       (vector
        title-with-props      ; Title (with file path property)
        (or (org-zettel-ref-ref-entry-author entry) "")
+       status-str           ; Status
+       rating-str          ; Rating
        (format-time-string "%Y-%m-%d %H:%M:%S"
                           (org-zettel-ref-ref-entry-modified entry))
        (if-let* ((keywords (org-zettel-ref-ref-entry-keywords entry)))
@@ -419,7 +440,21 @@ ENTRY is the org-zettel-ref-entry struct."
                 (parsed-info (org-zettel-ref-parse-filename file-name))
                 (author (nth 0 parsed-info))  
                 (title (nth 1 parsed-info))   
-                (keywords (nth 2 parsed-info)))
+                (keywords (nth 2 parsed-info))
+                ;; Safely get read-status with default value
+                (read-status (condition-case nil
+                               (org-zettel-ref-ref-entry-read-status entry)
+                             (error 'unread)))
+                (status-str (pcase read-status
+                            ('unread "⚪")
+                            ('reading "🔵")
+                            ('done "✅")
+                            (_ "⚪")))
+                ;; Safely get rating with default value
+                (rating (condition-case nil
+                           (org-zettel-ref-ref-entry-rating entry)
+                         (error 0)))
+                (rating-str (make-string (or rating 0) ?⭐)))
            (push (list file-path
                       (vector
                        ;; Title column 
@@ -431,6 +466,10 @@ ENTRY is the org-zettel-ref-entry struct."
                        (propertize 
                         (or author "")
                         'help-echo (format "Author: %s" (or author "Unknown")))
+                       ;; Status column
+                       status-str
+                       ;; Rating column
+                       rating-str
                        ;; Modified time column
                        (format-time-string "%Y-%m-%d %H:%M:%S"
                                          (org-zettel-ref-ref-entry-modified entry))
@@ -444,6 +483,9 @@ ENTRY is the org-zettel-ref-entry struct."
   "Check if OBJ is a valid ref-entry struct."
   (and (recordp obj)
        (eq (type-of obj) 'org-zettel-ref-ref-entry)))
+
+
+
 
 ;;;----------------------------------------------------------------------------
 ;;; List Operation: Mark
@@ -829,6 +871,46 @@ ENTRY is the org-zettel-ref-entry struct."
 
 
 ;;;----------------------------------------------------------------------------
+;;; List Panel Operations
+;;;----------------------------------------------------------------------------
+
+(defun org-zettel-ref-list-cycle-status ()
+  "Cycle through reading status for the current entry."
+  (interactive)
+  (let* ((file (org-zettel-ref-list-get-file-at-point))
+         (db (org-zettel-ref-ensure-db))
+         (ref-id (when file (org-zettel-ref-db-get-ref-id-by-path db file)))
+         (entry (when ref-id (org-zettel-ref-db-get-ref-entry db ref-id))))
+    (when entry
+      (let ((new-status (pcase (org-zettel-ref-ref-entry-read-status entry)
+                         ('unread 'reading)
+                         ('reading 'done)
+                         ('done 'unread)
+                         (_ 'unread))))
+        (org-zettel-ref-ref-entry-set-read-status entry new-status)
+        (org-zettel-ref-db-update-ref-entry db entry)
+        (org-zettel-ref-db-save db)
+        (org-zettel-ref-list-refresh)
+        (message "Reading status set to %s" new-status)))))
+
+(defun org-zettel-ref-list-set-rating (rating)
+  "Set rating for the current entry.
+RATING should be a number between 0 and 5."
+  (interactive "nRating (0-5): ")
+  (let* ((file (org-zettel-ref-list-get-file-at-point))
+         (db (org-zettel-ref-ensure-db))
+         (ref-id (when file (org-zettel-ref-db-get-ref-id-by-path db file)))
+         (entry (when ref-id (org-zettel-ref-db-get-ref-entry db ref-id))))
+    (when entry
+      (let ((new-rating (max 0 (min 5 rating))))  ; Ensure rating is between 0 and 5
+        (org-zettel-ref-ref-entry-set-rating entry new-rating)
+        (org-zettel-ref-db-update-ref-entry db entry)
+        (org-zettel-ref-db-save db)
+        (org-zettel-ref-list-refresh)
+        (message "Rating set to %d stars" new-rating)))))
+
+
+;;;----------------------------------------------------------------------------
 ;;; Interactive Menu System
 ;;;----------------------------------------------------------------------------
 
@@ -843,7 +925,9 @@ ENTRY is the org-zettel-ref-entry struct."
     ("unmark all" . org-zettel-ref-unmark-all)
     ("filter by regexp" . org-zettel-ref-filter-by-regexp)
     ("clear filters" . org-zettel-ref-clear-all-filters)
-    ("manage filter presets" . org-zettel-ref-filter-manage-presets))
+    ("manage filter presets" . org-zettel-ref-filter-manage-presets)
+    ("cycle status" . org-zettel-ref-list-cycle-status)
+    ("set rating" . org-zettel-ref-list-set-rating))
   "Available actions for reference list management.")
 
 (defun org-zettel-ref-list-menu ()
@@ -855,6 +939,15 @@ ENTRY is the org-zettel-ref-entry struct."
    (when action
       (call-interactively action))))
 
+(defun org-zettel-ref-list-setup-sort-keybindings (mode-map)
+  "Set up sort keybindings in MODE-MAP."
+  (define-key mode-map (kbd "S") 'org-zettel-ref-list-sort-by-column)
+  (define-key mode-map (kbd "M-S") 'org-zettel-ref-list-add-sort-column)
+  (define-key mode-map (kbd "C-c C-s c") 'org-zettel-ref-list-clear-sort)
+  (define-key mode-map (kbd "C-c C-s s") 'org-zettel-ref-list-save-sort-config)
+  (define-key mode-map (kbd "C-c C-s l") 'org-zettel-ref-list-load-sort-config)
+  (define-key mode-map (kbd "?") 'org-zettel-ref-list-help))      
+
 ;; Add menu key binding while keeping existing bindings
 (define-key org-zettel-ref-list-mode-map (kbd "C-c C-m") #'org-zettel-ref-list-menu)
 
@@ -865,6 +958,8 @@ ENTRY is the org-zettel-ref-entry struct."
 (define-key org-zettel-ref-list-mode-map (kbd "g") #'org-zettel-ref-list-refresh)
 (define-key org-zettel-ref-list-mode-map (kbd "d") #'org-zettel-ref-list-delete-file)
 (define-key org-zettel-ref-list-mode-map (kbd "k") #'org-zettel-ref-list-edit-keywords)
+(define-key org-zettel-ref-list-mode-map (kbd "R") #'org-zettel-ref-list-cycle-status)
+(define-key org-zettel-ref-list-mode-map (kbd "s") #'org-zettel-ref-list-set-rating)
 (define-key org-zettel-ref-list-mode-map (kbd "m") #'org-zettel-ref-mark-file)
 (define-key org-zettel-ref-list-mode-map (kbd "u") #'org-zettel-ref-unmark-file)
 (define-key org-zettel-ref-list-mode-map (kbd "D") #'org-zettel-ref-list-delete-marked-files)
@@ -1107,6 +1202,11 @@ Return a list of file paths."
     (princ "Org-Zettel-Ref List Mode Help\n")
     (princ "==========================\n\n")
     
+    (princ "READING STATUS AND RATING\n")
+    (princ "------------------------\n\n")
+    (princ "s - Cycle through reading status (unread -> reading -> done)\n")
+    (princ "R - Set rating (0-5 stars)\n\n")
+    
     (princ "FILTERING\n")
     (princ "---------\n\n")
     (princ "/ - Unified filter (recommended)\n")
@@ -1139,8 +1239,11 @@ Return a list of file paths."
     (princ "u - Unmark file\n")
     (princ "U - Unmark all files\n")
     (princ "x - Delete marked files\n")
+    (princ "R - Cycle reading status\n")
+    (princ "s - Set rating\n")
     (princ "g - Refresh list\n\n")
     
     (princ "For more information, see the documentation in the source code.")))
+
 
 (provide 'org-zettel-ref-list)
