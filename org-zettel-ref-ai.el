@@ -39,6 +39,15 @@
   "Summary generation status flag. Buffer-local variable.")
 
 ;; Core functions
+(defun org-zettel-ref-ai--get-org-title (buffer)
+  "Get the title from org BUFFER.
+Returns nil if no title is found."
+  (with-current-buffer buffer
+    (save-excursion
+      (goto-char (point-min))
+      (when (re-search-forward "^#\\+TITLE:\\s-*\\(.+\\)$" nil t)
+        (match-string-no-properties 1)))))
+
 (defun org-zettel-ref-ai--check-backend ()
   "Verify gptel backend configuration."
   (unless (featurep 'gptel)
@@ -191,10 +200,14 @@ Use prefix argument FORCE to force regeneration."
             (org-zettel-ref-ai--remove-summary overview-buffer))
           
           ;; Find insertion position and insert summary title
-          (let ((insert-pos (org-zettel-ref-ai--find-insert-position overview-buffer)))
+          (let ((insert-pos (org-zettel-ref-ai--find-insert-position overview-buffer))
+                (org-title (org-zettel-ref-ai--get-org-title source-buffer)))
             (save-excursion
               (goto-char insert-pos)
-              (insert "* Summary\n\n")
+              (insert (format "* Summary%s\n\n"
+                            (if org-title
+                                (format " - %s" org-title)
+                              "")))
               
               ;; Generate summary
               (condition-case err

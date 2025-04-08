@@ -123,6 +123,9 @@ and can be manually triggered with `org-zettel-ref-ai-generate-summary'."
 (defvar org-zettel-ref-init-hook nil
   "Hook run after `org-zettel-ref-init` completes successfully.")
 
+(defvar org-zettel-ref-db-initialized nil
+  "Flag indicating whether the database has been initialized.")
+
 ;;------------------------------------------------------------------
 ;; Overview File Management
 ;;------------------------------------------------------------------
@@ -426,77 +429,86 @@ Returns nil if no changes needed, or new filepath if changes required."
 ;; Initialization
 ;;------------------------------------------------------------------
 
- 
 
-;;;###autoload
+
 (defun org-zettel-ref-init ()
-  "Initialize org-zettel-ref-mode."
+  "Initialize org-zettel-ref for current buffer."
   (interactive)
-  (let* ((source-buffer (current-buffer))
-         (source-file (buffer-file-name source-buffer)))
-    (unless source-file
-      (user-error "Current buffer is not associated with a file"))
-    
+  (when (buffer-file-name)
     ;; 启用 minor-mode
     (org-zettel-ref-minor-mode 1)
     
-    ;; 设置 source-buffer
-    (setq-local org-zettel-ref-source-buffer source-buffer)
-    
-    ;; 其他初始化
-    (unless save-place-mode
-      (save-place-mode 1))
-    (org-zettel-ref-debug-message-category 'core "Starting initialization: %s" source-file)
-
-    ;; 初始化高亮功能
-    (org-zettel-ref-highlight-initialize-counter)
-    (org-zettel-ref-highlight-refresh)
-  
-    (let* ((entry-pair (org-zettel-ref-ensure-entry source-buffer))
-           (ref-entry (car entry-pair))
-           (overview-file (cdr entry-pair)))
-      
-      (when overview-file
-        (let* ((overview-buffer-name (format "*Overview: %s*" 
-                                           (file-name-base source-file)))
+    (let* ((source-buffer (current-buffer))
+           (entry-pair (org-zettel-ref-ensure-entry source-buffer)))
+      (when entry-pair
+        ;; 设置 buffer-local 变量
+        (setq-local org-zettel-ref-current-ref-entry (car entry-pair))
+        (setq-local org-zettel-ref-current-overview-file (cdr entry-pair))
+        
+        ;; 设置 overview window 和 buffer
+        (let* ((overview-file (cdr entry-pair))
+               (overview-buffer-name (format "*Overview: %s*" 
+                                          (file-name-base (buffer-file-name))))
                (overview-buffer (org-zettel-ref-setup-overview-window 
                                overview-file 
                                overview-buffer-name)))
+          
+          ;; 设置 buffers
           (org-zettel-ref-setup-buffers source-buffer overview-buffer)
           (setq org-zettel-ref-current-overview-buffer overview-buffer)
           (setq org-zettel-ref-overview-file overview-file)
           
-          ;; 运行hook让其他模块可以介入初始化过程
-          (run-hooks 'org-zettel-ref-init-hook))))))
+          ;; 初始化高亮
+          (org-zettel-ref-highlight-initialize-counter)
+          (org-zettel-ref-highlight-refresh)
+          
+          ;; 运行初始化 hook
+          (run-hooks 'org-zettel-ref-init-hook)
+          
+          (message "Initialized org-zettel-ref for %s" (buffer-name)))))))
 
 (defun org-zettel-ref-ensure-entry (source-buffer)
   "Ensure source-buffer has corresponding reference and overview entries.
 Return (ref-entry . overview-file) pair."
   (let* ((source-file (buffer-file-name source-buffer))
+         (abs-source-file (expand-file-name source-file))
          (db (org-zettel-ref-ensure-db))
-         (ref-entry (org-zettel-ref-db-ensure-ref-entry db source-file))
+         (ref-entry (org-zettel-ref-db-ensure-ref-entry db abs-source-file))
          (ref-id (org-zettel-ref-ref-entry-id ref-entry))
          (overview-id (org-zettel-ref-db-get-maps db ref-id))
          overview-file)
+    
+    ;; Ensure overview directory exists
+    (unless (file-exists-p org-zettel-ref-overview-directory)
+      (make-directory org-zettel-ref-overview-directory t))
+    
     (setq overview-file
           (if overview-id
-              (when-let* ((existing-overview (org-zettel-ref-db-get-overview-by-ref-id db ref-id))  
+              ;; Try to get existing overview file
+              (when-let* ((existing-overview (org-zettel-ref-db-get-overview-by-ref-id db ref-id))
                          (file-path (org-zettel-ref-overview-entry-file-path existing-overview)))
-                (when (file-exists-p file-path)
-                  file-path))
+                (if (file-exists-p file-path)
+                    file-path
+                  ;; If file doesn't exist but entry does, remove the entry
+                  (remhash overview-id (org-zettel-ref-db-overviews db))
+                  (remhash ref-id (org-zettel-ref-db-map db))
+                  nil))
+            ;; Create new overview file
             (let* ((title (org-zettel-ref-ref-entry-title ref-entry))
                    (overview-filename (org-zettel-ref-generate-filename title))
-                   (target-file (expand-file-name overview-filename org-zettel-ref-overview-directory))
-                   (new-file (org-zettel-ref-create-overview-file source-buffer target-file))
-                   (new-entry (org-zettel-ref-db-create-overview-entry 
-                             db
-                             ref-id 
-                             new-file
-                             title)))
-              (org-zettel-ref-db-add-overview-entry db new-entry)
-              (org-zettel-ref-db-add-map db ref-id (org-zettel-ref-overview-entry-id new-entry))
-              new-file)))
-    (org-zettel-ref-db-save db)
+                   (target-file (expand-file-name overview-filename org-zettel-ref-overview-directory)))
+              (unless (file-exists-p target-file)
+                (let ((new-file (org-zettel-ref-create-overview-file source-buffer target-file))
+                      (new-entry (org-zettel-ref-db-create-overview-entry 
+                                db
+                                ref-id 
+                                target-file
+                                title)))
+                  (org-zettel-ref-db-add-overview-entry db new-entry)
+                  (org-zettel-ref-db-add-map db ref-id (org-zettel-ref-overview-entry-id new-entry))
+                  (org-zettel-ref-db-save db)
+                  new-file))
+              target-file)))
     (cons ref-entry overview-file)))
 
 (defun org-zettel-ref-setup-overview-window (overview-file buffer-name)
