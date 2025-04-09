@@ -389,6 +389,17 @@ We welcome community contributions! Here are some ways you can get involved:
 - Share your experiences and tips for using org-zettel-ref-mode.
 
 ** Changlog
+*** Version 0.5.7 (2025-04-09)
+  - Enhanced: Added reading status and rating management in the `org-zettel-ref-list` panel
+    - New keybinding `R` to cycle reading status (unread -> reading -> done)
+    - New keybinding `s` to set rating (0-5 stars)
+    - Filename format now includes status and rating (`--status-rating.org`)
+    - Updated database structure to store status and rating
+  - Enhanced: Added overview file link management in the `org-zettel-ref-list` panel
+    - New keybinding `L` to link the current file to an overview file (create new or select existing)
+    - New keybinding `I` to show link information for the current file
+    - New keybinding `C-c C-u` to unlink the current file from its overview file
+  - Refactored: Improved filename parsing and formatting logic to accommodate new status and rating info
 *** Version 0.5.6 (2025-03-20)
   - Added: AI summary generation
     - Added `org-zettel-ref-ai-generate-summary` command for manual summary generation
