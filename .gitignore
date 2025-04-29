@@ -5,6 +5,7 @@ tmp/
 .venv/
 __pycache__/
 cursor-memory-bank/
+memory-bank/
 *.backup
 *.test
 org-zettel-ref-mode.el.backup2
