@@ -150,20 +150,26 @@ Luhmann 有一个习惯, 是一边读, 一边记文献笔记. 他的书或者资
 
 [[file:demo/org-zettel-ref-list-delete-file.gif]]
 
-删除单个文件 ("d")
-~M-x org-zettel-ref-list-delete-file~
-
+现在会提示选择删除类型：仅源文件、仅概览文件 或 两者都删。
 
 [[file:demo/org-zettel-ref-list-delete-marked-files.gif]]
-删除多个文件 ("D")
+
+Delete multiple marked files ("D")
 
 在列表里按下 "m" 标记多个文件, 然后执行 ~M-x org-zettel-ref-list-delete-marked-files~
 
+同样会提示选择删除类型（仅源文件、仅概览文件 或 两者都删）应用于所有标记的文件。
+
 如果标记的文件不对, 按下 "u" 即可清除标记状态, 按下 "U" 可以直接清除所有标记状态
+
+仅移除数据库记录 ("x")
+~M-x org-zettel-ref-list-remove-db-entries~
+从数据库索引中移除所选文件（或标记的文件）的记录，但不会从磁盘上删除实际文件。用于"取消跟踪"文件。
 
 5. 使用过滤器
 
 [[file:demo/org-zettel-ref-list-filter-by-regexp.gif]]
+
 简单过滤 ("/ r"): 使用 Author, Title, Keywords 作为过滤条件, 每次只能应用一个过滤条件
 ~M-x org-zettel-filter-by-regexp~
 
@@ -322,10 +328,13 @@ org-zettel-ref-mode 现在支持直接通过 Emacs 调用外部 Python 脚本，
 - =M-x org-zettel-ref-add-quick-note=: 在当前位置添加快速笔记
 - =M-x org-zettel-ref-sync-overview=: 手动同步概览文件
 - =M-x org-zettel-ref-quick-markup=: 快速为选中文本添加标记
-- =M-x org-zettel-ref-clean-multiple-targets=: 清理源文件中的多余标记
-- (新增) =M-x org-zettel-ref-list=: 打开源文件管理面板
-- (已弃用) =M-x org-zettel-ref-enable-auto-sync=: 启用自动同步
-- (已弃用)=M-x org-zettel-ref-disable-auto-sync=: 禁用自动同步
+- =M-x org-zettel-ref-clean-targets=: 清理源文件中的多余标记
+- =M-x org-zettel-ref-list=: 打开源文件管理面板
+- =M-x org-zettel-ref-list-delete-file=: 删除光标处文件（提示 源/概览/两者）
+- =M-x org-zettel-ref-list-delete-marked-files=: 删除标记文件（提示 源/概览/两者）
+- =M-x org-zettel-ref-list-remove-db-entries=: 仅移除选定数据库条目（保留文件）
+- =M-x org-zettel-ref-enable-auto-sync=: 启用自动同步
+- =M-x org-zettel-ref-disable-auto-sync=: 禁用自动同步
 - =M-x org-zettel-ref-check-roam-db=: 检查 org-roam 数据库状态
 - =M-x org-zettel-ref-run-python-script=: 运行指定的 Python 脚本
 
@@ -381,6 +390,10 @@ A: 您可以使用 =M-x org-zettel-ref-check-roam-db= 命令来检查org-roam数
 如果问题持续存在，请通过 GitHub 仓库提交 issue，附上问题描述、重现步骤和调试日志。
 
 * 版本历史
+- v0.5.8 (2025-04-29)
+  - 增强：概览文件头现在在创建时自动包含 `#+AUTHOR:` 和 `#+SOURCE_FILE:` 属性
+  - 增强：删除命令 (`d`, `D`) 在 `org-zettel-ref-list` 面板中现在提示选择性删除 (源文件仅, 概览文件仅, 两者)
+  - 新增：新命令 `org-zettel-ref-list-remove-db-entries` (`x` 在列表中) 用于仅移除数据库条目而不删除文件
 - v0.5.7 (2025-04-09)
   - 增强：在 `org-zettel-ref-list` 面板中增加阅读状态和评分管理
     - 新增快捷键 `R` 用于切换阅读状态 (未读 -> 阅读中 -> 完成)

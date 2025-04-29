@@ -130,13 +130,13 @@ and can be manually triggered with `org-zettel-ref-ai-generate-summary'."
 ;; Overview File Management
 ;;------------------------------------------------------------------
 
-(defun org-zettel-ref-create-overview-file (source-buffer target-file)
-  "Create overview file for SOURCE-BUFFER at TARGET-FILE."
+(defun org-zettel-ref-create-overview-file (source-buffer target-file ref-entry)
+  "Create overview file for SOURCE-BUFFER at TARGET-FILE using REF-ENTRY metadata."
   (unless (file-exists-p target-file)
     (pcase org-zettel-ref-mode-type
-      ('normal (org-zettel-ref-get-normal-overview source-buffer target-file))
-      ('denote (org-zettel-ref-get-overview-file-denote source-buffer target-file))
-      ('org-roam (org-zettel-ref-get-overview-file-org-roam source-buffer target-file))
+      ('normal (org-zettel-ref-get-normal-overview source-buffer target-file ref-entry))
+      ('denote (org-zettel-ref-get-overview-file-denote source-buffer target-file ref-entry))
+      ('org-roam (org-zettel-ref-get-overview-file-org-roam source-buffer target-file ref-entry))
       (_ (error "Unsupported org-zettel-ref-mode-type: %s" org-zettel-ref-mode-type))))
   target-file)
 
@@ -498,7 +498,7 @@ Return (ref-entry . overview-file) pair."
                    (overview-filename (org-zettel-ref-generate-filename title))
                    (target-file (expand-file-name overview-filename org-zettel-ref-overview-directory)))
               (unless (file-exists-p target-file)
-                (let ((new-file (org-zettel-ref-create-overview-file source-buffer target-file))
+                (let ((new-file (org-zettel-ref-create-overview-file source-buffer target-file ref-entry))
                       (new-entry (org-zettel-ref-db-create-overview-entry 
                                 db
                                 ref-id 
@@ -536,39 +536,54 @@ Returns the overview buffer."
 ;;------------------------------------------------------------------
 ;; Overview File Creation
 ;;------------------------------------------------------------------
-(defun org-zettel-ref-get-normal-overview (source-buffer overview-file)
-  "Create an overview file for SOURCE-BUFFER in normal mode."
-  (let* ((source-file (buffer-file-name source-buffer))
-         (title (file-name-base source-file))
-         (id (file-name-sans-extension 
-              (file-name-nondirectory 
-               (org-zettel-ref-generate-filename title)))))
+(defun org-zettel-ref-get-normal-overview (source-buffer overview-file ref-entry)
+  "Create an overview file for SOURCE-BUFFER in normal mode using REF-ENTRY metadata."
+  (let* ((title (org-zettel-ref-ref-entry-title ref-entry))
+         (source-file (org-zettel-ref-ref-entry-file-path ref-entry))
+         (author (org-zettel-ref-ref-entry-author ref-entry)))
     (unless (file-exists-p overview-file)
       (with-temp-file overview-file
-        (insert (format "#+TITLE: Overview - %s\n#+SOURCE_FILE: %s\n#+filetags: :overview:\n#+startup: showall\n\n" 
-                       title source-file))))
+        (insert (format "#+TITLE: Overview - %s\n" title))
+        (when author
+          (insert (format "#+AUTHOR: %s\n" author)))
+        (insert (format "#+SOURCE_FILE: %s\n" source-file))
+        (insert "#+filetags: :overview:\n")
+        (insert "#+startup: showall\n\n")))
     overview-file))
 
-(defun org-zettel-ref-get-overview-file-org-roam (source-buffer overview-file)
-  "Use org-roam mode to get or create an overview file for SOURCE-BUFFER."
-  (let* ((source-file (buffer-file-name source-buffer))
-         (title (file-name-base source-file))
+(defun org-zettel-ref-get-overview-file-org-roam (source-buffer overview-file ref-entry)
+  "Use org-roam mode to get or create an overview file for SOURCE-BUFFER using REF-ENTRY metadata."
+  (let* ((title (org-zettel-ref-ref-entry-title ref-entry))
+         (source-file (org-zettel-ref-ref-entry-file-path ref-entry))
+         (author (org-zettel-ref-ref-entry-author ref-entry))
          (org-id (org-id-new)))
     (unless (file-exists-p overview-file)
       (with-temp-file overview-file
-        (insert (format ":PROPERTIES:\n:ID:       %s\n:END:\n#+title: Overview - %s\n#+filetags: :overview:\n#+startup: showall\n\n" org-id title))))
+        (insert (format ":PROPERTIES:\n:ID:       %s\n:END:\n" org-id))
+        (insert (format "#+TITLE: Overview - %s\n" title))
+        (when author
+          (insert (format "#+AUTHOR: %s\n" author)))
+        (insert (format "#+SOURCE_FILE: %s\n" source-file))
+        (insert "#+filetags: :overview:\n")
+        (insert "#+startup: showall\n\n")))
     (when (and (featurep 'org-roam)
                (fboundp 'org-roam-db-update-file))
       (org-roam-db-update-file overview-file))
     overview-file))
 
-(defun org-zettel-ref-get-overview-file-denote (source-buffer overview-file)
-  "Get or create an overview file for SOURCE-BUFFER using Denote mode."
-  (let* ((source-file (buffer-file-name source-buffer))
-         (title (file-name-base source-file)))
+(defun org-zettel-ref-get-overview-file-denote (source-buffer overview-file ref-entry)
+  "Get or create an overview file for SOURCE-BUFFER using Denote mode and REF-ENTRY metadata."
+  (let* ((title (org-zettel-ref-ref-entry-title ref-entry))
+         (source-file (org-zettel-ref-ref-entry-file-path ref-entry))
+         (author (org-zettel-ref-ref-entry-author ref-entry)))
     (unless (file-exists-p overview-file)
       (with-temp-file overview-file
-        (insert (format "#+title: Overview - %s\n#+startup: showall\n#+filetags: :overview:\n\n" title))))
+        (insert (format "#+TITLE: Overview - %s\n" title))
+        (when author
+          (insert (format "#+AUTHOR: %s\n" author)))
+        (insert (format "#+SOURCE_FILE: %s\n" source-file))
+        (insert "#+filetags: :overview:\n")
+        (insert "#+startup: showall\n\n")))
     overview-file))
 
 

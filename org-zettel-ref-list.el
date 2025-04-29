@@ -826,72 +826,149 @@ ENTRY is the org-zettel-ref-entry struct."
 ;;;-------------------------------------------------------------------------- 
 ;;; File Operation: Delete  
 ;;;--------------------------------------------------------------------------
+
+;; Helper function to get overview path safely
+(defun org-zettel-ref-list--get-overview-file-path (db ref-id)
+  "Get the overview file path for REF-ID from DB."
+  (when-let* ((overview-id (org-zettel-ref-db-get-maps db ref-id))
+             (overview-entry (when overview-id (gethash overview-id (org-zettel-ref-db-overviews db)))))
+    (when overview-entry (org-zettel-ref-overview-entry-file-path overview-entry))))
+
+;; New helper function for deletion logic
+(defun org-zettel-ref-list--delete-item (source-file db deletion-type)
+  "Perform deletion based on DELETION-TYPE for SOURCE-FILE in DB.
+DELETION-TYPE can be 'source, 'overview, or 'both.
+Return a list indicating success/failure and type: (success-p type-deleted message).
+Example: (t 'source \"Deleted source file only.\") or (nil 'error \"Error message\")"
+  (let* ((ref-id (when source-file (org-zettel-ref-db-get-ref-id-by-path db source-file)))
+         (overview-file (when ref-id (org-zettel-ref-list--get-overview-file-path db ref-id)))
+         (overview-id (when ref-id (org-zettel-ref-db-get-maps db ref-id)))
+         (source-deleted nil)
+         (overview-deleted nil))
+
+    (unless ref-id
+      (return-from org-zettel-ref-list--delete-item (list nil 'error (format "No database entry for %s" source-file))))
+
+    (condition-case err
+        (progn
+          ;; --- Delete Source File and DB entries ---
+          (when (or (eq deletion-type 'source) (eq deletion-type 'both))
+            (message "DEBUG: Deleting source file: %s" source-file)
+            (delete-file source-file t) ; Use trash if available
+            (remhash source-file (org-zettel-ref-db-ref-paths db))
+            (remhash ref-id (org-zettel-ref-db-refs db))
+            ;; Remove map only if source is gone AND overview still exists
+            (when (and overview-id (not (eq deletion-type 'both)))
+              (remhash ref-id (org-zettel-ref-db-map db)))
+            (setq source-deleted t))
+
+          ;; --- Delete Overview File and DB entries ---
+          (when (and (or (eq deletion-type 'overview) (eq deletion-type 'both))
+                     overview-id overview-file)
+            (message "DEBUG: Deleting overview file: %s" overview-file)
+            (when (file-exists-p overview-file) (delete-file overview-file t)) ; Use trash if available
+            (remhash overview-file (org-zettel-ref-db-overview-paths db))
+            (remhash overview-id (org-zettel-ref-db-overviews db))
+            ;; Map entry definitely gone if overview is gone
+            (remhash ref-id (org-zettel-ref-db-map db))
+            (setq overview-deleted t))
+
+          ;; --- Determine Result ---
+          (cond
+           ((and source-deleted overview-deleted)
+            (list t 'both (format "Deleted source %s and overview %s" (file-name-nondirectory source-file) (when overview-file (file-name-nondirectory overview-file)))))
+           (source-deleted
+            (list t 'source (format "Deleted source file %s" (file-name-nondirectory source-file))))
+           (overview-deleted
+            (list t 'overview (format "Deleted overview file %s" (when overview-file (file-name-nondirectory overview-file)))))
+           (t (list nil 'none "No files were deleted."))))
+
+      ;; --- Error Handling ---
+      (error
+       (list nil 'error (format "Error during deletion for %s: %s" (file-name-nondirectory source-file) (error-message-string err)))))))
+
+
 (defun org-zettel-ref-list-delete-file ()
-  "Delete the currently selected file."
+  "Delete the source file, overview file, or both for the item at point."
   (interactive)
-  (let* ((file (org-zettel-ref-list-get-file-at-point))
+  (let* ((source-file (org-zettel-ref-list-get-file-at-point))
          (db (org-zettel-ref-ensure-db))
-         (ref-id (when file (org-zettel-ref-db-get-ref-id-by-path db file))))
-    (when (and file ref-id
-               (yes-or-no-p (format "Delete file %s? " file)))
-      ;; Delete mapping relationship
-      (when-let* ((overview-id (org-zettel-ref-db-get-maps db ref-id)))
-        (remhash ref-id (org-zettel-ref-db-map db))
-        (remhash overview-id (org-zettel-ref-db-overviews db)))
-      ;; Delete reference entry
-      (remhash ref-id (org-zettel-ref-db-refs db))
-      ;; Delete path index
-      (remhash file (org-zettel-ref-db-ref-paths db))
-      ;; Delete actual file
-      (condition-case err
-          (progn
-            (delete-file file)
-            (org-zettel-ref-db-save db)
-            (org-zettel-ref-list-refresh)
-            (message "File deleted successfully"))
-        (error
-         (message "Error deleting file %s: %s" 
-                 file (error-message-string err)))))))
+         (ref-id (when source-file (org-zettel-ref-db-get-ref-id-by-path db source-file)))
+         (overview-file (when ref-id (org-zettel-ref-list--get-overview-file-path db ref-id)))
+         (choices `(("Delete Source Only" . source)
+                   ,@(when overview-file '(("Delete Overview Only" . overview))) ; Conditionally add overview option
+                   ("Delete Both" . both)
+                   ("Cancel" . cancel)))
+         (prompt (format "Delete action for source '%s'%s? "
+                        (file-name-nondirectory source-file)
+                        (if overview-file (format " (overview '%s')" (file-name-nondirectory overview-file)) "")))
+         (action (completing-read prompt (mapcar #'car choices) nil t nil nil (caar choices))))
+
+    (when (and source-file ref-id) ; Ensure we have a valid item
+      (let* ((type (cdr (assoc action choices))))
+        (if (or (null type) (eq type 'cancel))
+            (message "Deletion cancelled.")
+          ;; Call the helper function
+          (let ((result (org-zettel-ref-list--delete-item source-file db type)))
+            (when (car result) ; If successful
+              (org-zettel-ref-db-save db) ; Save DB after successful deletion
+              (org-zettel-ref-list-refresh))
+            ;; Display result message from helper
+            (message (nth 2 result))))))))
+
 
 (defun org-zettel-ref-list-delete-marked-files ()
-  "Delete all marked files."
+  "Delete source, overview, or both for all marked files."
   (interactive)
   (let* ((files org-zettel-ref-marked-files)
          (file-count (length files))
          (db (org-zettel-ref-ensure-db))
-         (deleted 0))
-    (when (and files
-               (yes-or-no-p 
-                (format "Delete %d marked file%s? " 
-                        file-count
-                        (if (= file-count 1) "" "s"))))
+         (deleted-source 0)
+         (deleted-overview 0)
+         (deleted-both 0)
+         (errors 0)
+         (choices `(("Delete Source Only" . source)
+                   ("Delete Overview Only" . overview) ; Ask even if some don't have overviews
+                   ("Delete Both" . both)
+                   ("Cancel" . cancel)))
+         action type)
+
+    (unless files
+      (message "No files marked for deletion.")
+      (return-from org-zettel-ref-list-delete-marked-files))
+
+    ;; Ask for action once before the loop
+    (setq action (completing-read (format "Delete action for %d marked file%s? " file-count (if (= file-count 1) "" "s"))
+                                 (mapcar #'car choices) nil t nil nil (caar choices)))
+    (setq type (cdr (assoc action choices)))
+
+    (if (or (null type) (eq type 'cancel))
+        (message "Deletion cancelled.")
+      ;; Process each marked file with the chosen action
       (dolist (file files)
-        (when-let* ((ref-id (org-zettel-ref-db-get-ref-id-by-path db file))
-                         (ref-entry (org-zettel-ref-db-get-ref-entry db ref-id)))
-          ;; Delete mapping relationship
-          (when-let* ((overview-id (org-zettel-ref-db-get-maps db ref-id)))
-            (remhash ref-id (org-zettel-ref-db-map db))
-            (remhash overview-id (org-zettel-ref-db-overviews db)))
-          ;; Delete reference entry
-          (remhash ref-id (org-zettel-ref-db-refs db))
-          ;; Delete path index
-          (remhash file (org-zettel-ref-db-ref-paths db))
-          ;; Delete actual file
-          (condition-case err
-              (progn
-                (delete-file file)
-                (cl-incf deleted))
-            (error
-             (message "Error deleting file %s: %s" 
-                     file (error-message-string err)))))
-        ;; Save database
-        (org-zettel-ref-db-save db)
-        (when (called-interactively-p 'any)
-          (message "Deleted %d entries" deleted)))
-    (setq org-zettel-ref-marked-files nil)
-    (org-zettel-ref-list-refresh)
-    (message "Successfully deleted %d of %d files" 
-            deleted file-count))))
+        (let ((result (org-zettel-ref-list--delete-item file db type)))
+          (cond
+           ((not (car result)); Error occurred
+            (message (nth 2 result))
+            (cl-incf errors))
+           ((eq (cadr result) 'source)
+            (cl-incf deleted-source))
+           ((eq (cadr result) 'overview)
+            (cl-incf deleted-overview))
+           ((eq (cadr result) 'both)
+            (cl-incf deleted-both)))))
+
+      ;; Save DB once if any changes were potentially made
+      (when (> (+ deleted-source deleted-overview deleted-both errors) 0)
+         (org-zettel-ref-db-save db))
+
+      ;; Unmark and refresh
+      (setq org-zettel-ref-marked-files nil)
+      (org-zettel-ref-list-refresh)
+
+      ;; Report final outcome
+      (message "Deletion complete: %d source(s) only, %d overview(s) only, %d both, %d error(s)."
+               deleted-source deleted-overview deleted-both errors))))
 
 
 ;;;----------------------------------------------------------------------------
@@ -1060,6 +1137,7 @@ RATING should be a number between 0 and 5."
 (define-key org-zettel-ref-list-mode-map (kbd "m") #'org-zettel-ref-mark-file)
 (define-key org-zettel-ref-list-mode-map (kbd "u") #'org-zettel-ref-unmark-file)
 (define-key org-zettel-ref-list-mode-map (kbd "D") #'org-zettel-ref-list-delete-marked-files)
+(define-key org-zettel-ref-list-mode-map (kbd "x") #'org-zettel-ref-list-remove-db-entries)
 (define-key org-zettel-ref-list-mode-map (kbd "U") #'org-zettel-ref-unmark-all)
 (define-key org-zettel-ref-list-mode-map (kbd "L") #'org-zettel-ref-list-link-overview)
 (define-key org-zettel-ref-list-mode-map (kbd "I") #'org-zettel-ref-list-show-links)
@@ -1393,6 +1471,72 @@ Return a list of file paths."
        (message "Error removing file watch: %s" (error-message-string err))
        (setq-local org-zettel-ref-file-watch-descriptor nil)))))
 
+;;;--------------------------------------------------------------------------
+;;; Database Entry Removal (Without File Deletion)
+;;;--------------------------------------------------------------------------
+
+(defun org-zettel-ref-list--remove-db-entry-only (source-file db)
+  "Remove DB entries associated with SOURCE-FILE, leaving files intact.
+Returns t if entry was found and removed, nil otherwise."
+  (let* ((ref-id (when source-file (org-zettel-ref-db-get-ref-id-by-path db source-file)))
+         (overview-file (when ref-id (org-zettel-ref-list--get-overview-file-path db ref-id)))
+         (overview-id (when ref-id (org-zettel-ref-db-get-maps db ref-id))))
+
+    (if (not ref-id)
+        (progn
+          (message "DEBUG: No DB entry found for %s" source-file)
+          nil) ; Entry not found
+      (progn
+        (message "DEBUG: Removing DB entries for ref-id: %s (source: %s)" ref-id source-file)
+        ;; Remove from refs and ref-paths (guaranteed to exist if ref-id exists)
+        (remhash source-file (org-zettel-ref-db-ref-paths db))
+        (remhash ref-id (org-zettel-ref-db-refs db))
+
+        ;; Remove overview info if it exists
+        (when overview-id
+          (remhash overview-id (org-zettel-ref-db-overviews db)))
+        (when overview-file
+           (remhash overview-file (org-zettel-ref-db-overview-paths db)))
+        ;; Remove map entry if it exists
+        (when ref-id
+          (remhash ref-id (org-zettel-ref-db-map db)))
+        t)))) ; Indicate success
+
+(defun org-zettel-ref-list-remove-db-entries ()
+  "Remove database entries for the item at point or marked items.
+This command does NOT delete the actual source or overview files."
+  (interactive)
+  (let* ((db (org-zettel-ref-ensure-db))
+         (marked-files org-zettel-ref-marked-files)
+         (target-files (if marked-files
+                           marked-files
+                         (list (org-zettel-ref-list-get-file-at-point))))
+         (target-count (length target-files))
+         (removed-count 0)
+         (prompt-verb (if marked-files "marked items" "item at point")))
+
+    (unless target-files
+      (message "No item at point or marked.")
+      (return-from org-zettel-ref-list-remove-db-entries))
+
+    (when (yes-or-no-p (format "Remove %d database entr%s for %s (files will NOT be deleted)? "
+                               target-count
+                               (if (= target-count 1) "y" "ies")
+                               prompt-verb))
+      (dolist (file target-files)
+        (if (org-zettel-ref-list--remove-db-entry-only file db)
+            (cl-incf removed-count)
+          (message "Warning: Could not find or remove DB entry for %s" (file-name-nondirectory file))))
+
+      (when (> removed-count 0)
+        (org-zettel-ref-db-save db)
+        (when marked-files (setq org-zettel-ref-marked-files nil)) ; Clear marks if we removed them
+        (org-zettel-ref-list-refresh))
+
+      (message "Removed %d of %d database entries." removed-count target-count))))
+
+;; Add Keybinding (Example: C-c C-k) - Needs to be added where other keys are defined
+;; (define-key org-zettel-ref-list-mode-map (kbd "C-c C-k") #'org-zettel-ref-list-remove-db-entries)
 
 ;;;----------------------------------------------------------------------------
 ;;; Overview Link Management
@@ -1549,7 +1693,6 @@ Return a list of file paths."
     (princ "g - Refresh list\n\n")
     
     (princ "For more information, see the documentation in the source code.")))
-
 
 
 

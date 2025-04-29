@@ -172,10 +172,18 @@ Independently add one or more keywords to the source file.
 Delete a single file ("d")
 ~M-x org-zettel-ref-list-delete-file~
 
+Now prompts for deletion type: Source Only, Overview Only, or Both.
+
 [[file:demo/org-zettel-ref-list-delete-marked-files.gif]]
 
-Delete multiple files ("D")
+Delete multiple marked files ("D")
 Press "m" in the list to mark multiple files, then execute ~M-x org-zettel-ref-list-delete-marked-files~
+
+Also prompts for deletion type (Source Only, Overview Only, or Both) to apply to all marked files.
+
+Remove DB Entry Only ("x")
+~M-x org-zettel-ref-list-remove-db-entries~
+Removes the selected file(s) from the database index without deleting the actual file(s) from disk. Useful for untracking files.
 
 If the marked files are incorrect, press "u" to clear the marked status, and press "U" to clear all marked statuses.
 
@@ -322,7 +330,9 @@ Here are the main commands provided by org-zettel-ref-mode:
 - `M-x org-zettel-ref-add-quick-note`: Add a quick note at the current position
 - `M-x org-zettel-ref-sync-overview`: Manually sync the overview file
 - `M-x org-zettel-ref-quick-markup`: Quickly add markup to selected text
-- `M-x org-zettel-ref-clean-multiple-targets`: Clean up excess targets in the source file
+- `M-x org-zettel-ref-list-delete-file`: Delete file at point (prompts source/overview/both)
+- `M-x org-zettel-ref-list-delete-marked-files`: Delete marked files (prompts source/overview/both)
+- `M-x org-zettel-ref-list-remove-db-entries`: Remove selected database entries only (leaves files)
 - `M-x org-zettel-ref-enable-auto-sync`: Enable auto-sync
 - `M-x org-zettel-ref-disable-auto-sync`: Disable auto-sync
 - `M-x org-zettel-ref-check-roam-db`: Check org-roam database status
@@ -389,6 +399,10 @@ We welcome community contributions! Here are some ways you can get involved:
 - Share your experiences and tips for using org-zettel-ref-mode.
 
 ** Changlog
+*** Version 0.5.8 (2025-04-29)
+  - Enhanced: Overview file headers now automatically include `#+AUTHOR:` and `#+SOURCE_FILE:` properties upon creation.
+    - Enhanced: Deletion commands (`d`, `D`) in `org-zettel-ref-list` now prompt for selective deletion (Source Only, Overview Only, Both).
+    - Added: New command `org-zettel-ref-list-remove-db-entries` (`x` in list) to remove database entries without deleting files.
 *** Version 0.5.7 (2025-04-09)
   - Enhanced: Added reading status and rating management in the `org-zettel-ref-list` panel
     - New keybinding `R` to cycle reading status (unread -> reading -> done)
