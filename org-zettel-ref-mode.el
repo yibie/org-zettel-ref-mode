@@ -27,7 +27,7 @@
 (define-minor-mode org-zettel-ref-mode
   "Minor mode for managing reference notes in Org mode."
   :init-value nil
-  :lighter " ZettelRef"
+  :lighter " OrgZettelRef"
   :keymap (let ((map (make-sparse-keymap)))
             (define-key map (kbd org-zettel-ref-quick-markup-key) #'org-zettel-ref-quick-markup)
             map)

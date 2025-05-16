@@ -563,22 +563,25 @@ Group 3: Content (for images including path and description)"
 (defun org-zettel-ref-highlight-setup ()
   "Setup highlight system."
   (interactive)
-  ;; Ensure the variable is buffer-local
+  ;; 确保变量是 buffer-local
   (make-local-variable 'org-zettel-ref-highlight-counter)
-  ;; Validate configuration
+  ;; 验证配置
   (unless (org-zettel-ref-highlight-validate-types)
     (org-zettel-ref-debug-message-category 'highlight 
       "Warning: Invalid highlight types configuration"))
-  ;; Initialize counter
+  ;; 初始化计数器
   (org-zettel-ref-highlight-initialize-counter)
-  ;; Refresh display
+  ;; 刷新显示
   (org-zettel-ref-highlight-refresh)
-  ;; Display current configuration status
+  ;; 显示当前配置状态
   (org-zettel-ref-debug-message-category 'highlight 
     "Highlight system setup complete. Use M-x org-zettel-ref-highlight-debug-config to check configuration."))
-;; Add to main mode hook
-(add-hook 'org-mode-hook #'org-zettel-ref-highlight-setup)               
 
+;; 在初始化时设置高亮
+(defun org-zettel-ref--setup-highlight (buffer)
+  "Setup highlight for BUFFER."
+  (with-current-buffer buffer
+    (org-zettel-ref-highlight-setup)))
 
 (defun org-zettel-ref-highlight-validate-types ()
   "Validate highlight types configuration."
@@ -628,5 +631,7 @@ Group 3: Content (for images including path and description)"
      (message "Error resetting org-element cache: %s" (error-message-string err))
      (when (boundp 'org-element-use-cache)
        (setq-local org-element-use-cache nil)))))
+
+
 
 (provide 'org-zettel-ref-highlight)

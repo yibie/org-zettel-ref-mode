@@ -16,45 +16,8 @@
 (require 'org-zettel-ref-highlight)
 
 ;;-----------------------
-;; Minor Modey
-;;-----------------------
-
-(defvar org-zettel-ref-minor-mode-map
-  (let ((map (make-sparse-keymap)))
-    ;; Add shortcuts here
-    map)
-  "Keymap for `org-zettel-ref-minor-mode'.")
-
-(define-minor-mode org-zettel-ref-minor-mode
-  "Minor mode for org-zettel-ref buffers.
-This mode indicates that the buffer is part of an org-zettel-ref pair."
-  :init-value nil
-  :lighter " Zettel"
-  :keymap (let ((map (make-sparse-keymap)))
-            (define-key map (kbd "C-c h h") #'org-zettel-ref-highlight-region)
-            (define-key map (kbd "C-c h r") #'org-zettel-ref-highlight-refresh)
-            (define-key map (kbd "C-c h e") #'org-zettel-ref-highlight-edit)
-            (define-key map (kbd "C-c h n") #'org-zettel-ref-highlight-add-note)
-            (define-key map (kbd "C-c h N") #'org-zettel-ref-highlight-edit-note)
-            (define-key map (kbd "C-c C-r") #'org-zettel-ref-rename-source-file)
-            map)
-  :group 'org-zettel-ref
-  (if org-zettel-ref-minor-mode
-      (progn
-        (org-zettel-ref-ensure-org-element-cache)
-        (org-zettel-ref-highlight-refresh)
-        (add-hook 'after-save-hook #'org-zettel-ref-sync-highlights nil t)
-        (add-hook 'after-change-functions #'org-zettel-ref-highlight-after-change nil t))
-    (progn
-      (remove-overlays nil nil 'org-zettel-ref-highlight t)
-      (remove-hook 'after-save-hook #'org-zettel-ref-sync-highlights t)
-      (remove-hook 'after-change-functions #'org-zettel-ref-highlight-after-change t)
-      (org-zettel-ref-reset-org-element-cache))))
-
-
-;;-------------------------
 ;; Customization
-;;-------------------------
+;;-----------------------
 
 (defgroup org-zettel-ref nil
   "Customization group for org-zettel-ref."
@@ -126,6 +89,28 @@ and can be manually triggered with `org-zettel-ref-ai-generate-summary'."
 (defvar org-zettel-ref-db-initialized nil
   "Flag indicating whether the database has been initialized.")
 
+(defvar org-zettel-ref--active-buffers (make-hash-table :test 'equal)
+  "Hash table to store active buffers and their relations.")
+
+(defun org-zettel-ref--activate-buffer (buffer)
+  "Activate org-zettel-ref functionality for BUFFER."
+  (when (buffer-live-p buffer)
+    (with-current-buffer buffer
+      (setq-local org-zettel-ref--active t)
+      (puthash buffer t org-zettel-ref--active-buffers))))
+
+(defun org-zettel-ref--deactivate-buffer (buffer)
+  "Deactivate org-zettel-ref functionality for BUFFER."
+  (when (buffer-live-p buffer)
+    (with-current-buffer buffer
+      (setq-local org-zettel-ref--active nil))
+    (remhash buffer org-zettel-ref--active-buffers)))
+
+(defun org-zettel-ref--is-active-buffer (buffer)
+  "Check if BUFFER is an active org-zettel-ref buffer."
+  (and (buffer-live-p buffer)
+       (gethash buffer org-zettel-ref--active-buffers)))
+
 ;;------------------------------------------------------------------
 ;; Overview File Management
 ;;------------------------------------------------------------------
@@ -150,7 +135,8 @@ But keep both source and overview buffers when user is switching between them."
         (when (buffer-live-p buffer)
           (with-current-buffer buffer
             ;; Check if it's an overview buffer
-            (when (and (local-variable-p 'org-zettel-ref-source-buffer)
+            (when (and (org-zettel-ref--is-active-buffer buffer)
+                       (local-variable-p 'org-zettel-ref-source-buffer)
                        org-zettel-ref-source-buffer
                        (buffer-live-p org-zettel-ref-source-buffer)
                        ;; 不要关闭 overview buffer 或者 source buffer
@@ -158,6 +144,9 @@ But keep both source and overview buffers when user is switching between them."
                        (not (or (eq buffer current-buffer) 
                                 (eq buffer org-zettel-ref-source-buffer)
                                 (eq current-buffer org-zettel-ref-source-buffer)))
+                       ;; 不要关闭正在被编辑的 overview buffer
+                       (not (and (eq buffer org-zettel-ref-current-overview-buffer)
+                                (window-dedicated-p window)))
                        org-zettel-ref-overview-file
                        (file-exists-p org-zettel-ref-overview-file))
               ;; Save if needed
@@ -166,13 +155,17 @@ But keep both source and overview buffers when user is switching between them."
               ;; Delete window and buffer
               (let ((buf (current-buffer)))
                 (delete-window window)  ;; 直接删除窗口，而不是切换buffer
-                (kill-buffer buf)))))))))
+                (kill-buffer buf)
+                (org-zettel-ref--deactivate-buffer buf)))))))))
 
 (defun org-zettel-ref-maybe-cleanup-overview ()
   "Only cleanup overview when appropriate conditions are met."
   (when (and (not (minibufferp))
              (not (window-minibuffer-p))
-             (not executing-kbd-macro))
+             (not executing-kbd-macro)
+             ;; 不要在其他 mode 切换时触发清理
+             (not (and (boundp 'org-zettel-ref-current-overview-buffer)
+                      (eq (current-buffer) org-zettel-ref-current-overview-buffer))))
     (org-zettel-ref-cleanup-overview)))
 
 (remove-hook 'window-configuration-change-hook #'org-zettel-ref-cleanup-overview)
@@ -191,33 +184,28 @@ But keep both source and overview buffers when user is switching between them."
 
 (defun org-zettel-ref-setup-buffers (source-buffer overview-buffer)
   "Setup SOURCE-BUFFER and OVERVIEW-BUFFER for org-zettel-ref."
-
   (with-current-buffer overview-buffer
-    (setq-local org-zettel-ref-source-buffer source-buffer)
-    (org-zettel-ref-minor-mode 1))
+    (setq-local org-zettel-ref-source-buffer source-buffer))
   
   (with-current-buffer source-buffer
-    (setq-local org-zettel-ref-source-buffer source-buffer)
-    (org-zettel-ref-minor-mode 1)))
+    (setq-local org-zettel-ref-source-buffer source-buffer)))
 
 ;;------------------------------------------------------------------
 ;; Synchronization
 ;;------------------------------------------------------------------
 
-(defun org-zettel-ref-sync-overview ()
-  "Synchronize the current buffer to the overview file."
-  (interactive)
-  (when (and org-zettel-ref-overview-file
-             (file-exists-p org-zettel-ref-overview-file))
-    (org-zettel-ref-sync-highlights)))
-
 (defun org-zettel-ref-sync-highlights ()
   "Synchronize all highlights to the overview file, using incremental update strategy."
   (interactive)
+  (message "DEBUG: Starting sync in buffer: %s" (buffer-name))
+  (message "DEBUG: Current overview file: %s" org-zettel-ref-overview-file)
+  (message "DEBUG: Current overview buffer: %s" org-zettel-ref-overview-buffer)
+  
   (when (and org-zettel-ref-overview-file
              (file-exists-p org-zettel-ref-overview-file))
     (let ((highlights '())
-          (notes '()))
+          (notes '())
+          (org-element-use-cache nil))  ; 全局禁用 cache
       
       ;; collect all the highlights
       (save-excursion
@@ -249,85 +237,94 @@ But keep both source and overview buffers when user is switching between them."
         (length highlights))
       
       ;; Update the overview file with cache handling
-      (let ((overview-buffer (find-file-noselect org-zettel-ref-overview-file)))
+      (let ((overview-buffer (or org-zettel-ref-overview-buffer
+                                (find-file-noselect org-zettel-ref-overview-file))))
+        (message "DEBUG: Using overview buffer: %s" overview-buffer)
         (with-current-buffer overview-buffer
-          ;; Disable org element cache before modifications
-          (when (boundp 'org-element-use-cache)
-            (let ((org-element-use-cache nil))
-              (org-with-wide-buffer
-               ;; Update or add each highlight
-               (dolist (highlight (sort highlights
-                                      (lambda (a b)
-                                        (< (string-to-number (car a))
-                                           (string-to-number (car b))))))
-                 (let* ((ref (nth 0 highlight))
-                        (type (nth 1 highlight))
-                        (text (nth 2 highlight))
-                        (name (nth 3 highlight))
-                        (prefix (nth 4 highlight))
-                        (img-path (nth 5 highlight))
-                        (img-desc (nth 6 highlight))
-                        (heading-regexp (format "^\\* .* \\[\\[hl:%s\\]" ref))
-                        (property-regexp (format ":HI_ID: \\[\\[hl:%s\\]" ref)))
-                   
-                   (message "DEBUG: Processing entry - ref: %s, type: %s" ref type)
-                   
-                   ;; Check if the corresponding entry exists by searching for property
-                   (goto-char (point-min))
-                   (if (or (re-search-forward heading-regexp nil t)
-                           (re-search-forward property-regexp nil t))
-                       ;; Entry exists - update only if needed
-                       (progn
-                         ;; Find the heading
-                         (org-back-to-heading t)
-                         ;; Get current heading text
-                         (let* ((heading-start (point))
-                                (heading-end (line-end-position))
-                                (current-heading (buffer-substring-no-properties heading-start heading-end))
-                                (display-text (if (string= type "image") 
-                                                 (or img-desc name)
-                                               text))
-                                (expected-heading (format "* %s %s"
-                                                        prefix
-                                                        display-text)))
-                           
-                           ;; Only update heading if it's different
-                           (unless (string-match-p (regexp-quote expected-heading) current-heading)
-                             (delete-region heading-start heading-end)
-                             (insert expected-heading))
-                           
-                           ;; For images, check if we need to update the image
-                           (when (and (string= type "image") img-path)
-                             ;; Move past properties drawer
-                             (org-end-of-meta-data t)
-                             ;; Check if image already exists
-                             (let ((has-image (looking-at "\\(#\\+ATTR_ORG:.*\n\\)?\\[\\[file:")))
-                               (unless has-image
-                                 ;; Add image if not present
-                                 (insert "\n#+ATTR_ORG: :width 300\n")
-                                 (insert (format "[[file:%s]]\n" img-path)))))))
+          (condition-case err
+              (progn
+                ;; 确保禁用 cache
+                (setq-local org-element-use-cache nil)
+                (when (fboundp 'org-element-cache-reset)
+                  (org-element-cache-reset))
+                
+                (org-with-wide-buffer
+                 ;; Update or add each highlight
+                 (dolist (highlight (sort highlights
+                                        (lambda (a b)
+                                          (< (string-to-number (car a))
+                                             (string-to-number (car b))))))
+                   (let* ((ref (nth 0 highlight))
+                          (type (nth 1 highlight))
+                          (text (nth 2 highlight))
+                          (name (nth 3 highlight))
+                          (prefix (nth 4 highlight))
+                          (img-path (nth 5 highlight))
+                          (img-desc (nth 6 highlight))
+                          (heading-regexp (format "^\\* .* \\[\\[hl:%s\\]" ref))
+                          (property-regexp (format ":HI_ID: \\[\\[hl:%s\\]" ref)))
                      
-                     ;; Add new entry
-                     (goto-char (point-max))
-                     (insert (format "\n* %s %s\n:PROPERTIES:\n:HI_ID: [[hl:%s][hl-%s]]\n:END:\n"
-                                   prefix
-                                   (if (string= type "image")
-                                       (or img-desc name)
-                                     text)
-                                   ref
-                                   ref))
+                     (message "DEBUG: Processing entry - ref: %s, type: %s" ref type)
                      
-                     ;; Handle image specific content for new entries
-                     (when (and (string= type "image") img-path)
-                       (insert "\n#+ATTR_ORG: :width 300\n")
-                       (insert (format "[[file:%s]]\n" img-path))))))))))
-          
-          ;; Reset org element cache after modifications
-          (when (fboundp 'org-element-cache-reset)
-            (org-element-cache-reset))
-          
-          ;; Save the updated file
-          (save-buffer)))))
+                     ;; Check if the corresponding entry exists by searching for property
+                     (goto-char (point-min))
+                     (if (or (re-search-forward heading-regexp nil t)
+                             (re-search-forward property-regexp nil t))
+                         ;; Entry exists - update only if needed
+                         (progn
+                           ;; Find the heading
+                           (org-back-to-heading t)
+                           ;; Get current heading text
+                           (let* ((heading-start (point))
+                                  (heading-end (line-end-position))
+                                  (current-heading (buffer-substring-no-properties heading-start heading-end))
+                                  (display-text (if (string= type "image") 
+                                                   (or img-desc name)
+                                                 text))
+                                  (expected-heading (format "* %s %s"
+                                                          prefix
+                                                          display-text)))
+                             
+                             ;; Only update heading if it's different
+                             (unless (string-match-p (regexp-quote expected-heading) current-heading)
+                               (delete-region heading-start heading-end)
+                               (insert expected-heading))
+                             
+                             ;; For images, check if we need to update the image
+                             (when (and (string= type "image") img-path)
+                               ;; Move past properties drawer
+                               (org-end-of-meta-data t)
+                               ;; Check if image already exists
+                               (let ((has-image (looking-at "\\(#\\+ATTR_ORG:.*\n\\)?\\[\\[file:")))
+                                 (unless has-image
+                                   ;; Add image if not present
+                                   (insert "\n#+ATTR_ORG: :width 300\n")
+                                   (insert (format "[[file:%s]]\n" img-path)))))))
+                       
+                       ;; Add new entry
+                       (goto-char (point-max))
+                       (insert (format "\n* %s %s\n:PROPERTIES:\n:HI_ID: [[hl:%s][hl-%s]]\n:END:\n"
+                                     prefix
+                                     (if (string= type "image")
+                                         (or img-desc name)
+                                       text)
+                                     ref
+                                     ref))
+                       
+                       ;; Handle image specific content for new entries
+                       (when (and (string= type "image") img-path)
+                         (insert "\n#+ATTR_ORG: :width 300\n")
+                         (insert (format "[[file:%s]]\n" img-path)))))))
+                
+                ;; Save the updated file
+                (save-buffer))
+            (error
+             (message "Error during sync: %s" (error-message-string err))
+             ;; 尝试恢复 cache 状态
+             (when (fboundp 'org-element-cache-reset)
+               (org-element-cache-reset)))))))))
+
+
 
 ;;----------------------------------------------------------------
 ;; File namming
@@ -429,38 +426,48 @@ Returns nil if no changes needed, or new filepath if changes required."
 ;; Initialization
 ;;------------------------------------------------------------------
 
-
-
 (defun org-zettel-ref-init ()
   "Initialize org-zettel-ref for current buffer."
   (interactive)
+  (message "DEBUG: Starting initialization for buffer: %s" (buffer-name))
   (when (buffer-file-name)
-    ;; 启用 minor-mode
-    (org-zettel-ref-minor-mode 1)
-    
     (let* ((source-buffer (current-buffer))
            (entry-pair (org-zettel-ref-ensure-entry source-buffer)))
+      (message "DEBUG: Got entry pair: %S" entry-pair)
       (when entry-pair
-        ;; 设置 buffer-local 变量
-        (setq-local org-zettel-ref-current-ref-entry (car entry-pair))
-        (setq-local org-zettel-ref-current-overview-file (cdr entry-pair))
-        
-        ;; 设置 overview window 和 buffer
         (let* ((overview-file (cdr entry-pair))
                (overview-buffer-name (format "*Overview: %s*" 
                                           (file-name-base (buffer-file-name))))
                (overview-buffer (org-zettel-ref-setup-overview-window 
                                overview-file 
                                overview-buffer-name)))
+          (message "DEBUG: Created overview buffer: %s" overview-buffer)
           
-          ;; 设置 buffers
-          (org-zettel-ref-setup-buffers source-buffer overview-buffer)
-          (setq org-zettel-ref-current-overview-buffer overview-buffer)
-          (setq org-zettel-ref-overview-file overview-file)
+          ;; 激活 buffers
+          (org-zettel-ref--activate-buffer source-buffer)
+          (org-zettel-ref--activate-buffer overview-buffer)
           
-          ;; 初始化高亮
-          (org-zettel-ref-highlight-initialize-counter)
-          (org-zettel-ref-highlight-refresh)
+          ;; 设置 buffer 关系
+          (with-current-buffer overview-buffer
+            (setq-local org-zettel-ref-source-buffer source-buffer)
+            (setq-local org-zettel-ref-overview-file overview-file)
+            (message "DEBUG: Set overview file in overview buffer: %s" org-zettel-ref-overview-file)
+            (setq org-zettel-ref-current-overview-buffer overview-buffer))
+          
+          (with-current-buffer source-buffer
+            (setq-local org-zettel-ref-current-ref-entry (car entry-pair))
+            (setq-local org-zettel-ref-overview-file overview-file)
+            (setq-local org-zettel-ref-overview-buffer overview-buffer)
+            (message "DEBUG: Set overview file in source buffer: %s" org-zettel-ref-overview-file))
+          
+          ;; 设置高亮
+          (with-current-buffer source-buffer
+            (org-zettel-ref-highlight-setup)
+            (add-hook 'after-save-hook #'org-zettel-ref-sync-highlights nil t)
+            (add-hook 'after-change-functions #'org-zettel-ref-highlight-after-change nil t))
+          
+          (with-current-buffer overview-buffer
+            (org-zettel-ref-highlight-setup))
           
           ;; 运行初始化 hook
           (run-hooks 'org-zettel-ref-init-hook)
@@ -470,6 +477,7 @@ Returns nil if no changes needed, or new filepath if changes required."
 (defun org-zettel-ref-ensure-entry (source-buffer)
   "Ensure source-buffer has corresponding reference and overview entries.
 Return (ref-entry . overview-file) pair."
+  (message "DEBUG: Ensuring entry for buffer: %s" (buffer-name source-buffer))
   (let* ((source-file (buffer-file-name source-buffer))
          (abs-source-file (expand-file-name source-file))
          (db (org-zettel-ref-ensure-db))
@@ -477,6 +485,10 @@ Return (ref-entry . overview-file) pair."
          (ref-id (org-zettel-ref-ref-entry-id ref-entry))
          (overview-id (org-zettel-ref-db-get-maps db ref-id))
          overview-file)
+    
+    (message "DEBUG: Source file: %s" source-file)
+    (message "DEBUG: Ref ID: %s" ref-id)
+    (message "DEBUG: Overview ID: %s" overview-id)
     
     ;; Ensure overview directory exists
     (unless (file-exists-p org-zettel-ref-overview-directory)
@@ -487,9 +499,11 @@ Return (ref-entry . overview-file) pair."
               ;; Try to get existing overview file
               (when-let* ((existing-overview (org-zettel-ref-db-get-overview-by-ref-id db ref-id))
                          (file-path (org-zettel-ref-overview-entry-file-path existing-overview)))
+                (message "DEBUG: Found existing overview file: %s" file-path)
                 (if (file-exists-p file-path)
                     file-path
                   ;; If file doesn't exist but entry does, remove the entry
+                  (message "DEBUG: Overview file doesn't exist, removing entry")
                   (remhash overview-id (org-zettel-ref-db-overviews db))
                   (remhash ref-id (org-zettel-ref-db-map db))
                   nil))
@@ -497,6 +511,7 @@ Return (ref-entry . overview-file) pair."
             (let* ((title (org-zettel-ref-ref-entry-title ref-entry))
                    (overview-filename (org-zettel-ref-generate-filename title))
                    (target-file (expand-file-name overview-filename org-zettel-ref-overview-directory)))
+              (message "DEBUG: Creating new overview file: %s" target-file)
               (unless (file-exists-p target-file)
                 (let ((new-file (org-zettel-ref-create-overview-file source-buffer target-file ref-entry))
                       (new-entry (org-zettel-ref-db-create-overview-entry 
@@ -509,6 +524,7 @@ Return (ref-entry . overview-file) pair."
                   (org-zettel-ref-db-save db)
                   new-file))
               target-file)))
+    (message "DEBUG: Final overview file: %s" overview-file)
     (cons ref-entry overview-file)))
 
 (defun org-zettel-ref-setup-overview-window (overview-file buffer-name)
@@ -531,6 +547,7 @@ Returns the overview buffer."
         (window-resize overview-window width-delta t)))
     ;; switch back to source window
     (select-window source-window)
+    (set-window-dedicated-p overview-window t)
     overview-buffer))
 
 ;;------------------------------------------------------------------
