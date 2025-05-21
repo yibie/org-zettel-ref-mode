@@ -67,6 +67,19 @@ and can be manually triggered with `org-zettel-ref-ai-generate-summary'."
   :type 'boolean
   :group 'org-zettel-ref)
 
+(defcustom org-zettel-ref-note-saving-style 'multi-file
+  "Determines how literature notes are saved.
+`single-file`: All notes are saved in a single Org file, with each reference as a top-level heading.
+`multi-file`: Each reference material has its own separate note file (overview file)."
+  :type '(choice (const :tag "Single File" single-file)
+                 (const :tag "Multi-File (One note file per reference)" multi-file))
+  :group 'org-zettel-ref)
+
+(defcustom org-zettel-ref-single-notes-file-path (expand-file-name "zettel-ref-notes.org" org-directory)
+  "The path to the single Org file used for storing all literature notes when `org-zettel-ref-note-saving-style` is set to `single-file`."
+  :type 'file
+  :group 'org-zettel-ref)
+
 ;;------------------------------------------------------------------  
 ;; Variables
 ;;------------------------------------------------------------------
@@ -238,91 +251,152 @@ But keep both source and overview buffers when user is switching between them."
       
       ;; Update the overview file with cache handling
       (let ((overview-buffer (or org-zettel-ref-overview-buffer
-                                (find-file-noselect org-zettel-ref-overview-file))))
-        (message "DEBUG: Using overview buffer: %s" overview-buffer)
+                                (find-file-noselect org-zettel-ref-overview-file)))
+            (current-source-ref-entry org-zettel-ref-current-ref-entry) ; Captured from source buffer context
+            source-doc-path)
+
+        (unless current-source-ref-entry
+          (error "org-zettel-ref-current-ref-entry is not set in source buffer %s" (buffer-name (org-zettel-ref-source-buffer)))
+          (cl-return-from org-zettel-ref-sync-highlights))
+
+        (setq source-doc-path (org-zettel-ref-ref-entry-file-path current-source-ref-entry))
+
+        (message "DEBUG: Syncing highlights for source: %s into overview file: %s (Style: %s)"
+                 source-doc-path org-zettel-ref-overview-file org-zettel-ref-note-saving-style)
+
         (with-current-buffer overview-buffer
           (condition-case err
               (progn
-                ;; 确保禁用 cache
                 (setq-local org-element-use-cache nil)
-                (when (fboundp 'org-element-cache-reset)
-                  (org-element-cache-reset))
-                
-                (org-with-wide-buffer
-                 ;; Update or add each highlight
-                 (dolist (highlight (sort highlights
-                                        (lambda (a b)
-                                          (< (string-to-number (car a))
-                                             (string-to-number (car b))))))
-                   (let* ((ref (nth 0 highlight))
-                          (type (nth 1 highlight))
-                          (text (nth 2 highlight))
-                          (name (nth 3 highlight))
-                          (prefix (nth 4 highlight))
-                          (img-path (nth 5 highlight))
-                          (img-desc (nth 6 highlight))
-                          (heading-regexp (format "^\\* .* \\[\\[hl:%s\\]" ref))
-                          (property-regexp (format ":HI_ID: \\[\\[hl:%s\\]" ref)))
-                     
-                     (message "DEBUG: Processing entry - ref: %s, type: %s" ref type)
-                     
-                     ;; Check if the corresponding entry exists by searching for property
-                     (goto-char (point-min))
-                     (if (or (re-search-forward heading-regexp nil t)
-                             (re-search-forward property-regexp nil t))
-                         ;; Entry exists - update only if needed
-                         (progn
-                           ;; Find the heading
-                           (org-back-to-heading t)
-                           ;; Get current heading text
-                           (let* ((heading-start (point))
-                                  (heading-end (line-end-position))
-                                  (current-heading (buffer-substring-no-properties heading-start heading-end))
-                                  (display-text (if (string= type "image") 
-                                                   (or img-desc name)
-                                                 text))
-                                  (expected-heading (format "* %s %s"
-                                                          prefix
-                                                          display-text)))
-                             
-                             ;; Only update heading if it's different
-                             (unless (string-match-p (regexp-quote expected-heading) current-heading)
-                               (delete-region heading-start heading-end)
-                               (insert expected-heading))
-                             
-                             ;; For images, check if we need to update the image
-                             (when (and (string= type "image") img-path)
-                               ;; Move past properties drawer
-                               (org-end-of-meta-data t)
-                               ;; Check if image already exists
-                               (let ((has-image (looking-at "\\(#\\+ATTR_ORG:.*\n\\)?\\[\\[file:")))
-                                 (unless has-image
-                                   ;; Add image if not present
+                (when (fboundp 'org-element-cache-reset) (org-element-cache-reset))
+
+                (if (eq org-zettel-ref-note-saving-style 'single-file)
+                    ;; --- Single-File Mode ---
+                    (let ((parsed (org-element-parse-buffer 'headline))
+                          target-heading-element)
+                      (dolist (el (org-element-contents parsed))
+                        (when (and (eq (org-element-type el) 'headline)
+                                   (= (org-element-property :level el) 1)
+                                   (string= (org-element-property :SOURCE_FILE el) source-doc-path))
+                          (setq target-heading-element el)
+                          (cl-return)))
+
+                      (if target-heading-element
+                          (org-with-wide-buffer
+                           (let ((target-heading-begin (org-element-property :begin target-heading-element))
+                                 (original-target-heading-end (org-element-property :end target-heading-element))
+                                 ;; We need a mutable end position because we might add new subheadings
+                                 (current-target-heading-section-end original-target-heading-end))
+                             (dolist (highlight (sort highlights (lambda (a b) (< (string-to-number (car a)) (string-to-number (car b))))))
+                               (let* ((hl-ref (nth 0 highlight))
+                                      (hl-type (nth 1 highlight))
+                                      (hl-text (nth 2 highlight))
+                                      (hl-name (nth 3 highlight))
+                                      (hl-prefix (nth 4 highlight))
+                                      (hl-img-path (nth 5 highlight))
+                                      (hl-img-desc (nth 6 highlight))
+                                      (hi-id-property-val (format "[[hl:%s]]" hl-ref))
+                                      (display-text (if (string= hl-type "image") (or hl-img-desc hl-name) hl-text))
+                                      existing-hl-subheading)
+
+                                 (message "DEBUG: [SF] Processing hl-ref: %s for HI_ID: %s" hl-ref hi-id-property-val)
+                                 
+                                 ;; Search for existing highlight subheading *only within the target H1's content*
+                                 (dolist (sub-el (org-element-contents target-heading-element))
+                                   (when (and (eq (org-element-type sub-el) 'headline)
+                                              (= (org-element-property :level sub-el) 2)
+                                              (string= (org-element-property :HI_ID sub-el) hi-id-property-val))
+                                     (setq existing-hl-subheading sub-el)
+                                     (message "DEBUG: [SF] Found existing sub-heading for HI_ID %s" hi-id-property-val)
+                                     (cl-return))))
+
+                                 (if existing-hl-subheading
+                                     (let* ((hl-subheading-begin (org-element-property :begin existing-hl-subheading))
+                                            (current-subheading-title (org-element-property :raw-value existing-hl-subheading))
+                                            (expected-subheading-title (format "%s %s" hl-prefix display-text)))
+                                       (goto-char hl-subheading-begin)
+                                       ;; Correctly get to the line of the title itself to change it
+                                       (beginning-of-line 2) ; Moves to the start of the line after the `**`
+                                       (let ((line-content-start (point)))
+                                         (end-of-line)
+                                         (let ((current-title-on-line (buffer-substring-no-properties line-content-start (point)))))
+                                         (unless (string-match-p (regexp-quote expected-subheading-title) current-title-on-line)
+                                           (message "DEBUG: [SF] Updating subheading title for %s" hi-id-property-val)
+                                           (delete-region line-content-start (point)) ; Delete only the title part
+                                           (insert expected-subheading-title) ; Insert new title part
+                                           (org-element-changed))) ; Mark element as changed
+                                         
+                                         (when (and (string= hl-type "image") hl-img-path)
+                                           (goto-char (org-element-property :end existing-hl-subheading)) ; Go to end of this H2
+                                           (org-end-of-meta-data t)
+                                           (unless (looking-at "[ \t]*\n\\(#\\+ATTR_ORG:.*\n\\)?\\[\\[file:")
+                                             (message "DEBUG: [SF] Adding image for %s" hi-id-property-val)
+                                             (goto-char (org-element-property :end existing-hl-subheading))
+                                             (unless (bolp) (insert "\n"))
+                                             (insert (format "#+ATTR_ORG: :width 300\n[[file:%s]]\n" hl-img-path))
+                                             (org-element-changed))))))
+                                   (progn
+                                     (message "DEBUG: [SF] Adding new sub-heading for HI_ID %s" hi-id-property-val)
+                                     ;; Go to the end of the current H1's content area to append a new H2
+                                     (goto-char current-target-heading-section-end)
+                                     (unless (bolp) (insert "\n"))
+                                     (insert (format "** %s %s\n:PROPERTIES:\n:HI_ID: %s\n:END:\n"
+                                                     hl-prefix display-text hi-id-property-val))
+                                     (when (and (string= hl-type "image") hl-img-path)
+                                       (insert (format "#+ATTR_ORG: :width 300\n[[file:%s]]\n" hl-img-path)))
+                                     (setq current-target-heading-section-end (point)) ; Update for next potential addition
+                                     (org-element-changed)))))))
+                             (save-buffer)))
+                        (message "WARN: [SF] No target heading found for source file %s in %s. Highlights not synced."
+                                 source-doc-path (buffer-name))))
+                  ;; --- Multi-File Mode (Existing Logic) ---
+                  (org-with-wide-buffer
+                   (dolist (highlight (sort highlights
+                                          (lambda (a b)
+                                            (< (string-to-number (car a))
+                                               (string-to-number (car b))))))
+                     (let* ((ref (nth 0 highlight))
+                            (type (nth 1 highlight))
+                            (text (nth 2 highlight))
+                            (name (nth 3 highlight))
+                            (prefix (nth 4 highlight))
+                            (img-path (nth 5 highlight))
+                            (img-desc (nth 6 highlight))
+                            (heading-regexp (format "^\\* .* \\[\\[hl:%s\\]" ref))
+                            (property-regexp (format ":HI_ID: \\[\\[hl:%s\\]" ref)))
+                       
+                       (message "DEBUG: [MF] Processing entry - ref: %s, type: %s" ref type)
+                       (goto-char (point-min))
+                       (if (or (re-search-forward heading-regexp nil t)
+                               (re-search-forward property-regexp nil t))
+                           (progn
+                             (org-back-to-heading t)
+                             (let* ((heading-start (point))
+                                    (heading-end (line-end-position))
+                                    (current-heading (buffer-substring-no-properties heading-start heading-end))
+                                    (display-text (if (string= type "image") (or img-desc name) text))
+                                    (expected-heading (format "* %s %s" prefix display-text)))
+                               (unless (string-match-p (regexp-quote expected-heading) current-heading)
+                                 (delete-region heading-start heading-end)
+                                 (insert expected-heading))
+                               (when (and (string= type "image") img-path)
+                                 (org-end-of-meta-data t)
+                                 (unless (looking-at "\\(#\\+ATTR_ORG:.*\n\\)?\\[\\[file:")
                                    (insert "\n#+ATTR_ORG: :width 300\n")
                                    (insert (format "[[file:%s]]\n" img-path)))))))
-                       
-                       ;; Add new entry
-                       (goto-char (point-max))
-                       (insert (format "\n* %s %s\n:PROPERTIES:\n:HI_ID: [[hl:%s][hl-%s]]\n:END:\n"
-                                     prefix
-                                     (if (string= type "image")
-                                         (or img-desc name)
-                                       text)
-                                     ref
-                                     ref))
-                       
-                       ;; Handle image specific content for new entries
-                       (when (and (string= type "image") img-path)
-                         (insert "\n#+ATTR_ORG: :width 300\n")
-                         (insert (format "[[file:%s]]\n" img-path)))))))
-                
-                ;; Save the updated file
-                (save-buffer))
+                         (progn ;; Add new entry (multi-file)
+                           (goto-char (point-max))
+                           (insert (format "\n* %s %s\n:PROPERTIES:\n:HI_ID: [[hl:%s][hl-%s]]\n:END:\n"
+                                           prefix
+                                           (if (string= type "image") (or img-desc name) text)
+                                           ref ref))
+                           (when (and (string= type "image") img-path)
+                             (insert "\n#+ATTR_ORG: :width 300\n")
+                             (insert (format "[[file:%s]]\n" img-path))))))))
+                   (save-buffer))))
             (error
              (message "Error during sync: %s" (error-message-string err))
-             ;; 尝试恢复 cache 状态
-             (when (fboundp 'org-element-cache-reset)
-               (org-element-cache-reset)))))))))
+             (when (fboundp 'org-element-cache-reset) (org-element-cache-reset)))))))))
 
 
 
@@ -483,47 +557,140 @@ Return (ref-entry . overview-file) pair."
          (db (org-zettel-ref-ensure-db))
          (ref-entry (org-zettel-ref-db-ensure-ref-entry db abs-source-file))
          (ref-id (org-zettel-ref-ref-entry-id ref-entry))
-         (overview-id (org-zettel-ref-db-get-maps db ref-id))
          overview-file)
-    
+
     (message "DEBUG: Source file: %s" source-file)
     (message "DEBUG: Ref ID: %s" ref-id)
-    (message "DEBUG: Overview ID: %s" overview-id)
-    
-    ;; Ensure overview directory exists
-    (unless (file-exists-p org-zettel-ref-overview-directory)
-      (make-directory org-zettel-ref-overview-directory t))
-    
-    (setq overview-file
-          (if overview-id
-              ;; Try to get existing overview file
-              (when-let* ((existing-overview (org-zettel-ref-db-get-overview-by-ref-id db ref-id))
-                         (file-path (org-zettel-ref-overview-entry-file-path existing-overview)))
-                (message "DEBUG: Found existing overview file: %s" file-path)
-                (if (file-exists-p file-path)
-                    file-path
-                  ;; If file doesn't exist but entry does, remove the entry
-                  (message "DEBUG: Overview file doesn't exist, removing entry")
-                  (remhash overview-id (org-zettel-ref-db-overviews db))
-                  (remhash ref-id (org-zettel-ref-db-map db))
-                  nil))
-            ;; Create new overview file
-            (let* ((title (org-zettel-ref-ref-entry-title ref-entry))
-                   (overview-filename (org-zettel-ref-generate-filename title))
-                   (target-file (expand-file-name overview-filename org-zettel-ref-overview-directory)))
-              (message "DEBUG: Creating new overview file: %s" target-file)
-              (unless (file-exists-p target-file)
-                (let ((new-file (org-zettel-ref-create-overview-file source-buffer target-file ref-entry))
-                      (new-entry (org-zettel-ref-db-create-overview-entry 
-                                db
-                                ref-id 
-                                target-file
-                                title)))
-                  (org-zettel-ref-db-add-overview-entry db new-entry)
-                  (org-zettel-ref-db-add-map db ref-id (org-zettel-ref-overview-entry-id new-entry))
-                  (org-zettel-ref-db-save db)
-                  new-file))
-              target-file)))
+
+    (if (eq org-zettel-ref-note-saving-style 'single-file)
+        ;; Single-file mode: all notes in one file
+        (progn
+          (setq overview-file org-zettel-ref-single-notes-file-path)
+          (message "DEBUG: Single-file mode. Notes file: %s" overview-file)
+          
+          ;; Ensure the single notes file exists (basic creation if new)
+          (unless (file-exists-p overview-file)
+            (message "DEBUG: Single notes file does not exist. Creating basic: %s" overview-file)
+            (with-temp-buffer
+              (insert "#+TITLE: Zettel Ref Notes\n")
+              (insert "#+STARTUP: showall\n\n")
+              (write-file overview-file)))
+
+          ;; === Database and OZREF_DB_ID Management for Single Notes File ===
+          (let ((generic-overview-id-marker "@SINGLE_FILE_MARKER@")
+                (db-modified nil)
+                (overview-id-in-file nil))
+
+            ;; 1. Check #+OZREF_DB_ID: in the file
+            (with-current-buffer (find-file-noselect overview-file)
+              (save-excursion
+                (goto-char (point-min))
+                (if (re-search-forward "^#\\+OZREF_DB_ID: \\(.*\\)$" nil t)
+                    (setq overview-id-in-file (match-string 1)))))
+
+            ;; 2. Ensure the generic overview entry exists in DB with the marker ID
+            (unless (org-zettel-ref-db-get-overview db generic-overview-id-marker)
+              (message "DEBUG: No DB entry for generic overview marker '%s'. Creating." generic-overview-id-marker)
+              (let ((new-entry (org-zettel-ref-db-create-overview-entry db generic-overview-id-marker overview-file "Zettel Ref Single Notes File")))
+                (org-zettel-ref-db-add-overview-entry db new-entry)
+                (setq db-modified t)))
+            
+            ;; 3. Update #+OZREF_DB_ID: in the file if it's missing or not the marker ID
+            (with-current-buffer (find-file-noselect overview-file)
+              (let ((keyword-to-write (format "#+OZREF_DB_ID: %s" generic-overview-id-marker))
+                    (file-needs-update (not (string= overview-id-in-file generic-overview-id-marker))))
+                (when file-needs-update
+                  (save-excursion
+                    (goto-char (point-min))
+                    (if (re-search-forward "^#\\+OZREF_DB_ID:.*$" nil t)
+                        (replace-match keyword-to-write)
+                      (if (re-search-forward "^#\\+TITLE:.*$" nil t) ; After title
+                          (progn (end-of-line) (insert (format "\n%s" keyword-to-write)))
+                        (goto-char (point-min)) ; Or at the very beginning
+                        (insert (format "%s\n" keyword-to-write)))))
+                  (message "DEBUG: OZREF_DB_ID in %s was %s. Updated to %s."
+                           overview-file 
+                           (if overview-id-in-file (format "'%s'" overview-id-in-file) "missing")
+                           generic-overview-id-marker)
+                  (save-buffer)))) ; Save if changed/added
+          
+            ;; 4. Map current ref-entry to the generic overview marker ID
+            (when (org-zettel-ref-db-add-map db ref-id generic-overview-id-marker)
+              (message "DEBUG: Mapped ref-id %s to generic overview-id %s" ref-id generic-overview-id-marker)
+              (setq db-modified t))
+            
+            (when db-modified
+              (message "DEBUG: Saving DB due to single-file overview/map changes.")
+              (org-zettel-ref-db-save db)))
+          ;; === End DB Management ===
+
+          ;; Find or create the top-level heading for the source file in the single notes file
+          (with-current-buffer (find-file-noselect overview-file)
+            (let ((source-file-path-property (org-zettel-ref-ref-entry-file-path ref-entry))
+                  (ref-title (org-zettel-ref-ref-entry-title ref-entry))
+                  (heading-found nil)
+                  (org-element-use-cache nil)) ; Disable cache for parsing
+              (save-excursion
+                (goto-char (point-min))
+                (while (re-search-forward "^\\* " nil t) ; Search for any top-level heading
+                  (let* ((element (org-element-at-point))
+                         (properties (org-element-property :SOURCE_FILE element)))
+                    (when (and properties (string= properties source-file-path-property))
+                      (setq heading-found t)
+                      (message "DEBUG: Found existing heading for %s" source-file-path-property)
+                      (goto-char (point-min)) ; break loop
+                      ))))
+              
+              (unless heading-found
+                (message "DEBUG: No heading found for %s. Creating new heading." source-file-path-property)
+                (goto-char (point-max))
+                (unless (or (= (point-min) (point-max)) (eql (char-before (point-max)) ?\n))
+                  (insert "\n"))
+                (insert (format "* Reference: %s\n" ref-title))
+                (insert ":PROPERTIES:\n")
+                (insert (format ":SOURCE_FILE: %s\n" source-file-path-property))
+                (insert (format ":OZREF_ID: %s\n" ref-id))
+                (insert ":END:\n\n"))
+                (save-buffer)))) ; Save buffer if new heading was added
+            ;; (save-buffer) ; This was here, but individual saves are better.
+            )
+      ;; Multi-file mode (existing logic)
+      (let ((overview-id (org-zettel-ref-db-get-maps db ref-id)))
+        (message "DEBUG: Multi-file mode. Overview ID: %s" overview-id)
+        ;; Ensure overview directory exists
+        (unless (file-exists-p org-zettel-ref-overview-directory)
+          (make-directory org-zettel-ref-overview-directory t))
+        
+        (setq overview-file
+              (if overview-id
+                  ;; Try to get existing overview file
+                  (when-let* ((existing-overview (org-zettel-ref-db-get-overview-by-ref-id db ref-id))
+                             (file-path (org-zettel-ref-overview-entry-file-path existing-overview)))
+                    (message "DEBUG: Found existing overview file: %s" file-path)
+                    (if (file-exists-p file-path)
+                        file-path
+                      ;; If file doesn't exist but entry does, remove the entry
+                      (message "DEBUG: Overview file doesn't exist, removing entry")
+                      (remhash overview-id (org-zettel-ref-db-overviews db))
+                      (remhash ref-id (org-zettel-ref-db-map db))
+                      nil)))
+                ;; Create new overview file
+                (let* ((title (org-zettel-ref-ref-entry-title ref-entry))
+                       (overview-filename (org-zettel-ref-generate-filename title))
+                       (target-file (expand-file-name overview-filename org-zettel-ref-overview-directory)))
+                  (message "DEBUG: Creating new overview file: %s" target-file)
+                  (unless (file-exists-p target-file)
+                    (let ((new-file (org-zettel-ref-create-overview-file source-buffer target-file ref-entry))
+                          (new-entry (org-zettel-ref-db-create-overview-entry 
+                                    db
+                                    ref-id 
+                                    target-file
+                                    title)))
+                      (org-zettel-ref-db-add-overview-entry db new-entry)
+                      (org-zettel-ref-db-add-map db ref-id (org-zettel-ref-overview-entry-id new-entry))
+                      (org-zettel-ref-db-save db)
+                      new-file))
+                  target-file))))))
     (message "DEBUG: Final overview file: %s" overview-file)
     (cons ref-entry overview-file)))
 
