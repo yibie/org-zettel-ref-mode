@@ -344,6 +344,10 @@ Here are the main configurable variables for org-zettel-ref-mode:
 
 - `setq org-zettel-ref-overview-directory "~/org-zettel-ref-overviews/"`: Set the overview file storage directory
 - `setq org-zettel-ref-mode-type 'normal`: Set the mode type (options: 'normal, 'denote, 'org-roam)
+- `setq org-zettel-ref-note-saving-style 'multi-file`: Determines how literature notes are saved.
+  - `'multi-file` (Default): Each reference material has its own separate note file (overview file) created in `org-zettel-ref-overview-directory`. This is the traditional behavior.
+  - `'single-file`: All notes are consolidated into a single Org file specified by `org-zettel-ref-single-notes-file-path`. Within this file, each source document is represented as a top-level heading, and its associated notes and highlights are nested as subheadings.
+- `setq org-zettel-ref-single-notes-file-path (expand-file-name "zettel-ref-notes.org" org-directory)`: Specifies the full path to the single Org file used for storing all literature notes when `org-zettel-ref-note-saving-style` is set to `single-file`.
 - `setq org-zettel-ref-include-empty-notes nil`: Set whether to include empty quick notes
 - `setq org-zettel-ref-include-context nil`: Set whether to include more context in the overview
 - `setq org-zettel-ref-quick-markup-key "C-c m"`: Set the shortcut key for quick markup
