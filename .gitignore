@@ -16,4 +16,4 @@ org-zettel-ref-mode.el.backup
 .vscode/
 org-zettel-ref-test
 org-zettel-ref-list-tests.el
-*.test
+test-*.el

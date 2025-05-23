@@ -668,59 +668,64 @@ ENTRY is the org-zettel-ref-entry struct."
          (old-file (org-zettel-ref-list-get-file-at-point)))
     (if (not old-file)
         (message "No file selected")
-      (let* ((dir (file-name-directory old-file))
-             (ref-id (when old-file (org-zettel-ref-db-get-ref-id-by-path db old-file))))
-        (if (not ref-id)
-            (message "Error: Cannot find database entry for file: %s" old-file)
-          (let* ((ref-entry (org-zettel-ref-db-get-ref-entry db ref-id))
-                 (current-author (org-zettel-ref-ref-entry-author ref-entry))
-                 (current-title (org-zettel-ref-ref-entry-title ref-entry))
-                 (current-keywords (org-zettel-ref-ref-entry-keywords ref-entry))
-                 (current-status (org-zettel-ref-ref-entry-read-status ref-entry))
-                 (current-rating (org-zettel-ref-ref-entry-rating ref-entry))
-                 (new-author (org-zettel-ref-rename--prompt-author current-author))
-                 (new-title (org-zettel-ref-rename--prompt-title current-title))
-                 (new-keywords (org-zettel-ref-rename--prompt-keywords current-keywords))
-                 (new-file-name (org-zettel-ref-format-filename 
-                                new-author new-title new-keywords 
-                                current-status current-rating))
-                 (new-file-path (expand-file-name new-file-name dir)))
-            
-            (when (and (not (equal old-file new-file-path))
-                      (y-or-n-p (format "Rename %s to %s? "
-                                      (file-name-nondirectory old-file)
-                                      (file-name-nondirectory new-file-path))))
-              ;; Suspend file monitoring
-              (org-zettel-ref-unwatch-directory)
-              
-              (condition-case err
-                  (progn
-                    ;; Rename file  
-                    (rename-file old-file new-file-path t)
-                    ;; Update database
-                    (when-let* ((ref-id (org-zettel-ref-db-get-ref-id-by-path db old-file))
-                              (ref-entry (org-zettel-ref-db-get-ref-entry db ref-id)))
-                      (remhash old-file (org-zettel-ref-db-ref-paths db))
-                      (puthash new-file-path ref-id (org-zettel-ref-db-ref-paths db))
-                      (setf (org-zettel-ref-ref-entry-file-path ref-entry) new-file-path
-                            (org-zettel-ref-ref-entry-title ref-entry) new-title
-                            (org-zettel-ref-ref-entry-author ref-entry) new-author
-                            (org-zettel-ref-ref-entry-keywords ref-entry) new-keywords)
-                      (org-zettel-ref-db-update-ref-entry db ref-entry)
-                      (org-zettel-ref-db-save db))
-                    ;; Update opened buffer
-                    (when-let* ((buf (get-file-buffer old-file)))
-                      (with-current-buffer buf
-                        (set-visited-file-name new-file-path)
-                        (set-buffer-modified-p nil)))
-                    ;; Refresh display
-                    (org-zettel-ref-list-refresh)
-                    (message "File renamed from %s to %s"
-                            (file-name-nondirectory old-file)
-                            (file-name-nondirectory new-file-path)))
-                (error
-                 (message "Error during rename: %s" (error-message-string err))))
-              (org-zettel-ref-watch-directory))))))))
+      (if (and org-zettel-ref-use-single-overview-file
+               (string= (expand-file-name old-file)
+                        (expand-file-name org-zettel-ref-single-overview-file-path)))
+          (message "The single overview file cannot be renamed.")
+        ;; Original logic for renaming
+        (let* ((dir (file-name-directory old-file))
+               (ref-id (when old-file (org-zettel-ref-db-get-ref-id-by-path db old-file))))
+          (if (not ref-id)
+              (message "Error: Cannot find database entry for file: %s" old-file)
+            (let* ((ref-entry (org-zettel-ref-db-get-ref-entry db ref-id))
+                   (current-author (org-zettel-ref-ref-entry-author ref-entry))
+                   (current-title (org-zettel-ref-ref-entry-title ref-entry))
+                   (current-keywords (org-zettel-ref-ref-entry-keywords ref-entry))
+                   (current-status (org-zettel-ref-ref-entry-read-status ref-entry))
+                   (current-rating (org-zettel-ref-ref-entry-rating ref-entry))
+                   (new-author (org-zettel-ref-rename--prompt-author current-author))
+                   (new-title (org-zettel-ref-rename--prompt-title current-title))
+                   (new-keywords (org-zettel-ref-rename--prompt-keywords current-keywords))
+                   (new-file-name (org-zettel-ref-format-filename
+                                  new-author new-title new-keywords
+                                  current-status current-rating))
+                   (new-file-path (expand-file-name new-file-name dir)))
+
+              (when (and (not (equal old-file new-file-path))
+                        (y-or-n-p (format "Rename %s to %s? "
+                                        (file-name-nondirectory old-file)
+                                        (file-name-nondirectory new-file-path))))
+                ;; Suspend file monitoring
+                (org-zettel-ref-unwatch-directory)
+
+                (condition-case err
+                    (progn
+                      ;; Rename file
+                      (rename-file old-file new-file-path t)
+                      ;; Update database
+                      (when-let* ((ref-id (org-zettel-ref-db-get-ref-id-by-path db old-file)) ; Re-fetch ref-id just in case, though it should be same
+                                (ref-entry (org-zettel-ref-db-get-ref-entry db ref-id)))
+                        (remhash old-file (org-zettel-ref-db-ref-paths db))
+                        (puthash new-file-path ref-id (org-zettel-ref-db-ref-paths db))
+                        (setf (org-zettel-ref-ref-entry-file-path ref-entry) new-file-path
+                              (org-zettel-ref-ref-entry-title ref-entry) new-title
+                              (org-zettel-ref-ref-entry-author ref-entry) new-author
+                              (org-zettel-ref-ref-entry-keywords ref-entry) new-keywords)
+                        (org-zettel-ref-db-update-ref-entry db ref-entry)
+                        (org-zettel-ref-db-save db))
+                      ;; Update opened buffer
+                      (when-let* ((buf (get-file-buffer old-file)))
+                        (with-current-buffer buf
+                          (set-visited-file-name new-file-path)
+                          (set-buffer-modified-p nil)))
+                      ;; Refresh display
+                      (org-zettel-ref-list-refresh)
+                      (message "File renamed from %s to %s"
+                              (file-name-nondirectory old-file)
+                              (file-name-nondirectory new-file-path)))
+                  (error
+                   (message "Error during rename: %s" (error-message-string err))))
+                (org-zettel-ref-watch-directory)))))))))
 
 (defun org-zettel-ref-list-goto-column ()
   "Prompt for a column and move cursor to it."
@@ -759,56 +764,61 @@ ENTRY is the org-zettel-ref-entry struct."
          (files (if (not (null marked-files))
                    marked-files
                  (list (org-zettel-ref-list-get-file-at-point)))))
-    
+
     (dolist (file files)
-      (let* ((filename (file-name-nondirectory file))
-             (components (org-zettel-ref-parse-filename filename))
-             ;; Keep the base part of the original file name (up to == or .org)
-             (base-with-title (substring filename 0 
-                                       (or (string-match "==" filename)
-                                           (- (length filename) 4)))) ; 减去.org
-             (current-keywords (if (nth 2 components)
-                                 (string-join (nth 2 components) ", ")
-                               ""))
-             (prompt (if (string-empty-p current-keywords)
-                        (format "Add keywords (comma-separated) for %s: " filename)
-                      (format "Edit keywords (current: %s) for %s: " current-keywords filename)))
-             (new-keywords-input (read-string prompt current-keywords)))
-        
-        (unless (string-empty-p new-keywords-input)
-          (let* ((new-keywords-list (split-string new-keywords-input "[,\s]+" t))
-                 (new-keywords-str (string-join new-keywords-list "_"))
-                 (new-filename (concat base-with-title
-                                     "==" new-keywords-str
-                                     ".org"))
-                 (new-filepath (expand-file-name new-filename (file-name-directory file))))
-            
-            (when (and (not (equal file new-filepath))
-                      (y-or-n-p (format "Rename file to %s?" new-filename)))
-              ;; Rename file
-              (condition-case err
-                  (rename-file file new-filepath t)
-                (error
-                 (message "Error renaming file: %s" (error-message-string err))
-                 (signal (car err) (cdr err))))
-              ;; Update database
-              (when-let* ((ref-id (org-zettel-ref-db-get-ref-id-by-path db file))
-                         (ref-entry (org-zettel-ref-db-get-ref-entry db ref-id)))
-                (remhash file (org-zettel-ref-db-ref-paths db))
-                (puthash new-filepath ref-id (org-zettel-ref-db-ref-paths db))
-                (setf (org-zettel-ref-ref-entry-file-path ref-entry) new-filepath
-                      (org-zettel-ref-ref-entry-keywords ref-entry) new-keywords-list
-                      (org-zettel-ref-ref-entry-modified ref-entry) (current-time)))
-              ;; Update opened buffer
-              (when-let* ((buf (get-file-buffer file)))
-                (with-current-buffer buf
-                  (set-visited-file-name new-filepath)
-                  (set-buffer-modified-p nil))))))))
+      (if (and org-zettel-ref-use-single-overview-file
+               (string= (expand-file-name file)
+                        (expand-file-name org-zettel-ref-single-overview-file-path)))
+          (message "Keywords are not applicable to the single overview file and it was skipped.")
+        ;; Original logic for editing keywords for other files
+        (let* ((filename (file-name-nondirectory file))
+               (components (org-zettel-ref-parse-filename filename))
+               ;; Keep the base part of the original file name (up to == or .org)
+               (base-with-title (substring filename 0
+                                         (or (string-match "==" filename)
+                                             (- (length filename) 4)))) ; 减去.org
+               (current-keywords (if (nth 2 components)
+                                   (string-join (nth 2 components) ", ")
+                                 ""))
+               (prompt (if (string-empty-p current-keywords)
+                          (format "Add keywords (comma-separated) for %s: " filename)
+                        (format "Edit keywords (current: %s) for %s: " current-keywords filename)))
+               (new-keywords-input (read-string prompt current-keywords)))
+
+          (unless (string-empty-p new-keywords-input)
+            (let* ((new-keywords-list (split-string new-keywords-input "[,\\s]+" t))
+                   (new-keywords-str (string-join new-keywords-list "_"))
+                   (new-filename (concat base-with-title
+                                       "==" new-keywords-str
+                                       ".org"))
+                   (new-filepath (expand-file-name new-filename (file-name-directory file))))
+
+              (when (and (not (equal file new-filepath))
+                        (y-or-n-p (format "Rename file to %s?" new-filename)))
+                ;; Rename file
+                (condition-case err
+                    (rename-file file new-filepath t)
+                  (error
+                   (message "Error renaming file: %s" (error-message-string err))
+                   (signal (car err) (cdr err))))
+                ;; Update database
+                (when-let* ((ref-id (org-zettel-ref-db-get-ref-id-by-path db file))
+                           (ref-entry (org-zettel-ref-db-get-ref-entry db ref-id)))
+                  (remhash file (org-zettel-ref-db-ref-paths db))
+                  (puthash new-filepath ref-id (org-zettel-ref-db-ref-paths db))
+                  (setf (org-zettel-ref-ref-entry-file-path ref-entry) new-filepath
+                        (org-zettel-ref-ref-entry-keywords ref-entry) new-keywords-list
+                        (org-zettel-ref-ref-entry-modified ref-entry) (current-time)))
+                ;; Update opened buffer
+                (when-let* ((buf (get-file-buffer file)))
+                  (with-current-buffer buf
+                    (set-visited-file-name new-filepath)
+                    (set-buffer-modified-p nil))))))))))
     ;; Save database and refresh display
     (org-zettel-ref-db-save db)
     (org-zettel-ref-list-refresh)
     (org-zettel-ref-unmark-all)
-    (message "Keywords updated successfully")))
+    (message "Keywords updated successfully"))
 
 
 ;;;-------------------------------------------------------------------------
@@ -983,52 +993,56 @@ Example: (t 'source \"Deleted source file only.\") or (nil 'error \"Error messag
          (ref-id (when file (org-zettel-ref-db-get-ref-id-by-path db file)))
          (entry (when ref-id (org-zettel-ref-db-get-ref-entry db ref-id))))
     (when entry
-      (let* ((old-status (org-zettel-ref-ref-entry-read-status entry))
-             (new-status (pcase old-status
-                          ('unread 'reading)
-                          ('reading 'done)
-                          ('done 'unread)
-                          (_ 'unread)))
-             ;; Get current file info
-             (dir (file-name-directory file))
-             (old-name (file-name-nondirectory file))
-             (parsed-info (org-zettel-ref-parse-filename old-name))
-             (author (nth 0 parsed-info))
-             (title (nth 1 parsed-info))
-             (keywords (nth 2 parsed-info))
-             (rating (nth 4 parsed-info))
-             ;; Generate new file name with updated status
-             (new-name (org-zettel-ref-format-filename 
-                       author title keywords new-status rating))
-             (new-file (expand-file-name new-name dir)))
-        
-        ;; Suspend file monitoring
-        (org-zettel-ref-unwatch-directory)
-        
-        (condition-case err
-            (progn
-              ;; Rename file
-              (rename-file file new-file t)
-              ;; Update database entry
-              (setf (org-zettel-ref-ref-entry-read-status entry) new-status
-                    (org-zettel-ref-ref-entry-file-path entry) new-file)
-              ;; Update database mappings
-              (remhash file (org-zettel-ref-db-ref-paths db))
-              (puthash new-file ref-id (org-zettel-ref-db-ref-paths db))
-              ;; Update any open buffer
-              (when-let ((buf (get-file-buffer file)))
-                (with-current-buffer buf
-                  (set-visited-file-name new-file)
-                  (set-buffer-modified-p nil)))
-              ;; Save changes
-              (org-zettel-ref-db-save db)
-              (org-zettel-ref-list-refresh)
-              (message "Reading status changed from %s to %s" old-status new-status))
-          (error
-           (message "Error updating status: %s" (error-message-string err))))
-        
-        ;; Resume file monitoring
-        (org-zettel-ref-watch-directory)))))
+      (if (and org-zettel-ref-use-single-overview-file
+               (string= (expand-file-name file)
+                        (expand-file-name org-zettel-ref-single-overview-file-path)))
+          (message "Status is not applicable to the single overview file.")
+        (let* ((old-status (org-zettel-ref-ref-entry-read-status entry))
+               (new-status (pcase old-status
+                            ('unread 'reading)
+                            ('reading 'done)
+                            ('done 'unread)
+                            (_ 'unread)))
+               ;; Get current file info
+               (dir (file-name-directory file))
+               (old-name (file-name-nondirectory file))
+               (parsed-info (org-zettel-ref-parse-filename old-name))
+               (author (nth 0 parsed-info))
+               (title (nth 1 parsed-info))
+               (keywords (nth 2 parsed-info))
+               (rating (nth 4 parsed-info))
+               ;; Generate new file name with updated status
+               (new-name (org-zettel-ref-format-filename
+                         author title keywords new-status rating))
+               (new-file (expand-file-name new-name dir)))
+
+          ;; Suspend file monitoring
+          (org-zettel-ref-unwatch-directory)
+
+          (condition-case err
+              (progn
+                ;; Rename file
+                (rename-file file new-file t)
+                ;; Update database entry
+                (setf (org-zettel-ref-ref-entry-read-status entry) new-status
+                      (org-zettel-ref-ref-entry-file-path entry) new-file)
+                ;; Update database mappings
+                (remhash file (org-zettel-ref-db-ref-paths db))
+                (puthash new-file ref-id (org-zettel-ref-db-ref-paths db))
+                ;; Update any open buffer
+                (when-let ((buf (get-file-buffer file)))
+                  (with-current-buffer buf
+                    (set-visited-file-name new-file)
+                    (set-buffer-modified-p nil)))
+                ;; Save changes
+                (org-zettel-ref-db-save db)
+                (org-zettel-ref-list-refresh)
+                (message "Reading status changed from %s to %s" old-status new-status))
+            (error
+             (message "Error updating status: %s" (error-message-string err))))
+
+          ;; Resume file monitoring
+          (org-zettel-ref-watch-directory))))))
 
 (defun org-zettel-ref-list-set-rating (rating)
   "Set rating for the current entry.
@@ -1039,47 +1053,51 @@ RATING should be a number between 0 and 5."
          (ref-id (when file (org-zettel-ref-db-get-ref-id-by-path db file)))
          (entry (when ref-id (org-zettel-ref-db-get-ref-entry db ref-id))))
     (when entry
-      (let* ((new-rating (max 0 (min 5 rating)))
-             ;; Get current file info
-             (dir (file-name-directory file))
-             (old-name (file-name-nondirectory file))
-             (parsed-info (org-zettel-ref-parse-filename old-name))
-             (author (nth 0 parsed-info))
-             (title (nth 1 parsed-info))
-             (keywords (nth 2 parsed-info))
-             (status (nth 3 parsed-info))
-             ;; Generate new file name with updated rating
-             (new-name (org-zettel-ref-format-filename 
-                       author title keywords status new-rating))
-             (new-file (expand-file-name new-name dir)))
-        
-        ;; Suspend file monitoring
-        (org-zettel-ref-unwatch-directory)
-        
-        (condition-case err
-            (progn
-              ;; Rename file
-              (rename-file file new-file t)
-              ;; Update database entry
-              (setf (org-zettel-ref-ref-entry-rating entry) new-rating
-                    (org-zettel-ref-ref-entry-file-path entry) new-file)
-              ;; Update database mappings
-              (remhash file (org-zettel-ref-db-ref-paths db))
-              (puthash new-file ref-id (org-zettel-ref-db-ref-paths db))
-              ;; Update any open buffer
-              (when-let ((buf (get-file-buffer file)))
-                (with-current-buffer buf
-                  (set-visited-file-name new-file)
-                  (set-buffer-modified-p nil)))
-              ;; Save changes
-              (org-zettel-ref-db-save db)
-              (org-zettel-ref-list-refresh)
-              (message "Rating set to %d stars" new-rating))
-          (error
-           (message "Error updating rating: %s" (error-message-string err))))
-        
-        ;; Resume file monitoring
-        (org-zettel-ref-watch-directory)))))
+      (if (and org-zettel-ref-use-single-overview-file
+               (string= (expand-file-name file)
+                        (expand-file-name org-zettel-ref-single-overview-file-path)))
+          (message "Rating is not applicable to the single overview file.")
+        (let* ((new-rating (max 0 (min 5 rating)))
+               ;; Get current file info
+               (dir (file-name-directory file))
+               (old-name (file-name-nondirectory file))
+               (parsed-info (org-zettel-ref-parse-filename old-name))
+               (author (nth 0 parsed-info))
+               (title (nth 1 parsed-info))
+               (keywords (nth 2 parsed-info))
+               (status (nth 3 parsed-info))
+               ;; Generate new file name with updated rating
+               (new-name (org-zettel-ref-format-filename
+                         author title keywords status new-rating))
+               (new-file (expand-file-name new-name dir)))
+
+          ;; Suspend file monitoring
+          (org-zettel-ref-unwatch-directory)
+
+          (condition-case err
+              (progn
+                ;; Rename file
+                (rename-file file new-file t)
+                ;; Update database entry
+                (setf (org-zettel-ref-ref-entry-rating entry) new-rating
+                      (org-zettel-ref-ref-entry-file-path entry) new-file)
+                ;; Update database mappings
+                (remhash file (org-zettel-ref-db-ref-paths db))
+                (puthash new-file ref-id (org-zettel-ref-db-ref-paths db))
+                ;; Update any open buffer
+                (when-let ((buf (get-file-buffer file)))
+                  (with-current-buffer buf
+                    (set-visited-file-name new-file)
+                    (set-buffer-modified-p nil)))
+                ;; Save changes
+                (org-zettel-ref-db-save db)
+                (org-zettel-ref-list-refresh)
+                (message "Rating set to %d stars" new-rating))
+            (error
+             (message "Error updating rating: %s" (error-message-string err))))
+
+          ;; Resume file monitoring
+          (org-zettel-ref-watch-directory))))))
 
 
 ;;;----------------------------------------------------------------------------
@@ -1088,6 +1106,7 @@ RATING should be a number between 0 and 5."
 
 (defvar org-zettel-ref-list-actions
   '(("open file" . org-zettel-ref-list-open-file)
+    ("open overview" . org-zettel-ref-list-open-overview)
     ("rename file" . org-zettel-ref-list-rename-file)
     ("refresh list" . org-zettel-ref-list-refresh)
     ("delete file" . org-zettel-ref-list-delete-file)
@@ -1134,6 +1153,7 @@ RATING should be a number between 0 and 5."
 (define-key org-zettel-ref-list-mode-map (kbd "k") #'org-zettel-ref-list-edit-keywords)
 (define-key org-zettel-ref-list-mode-map (kbd "R") #'org-zettel-ref-list-cycle-status)
 (define-key org-zettel-ref-list-mode-map (kbd "s") #'org-zettel-ref-list-set-rating)
+(define-key org-zettel-ref-list-mode-map (kbd "v") #'org-zettel-ref-list-open-overview)
 (define-key org-zettel-ref-list-mode-map (kbd "m") #'org-zettel-ref-mark-file)
 (define-key org-zettel-ref-list-mode-map (kbd "u") #'org-zettel-ref-unmark-file)
 (define-key org-zettel-ref-list-mode-map (kbd "D") #'org-zettel-ref-list-delete-marked-files)
@@ -1542,6 +1562,56 @@ This command does NOT delete the actual source or overview files."
 ;;; Overview Link Management
 ;;;----------------------------------------------------------------------------
 
+(defun org-zettel-ref-list-open-overview ()
+  "Open the overview file for the selected source file in the list.
+In single-file mode, navigates to the relevant section within the unified overview.
+In multi-file mode, opens the dedicated overview file."
+  (interactive)
+  (let* ((db (org-zettel-ref-ensure-db))
+         (source-file-path (org-zettel-ref-list-get-file-at-point))
+         (ref-id (when source-file-path (org-zettel-ref-db-get-ref-id-by-path db source-file-path)))
+         (ref-entry (when ref-id (org-zettel-ref-db-get-ref-entry db ref-id))))
+
+    (unless ref-entry
+      (message "Could not find database entry for the selected item: %s" source-file-path)
+      (cl-return-from org-zettel-ref-list-open-overview nil))
+
+    (if org-zettel-ref-use-single-overview-file
+        ;; --- Single-File Mode ---
+        (when org-zettel-ref-single-overview-file-path
+          (let ((single-overview-path (expand-file-name org-zettel-ref-single-overview-file-path)))
+            (find-file single-overview-path) ; Open the single overview file
+            (with-current-buffer (find-file-noselect single-overview-path) ; Ensure operations are in its buffer
+              (let ((target-heading-point nil))
+                (org-map-entries
+                 (lambda ()
+                   (setq target-heading-point (point-marker))
+                   t) ; Stop after first match
+                 (format "REF_ID=%s" ref-id) ; Match by REF_IDV
+                 'file) ; Search scope is the current file
+                (if target-heading-point
+                    (progn
+                      (goto-char target-heading-point)
+                      (org-reveal)
+                      (recenter)
+                      (message "Opened single overview and navigated to section for %s."
+                               (org-zettel-ref-ref-entry-title ref-entry)))
+                  (message "Section for %s not found in the single overview file."
+                           (org-zettel-ref-ref-entry-title ref-entry)))))))
+      ;; --- Multi-File Mode ---
+      (let ((overview-entry (org-zettel-ref-db-get-overview-by-ref-id db ref-id)))
+        (if (and overview-entry (org-zettel-ref-overview-entry-file-path overview-entry))
+            (let ((overview-file-path (org-zettel-ref-overview-entry-file-path overview-entry)))
+              (if (file-exists-p overview-file-path)
+                  (progn
+                    (find-file overview-file-path)
+                    (message "Opened dedicated overview file: %s" overview-file-path))
+                (message "Overview file for %s does not exist: %s"
+                         (org-zettel-ref-ref-entry-title ref-entry) overview-file-path)))
+          (message "No overview file linked to %s. You can link or create one via \'Link overview\' action (L)."
+                   (org-zettel-ref-ref-entry-title ref-entry)))))))
+
+
 (defun org-zettel-ref-list-link-overview ()
   "Link current source file with an overview file."
   (interactive)
@@ -1693,8 +1763,5 @@ This command does NOT delete the actual source or overview files."
     (princ "g - Refresh list\n\n")
     
     (princ "For more information, see the documentation in the source code.")))
-
-
-
 
 (provide 'org-zettel-ref-list)

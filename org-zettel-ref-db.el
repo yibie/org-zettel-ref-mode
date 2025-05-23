@@ -6,6 +6,7 @@
 (require 'org-roam nil t)  ; Safely attempt to load org-roam
 (require 'denote nil t)  ; Safely attempt to load denote
 
+
 ;;;----------------------------------------------------------------------------
 ;;; Org-roam Database intergration
 ;;;----------------------------------------------------------------------------
@@ -85,6 +86,9 @@ Can be 'org-roam, 'denote, or nil for standalone mode.")
 
 (defvar org-zettel-ref-db nil
   "The global database instance for org-zettel-ref.")
+
+(defconst org-zettel-ref-single-overview-id "__SINGLE_UNIFIED_OVERVIEW__"
+  "The unique ID used for the single overview entry in the database when in single-file mode.")
 
 ;;;----------------------------------------------------------------------------
 ;;; Database Structures
@@ -261,13 +265,21 @@ AUTHOR is the author, KEYWORDS is the keywords list."
   "Create a new overview entry.
 DB is the database object, REF-ID is the corresponding reference ID,
 FILE-PATH is the file path, TITLE is the title."
-  (let* ((id ref-id)  ; 使用 ref-id 作为 overview 的 id
+  (let* ((overview-entry-id (if org-zettel-ref-use-single-overview-file
+                                org-zettel-ref-single-overview-id
+                              ref-id)) ; In multi-file, overview_id is same as ref_id
+         (actual-file-path (if org-zettel-ref-use-single-overview-file
+                               (expand-file-name org-zettel-ref-single-overview-file-path)
+                             file-path))
+         (actual-title (if org-zettel-ref-use-single-overview-file
+                           "Unified Org Zettel Ref Overview"
+                         (or title (file-name-base actual-file-path))))
          (timestamp (current-time)))
     (org-zettel-ref-overview-entry-create
-     :id id
-     :ref-id ref-id
-     :file-path file-path
-     :title (or title (file-name-base file-path))
+     :id overview-entry-id
+     :ref-id (if org-zettel-ref-use-single-overview-file nil ref-id) ; In single mode, the overview isn't tied to one ref_id at creation
+     :file-path actual-file-path
+     :title actual-title
      :created timestamp
      :modified timestamp)))
 
@@ -412,41 +424,53 @@ Return the reference entry object."
 (defun org-zettel-ref-db-ensure-overview-entry (db ref-entry file-path &optional title)
   "Ensure there is an overview entry for the reference entry.
 DB is the database object, REF-ENTRY is the reference entry,
-FILE-PATH is the overview file path.
-TITLE is the optional title. If not provided, the reference entry's title will be used.
+FILE-PATH is the overview file path (used for multi-file, ignored for single-file if already set).
+TITLE is the optional title. If not provided, the reference entry's title will be used (for multi-file).
 Return the overview entry object."
-  (let* ((ref-id (org-zettel-ref-ref-entry-id ref-entry))
-         (existing-overview-id (org-zettel-ref-db-get-maps db ref-id)))
-    
-    (or ;; 1. Try to get the existing overview entry
-        (when existing-overview-id
-          (let ((overview (gethash existing-overview-id 
-                                  (org-zettel-ref-db-overviews db))))
-            (when (and overview
-                      (file-exists-p (org-zettel-ref-overview-entry-file-path overview)))
-              overview)))
-        
-        ;; 2. Try to get the overview entry by file path
-        (when-let* ((path-overview-id (gethash file-path 
-                                             (org-zettel-ref-db-overview-paths db))))
-          (let ((overview (gethash path-overview-id 
-                                  (org-zettel-ref-db-overviews db))))
-            (when overview
-              ;; Update the mapping relationship
-              (org-zettel-ref-db-add-map db ref-id path-overview-id)
-              overview)))
-        
-        ;; 3. Create a new overview entry
-        (let* ((overview-title (or title 
-                                  (org-zettel-ref-ref-entry-title ref-entry)))
-               (new-entry (org-zettel-ref-db-create-overview-entry 
-                          db ref-id file-path overview-title)))
-          ;; Add to the database
-          (org-zettel-ref-db-add-overview-entry db new-entry)
-          ;; Establish the mapping relationship
-          (org-zettel-ref-db-add-map db ref-id 
-                                    (org-zettel-ref-overview-entry-id new-entry))
-          new-entry))))
+  (let* ((source-ref-id (org-zettel-ref-ref-entry-id ref-entry))
+         (overview-entry nil))
+    (if org-zettel-ref-use-single-overview-file
+        ;; --- Single-File Mode ---_F
+        (progn
+          (setq overview-entry (gethash org-zettel-ref-single-overview-id (org-zettel-ref-db-overviews db)))
+          (unless overview-entry
+            (message "DEBUG: Single-file mode - Creating the single overview DB entry.")
+            (setq overview-entry (org-zettel-ref-db-create-overview-entry
+                                  db
+                                  nil ; ref-id is not directly tied at the overview entry level
+                                  (expand-file-name org-zettel-ref-single-overview-file-path)
+                                  "Unified Org Zettel Ref Overview"))
+            (org-zettel-ref-db-add-overview-entry db overview-entry))
+          ;; Ensure the current source ref-id is mapped to the single overview id
+          (org-zettel-ref-db-add-map db source-ref-id (org-zettel-ref-overview-entry-id overview-entry))
+          overview-entry)
+
+      ;; --- Multi-File Mode (existing logic) ---
+      (let* ((existing-overview-id-from-map (org-zettel-ref-db-get-maps db source-ref-id)))
+        (or ;; 1. Try to get the existing overview entry via map
+            (when existing-overview-id-from-map
+              (let ((ov (gethash existing-overview-id-from-map
+                                 (org-zettel-ref-db-overviews db))))
+                (when (and ov (file-exists-p (org-zettel-ref-overview-entry-file-path ov)))
+                  ov)))
+            ;; 2. Try to get the overview entry by file path (if file-path is provided and valid)
+            (when (and file-path (not (string-empty-p file-path)))
+              (when-let* ((path-overview-id (gethash file-path (org-zettel-ref-db-overview-paths db))))
+                (let ((ov (gethash path-overview-id (org-zettel-ref-db-overviews db))))
+                  (when ov
+                    ;; Update the mapping relationship if found via path and map was missing/different
+                    (unless (equal existing-overview-id-from-map path-overview-id)
+                      (org-zettel-ref-db-add-map db source-ref-id path-overview-id))
+                    ov))))
+            ;; 3. Create a new overview entry (for multi-file mode)
+            (let* ((overview-title (or title (org-zettel-ref-ref-entry-title ref-entry)))
+                   (new-entry (org-zettel-ref-db-create-overview-entry
+                               db source-ref-id file-path overview-title)))
+              (org-zettel-ref-db-add-overview-entry db new-entry)
+              (org-zettel-ref-db-add-map db source-ref-id
+                                       (org-zettel-ref-overview-entry-id new-entry))
+              new-entry)))))
+    overview-entry) ; Return the determined/created overview-entry
 
 ;;;----------------------------------------------------------------------------
 ;;; Database Query Functions
@@ -474,12 +498,15 @@ Return the corresponding reference entry, or nil if it doesn't exist."
   "Get the overview entry by reference ID.
 DB is the database object, REF-ID is the reference ID.
 Return the overview entry object."
-  (when-let* ((overview-id (org-zettel-ref-db-get-maps db ref-id)))
-    (let ((entry (gethash overview-id (org-zettel-ref-db-overviews db))))
-      ;; ensure return is a single entry instead of a list
-      (if (org-zettel-ref-overview-entry-p entry)
-          entry
-        (car entry)))))
+  (if org-zettel-ref-use-single-overview-file
+      (gethash org-zettel-ref-single-overview-id (org-zettel-ref-db-overviews db))
+    ;; Existing multi-file logic:
+    (when-let* ((overview-id (org-zettel-ref-db-get-maps db ref-id)))
+      (let ((entry (gethash overview-id (org-zettel-ref-db-overviews db))))
+        ;; ensure return is a single entry instead of a list
+        (if (org-zettel-ref-overview-entry-p entry)
+            entry
+          (car entry))))))
 
 
 (defun org-zettel-ref-db-get-ref-id-by-path (db file)
@@ -510,7 +537,7 @@ Return the reference entry object."
   (gethash ref-id (org-zettel-ref-db-refs db)))
 
 (defun org-zettel-ref-db-get-maps (db ref-id)
-  "Get the overview ID by reference ID.
+  "Get the overview ID mapped from reference ID.
 DB is the database object, REF-ID is the reference ID.
 Return the overview ID."
   (unless db
@@ -523,7 +550,10 @@ DB is the database object, REF-ID is the reference ID, OVERVIEW-ID is the overvi
 Return the mapping ID."
   (unless db
     (error "Database is nil"))
-  (puthash ref-id overview-id (org-zettel-ref-db-map db)))
+  (let ((map-to-id (if org-zettel-ref-use-single-overview-file
+                       org-zettel-ref-single-overview-id
+                     overview-id)))
+    (puthash ref-id map-to-id (org-zettel-ref-db-map db))))
 
 ;;;----------------------------------------------------------------------------
 ;;; Database Update Functions

@@ -443,46 +443,6 @@ Group 3: Content (for images including path and description)"
         (org-show-context)
         (recenter)))))
 
-;; Define hl link type
-(org-link-set-parameters 
- "hl"
- :follow (lambda (path)
-           (let* ((db (org-zettel-ref-ensure-db))
-                  (overview-file (buffer-file-name))
-                  (overview-id (gethash overview-file (org-zettel-ref-db-overview-paths db)))
-                  (overview-entry (gethash overview-id (org-zettel-ref-db-overviews db)))
-                  (ref-id (org-zettel-ref-overview-entry-ref-id overview-entry))
-                  (ref-entry (gethash ref-id (org-zettel-ref-db-refs db)))
-                  (source-file (org-zettel-ref-ref-entry-file-path ref-entry))
-                  (target-mark (concat "<<hl-" path ">>"))
-                  (source-buffer (find-file-noselect source-file)))
-             
-             (unless source-file
-               (user-error "Cannot find source file for this overview"))
-             
-             ;; Search in the source file buffer
-             (with-current-buffer source-buffer
-               (widen)
-               (goto-char (point-min))
-               (message "DEBUG: Buffer size: %d" (buffer-size))
-               (message "DEBUG: Current point: %d" (point))
-               
-               (let ((case-fold-search nil))  ; Case-insensitive search
-                 (if (re-search-forward target-mark nil t)
-                     (let ((target-pos (match-beginning 0)))
-                       ;; Switch to the source file buffer
-                       (pop-to-buffer source-buffer)
-                       ;; Then move to the target position
-                       (goto-char target-pos)
-                       (org-reveal)
-                       (recenter))
-                   (message "DEBUG: Search failed. Buffer content sample:")
-                   (message "DEBUG: %s" 
-                           (buffer-substring-no-properties 
-                            (point-min)
-                            (min (point-max) 500)))
-                   (user-error "Target not found: %s" target-mark)))))))
-
 (defun org-zettel-ref-highlight-enable ()
   "Enable highlight mode and initialize the counter."
   ;; Ensure the buffer-local variable is set
@@ -632,6 +592,45 @@ Group 3: Content (for images including path and description)"
      (when (boundp 'org-element-use-cache)
        (setq-local org-element-use-cache nil)))))
 
+(defun org-zettel-ref-jump-to-source-highlight-from-overview ()
+  "Jump from a highlight entry in the single overview file to the corresponding highlight in the source file.
+This command should be called when the point is on a highlight entry's headline in the single overview file."
+  (interactive)
+  (unless (and org-zettel-ref-use-single-overview-file
+               (string= (buffer-file-name (current-buffer)) (expand-file-name org-zettel-ref-single-overview-file-path)))
+    (user-error "This command can only be used from the single overview file when single-file mode is active."))
 
+  (save-excursion
+    (org-back-to-heading t) ; Ensure point is at the beginning of the headline
+    (let* ((props (org-entry-properties)) 
+           (source-ref-id (cdr (assoc "SOURCE_REF_ID" props)))
+           (original-hl-id (cdr (assoc "ORIGINAL_HL_ID" props))))
+      (message "DEBUG: Jump command - Props: %S, Source_Ref_ID: %s, Original_HL_ID: %s" props source-ref-id original-hl-id)
+
+      (unless source-ref-id
+        (user-error "Could not find :SOURCE_REF_ID: property at current heading."))
+      (unless original-hl-id
+        (user-error "Could not find :ORIGINAL_HL_ID: property at current heading."))
+
+      (let* ((db (org-zettel-ref-ensure-db))
+             (ref-entry (org-zettel-ref-db-get-ref-entry db source-ref-id))
+             (source-file-path (when ref-entry (org-zettel-ref-ref-entry-file-path ref-entry))))
+        (if source-file-path
+            (progn
+              (message "DEBUG: Jump command - Source file path: %s" source-file-path)
+              (let ((source-buffer (find-file source-file-path))) ; find-file switches buffer and selects window
+                (with-current-buffer source-buffer
+                  (widen)
+                  (goto-char (point-min))
+                  (let ((target-mark (concat "<<hl-" original-hl-id ">>"))
+                        (case-fold-search nil))
+                    (if (re-search-forward (regexp-quote target-mark) nil t)
+                        (progn
+                          (goto-char (match-beginning 0))
+                          (org-reveal)
+                          (recenter)
+                          (message "Jumped to %s in %s" target-mark (file-name-nondirectory source-file-path)))
+                      (user-error "Target mark %s not found in %s" target-mark source-file-path))))))
+          (user-error "Could not find source file for REF_ID: %s" source-ref-id))))))
 
 (provide 'org-zettel-ref-highlight)
