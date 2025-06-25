@@ -390,6 +390,10 @@ A: 您可以使用 =M-x org-zettel-ref-check-roam-db= 命令来检查org-roam数
 如果问题持续存在，请通过 GitHub 仓库提交 issue，附上问题描述、重现步骤和调试日志。
 
 * 版本历史
+- v0.5.9 (2025-06-25)
+  - 新增：单文件模式
+    - 新增配置项： ~org-zettel-ref-use-single-overview-file~ 用于启用/禁用单文件模式
+    - 新增配置项： ~org-zettel-ref-single-overview-file-path~ 用于设置单文件模式下的概览文件路径
 - v0.5.8 (2025-04-29)
   - 增强：概览文件头现在在创建时自动包含 `#+AUTHOR:` 和 `#+SOURCE_FILE:` 属性
   - 增强：删除命令 (`d`, `D`) 在 `org-zettel-ref-list` 面板中现在提示选择性删除 (源文件仅, 概览文件仅, 两者)

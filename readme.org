@@ -399,6 +399,11 @@ We welcome community contributions! Here are some ways you can get involved:
 - Share your experiences and tips for using org-zettel-ref-mode.
 
 ** Changlog
+*** 
+*** Version 0.5.9 (2025-06-25)
+  - Added: Single file mode
+    - Added configuration item: ~org-zettel-ref-use-single-overview-file~ for enabling/disabling single file mode
+    - Added configuration item: ~org-zettel-ref-single-overview-file-path~ for setting the path of the single overview file
 *** Version 0.5.8 (2025-04-29)
   - Enhanced: Overview file headers now automatically include `#+AUTHOR:` and `#+SOURCE_FILE:` properties upon creation.
     - Enhanced: Deletion commands (`d`, `D`) in `org-zettel-ref-list` now prompt for selective deletion (Source Only, Overview Only, Both).
