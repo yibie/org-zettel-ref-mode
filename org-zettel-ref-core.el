@@ -80,6 +80,19 @@ and can be manually triggered with `org-zettel-ref-ai-generate-summary'."
   :type 'boolean
   :group 'org-zettel-ref)
 
+(defcustom org-zettel-ref-note-saving-style 'multi-file
+  "Determines how literature notes are saved.
+`single-file`: All notes are saved in a single Org file, with each reference as a top-level heading.
+`multi-file`: Each reference material has its own separate note file (overview file)."
+  :type '(choice (const :tag "Single File" single-file)
+                 (const :tag "Multi-File (One note file per reference)" multi-file))
+  :group 'org-zettel-ref)
+
+(defcustom org-zettel-ref-single-notes-file-path (expand-file-name "zettel-ref-notes.org" org-directory)
+  "The path to the single Org file used for storing all literature notes when `org-zettel-ref-note-saving-style` is set to `single-file`."
+  :type 'file
+  :group 'org-zettel-ref)
+
 ;;------------------------------------------------------------------  
 ;; Variables
 ;;------------------------------------------------------------------

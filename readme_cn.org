@@ -343,6 +343,10 @@ org-zettel-ref-mode 现在支持直接通过 Emacs 调用外部 Python 脚本，
 
 - =setq org-zettel-ref-overview-directory "~/org-zettel-ref-overviews/"=: 设置概览文件存储目录
 - =setq org-zettel-ref-mode-type 'normal=: 设置模式类型（可选：'normal, 'denote, 'org-roam）
+- =setq org-zettel-ref-note-saving-style 'multi-file=: 决定文献笔记的保存方式。
+  - ='multi-file= (默认): 每个参考文献材料都有其自己独立的笔记文件（概览文件），创建于 `org-zettel-ref-overview-directory` 中。这是传统行为。
+  - ='single-file=: 所有笔记都整合到由 `org-zettel-ref-single-notes-file-path` 指定的单个 Org 文件中。在此文件中，每个源文档表示为一个顶级标题，其关联的笔记和高亮则作为子标题嵌套。
+- =setq org-zettel-ref-single-notes-file-path (expand-file-name "zettel-ref-notes.org" org-directory)=: 指定当 `org-zettel-ref-note-saving-style` 设置为 `single-file` 时，用于存储所有文献笔记的单个 Org 文件的完整路径。
 - =setq org-zettel-ref-include-empty-notes nil=: 设置是否包含空的快速笔记
 - =setq org-zettel-ref-quick-markup-key "C-c m"=: 设置快速标记的快捷键
 - =setq org-zettel-ref-add-quick-note "C-c n"=: 设置快速笔记的快捷键
