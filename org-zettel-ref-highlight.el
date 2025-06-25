@@ -417,7 +417,6 @@ Group 3: Content (for images including path and description)"
     (when (re-search-forward org-zettel-ref-highlight-regexp (cdr bounds) t)
       (match-string 1))))
 
-;; 初始化高亮计数器
 (defun org-zettel-ref-highlight-initialize-counter ()
   "Scan all highlight marks in the current buffer and initialize the counter to the maximum value."
   (save-excursion

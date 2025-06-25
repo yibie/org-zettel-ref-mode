@@ -29,7 +29,7 @@
 FORMAT-STRING and ARGS are passed to `message'."
   (when (and org-zettel-ref-debug
              (alist-get category org-zettel-ref-debug-categories))
-    (apply #'message 
+    (apply #'message
            (concat (format "ORG-ZETTEL-REF[%s]: " category) format-string)
            args)))
 
@@ -83,15 +83,15 @@ FORMAT-STRING and ARGS are passed to `message'."
   "Check and display the current status of org-zettel-ref-mode."
   (interactive)
   (org-zettel-ref-debug-message-category 'core "\n=== Org-Zettel-Ref Status ===")
-  (org-zettel-ref-debug-message-category 'core 
+  (org-zettel-ref-debug-message-category 'core
     "Mode enabled: %s" org-zettel-ref-mode)
-  (org-zettel-ref-debug-message-category 'core 
+  (org-zettel-ref-debug-message-category 'core
     "Overview file: %s" org-zettel-ref-overview-file)
-  (org-zettel-ref-debug-message-category 'core 
-    "Source buffer: %s" 
+  (org-zettel-ref-debug-message-category 'core
+    "Source buffer: %s"
     (buffer-name org-zettel-ref-source-buffer))
-  (org-zettel-ref-debug-message-category 'core 
-    "Overview buffer: %s" 
+  (org-zettel-ref-debug-message-category 'core
+    "Overview buffer: %s"
     (buffer-name org-zettel-ref-current-overview-buffer)))
 
 (defun org-zettel-ref-debug-show-all-status ()
@@ -101,11 +101,11 @@ FORMAT-STRING and ARGS are passed to `message'."
     (erase-buffer)
     (org-mode)
     (insert "* Org-Zettel-Ref Debug Status\n\n")
-    (insert (format "- Global Debug Mode: %s\n\n" 
+    (insert (format "- Global Debug Mode: %s\n\n"
                    (if org-zettel-ref-debug "Enabled" "Disabled")))
     (insert "** Category Status\n\n")
     (dolist (category org-zettel-ref-debug-categories)
-      (insert (format "- %s: %s\n" 
+      (insert (format "- %s: %s\n"
                      (car category)
                      (if (cdr category) "Enabled" "Disabled"))))
     (insert "\n** Available Commands\n\n")
@@ -146,7 +146,7 @@ FORMAT-STRING and ARGS are passed to `message'."
 
 ;;----------------------------------------------------------------
 ;; org-zettel-ref-run-python-script
-;;---------------------------------------------------------------- 
+;;----------------------------------------------------------------
 
 (defcustom org-zettel-ref-python-file "~/Documents/emacs/package/org-zettel-ref-mode/convert_to_org.py"
   "Python script file path."
@@ -190,10 +190,10 @@ Can be either 'venv or 'conda."
          (temp-folder (expand-file-name org-zettel-ref-temp-folder))
          (reference-folder (expand-file-name org-zettel-ref-reference-folder))
          (archive-folder (expand-file-name org-zettel-ref-archive-folder)))
-    
+
     ;; Set virtual environment type
     (setenv "ORG_ZETTEL_REF_PYTHON_ENV" venv-type)
-    
+
     ;; Run the script with appropriate checks
     (cond
      ((not (file-exists-p script-path))
@@ -232,15 +232,15 @@ Can be either 'venv or 'conda."
   (local-unset-key (kbd org-zettel-ref-quick-markup-key)))
 
 (defun org-zettel-ref-advice-open-at-point (orig-fun &rest args)
-  "简化的链接处理，利用 org-zettel-ref-mode 的上下文."
+  "Simplified link handling using the context of org-zettel-ref-mode."
   (let* ((context (org-element-context))
          (type (org-element-property :type context))
          (path (org-element-property :path context)))
     (if (and (eq (org-element-type context) 'link)
              (string= type "file")
              (string-match ".*::hl-\\([0-9]+\\)" path))
-        ;; 如果是高亮链接，使用已有的关联直接跳转
-        (with-current-buffer org-zettel-ref-source-buffer  ; 使用已关联的源文件缓冲区
+        ;; If it's a highlight link, jump directly using the existing association
+        (with-current-buffer org-zettel-ref-source-buffer  ;; Use the associated source file buffer
           (widen)
           (goto-char (point-min))
           (let ((target-id (match-string 1 path)))
@@ -253,7 +253,7 @@ Can be either 'venv or 'conda."
                   t)
               (message "Target hl-%s not found" target-id)
               nil)))
-      ;; 其他链接使用原始函数处理
+      ;; Handle other links using the original function
       (apply orig-fun args))))
 
 (defun org-zettel-ref-find-target (file target)
@@ -273,14 +273,14 @@ FILE should be absolute path, TARGET should be the target identifier."
         (message "Target %s not found in %s" target file)
         nil))))
 
-;; 其他实用函数
+;; Other utility functions
 (defun org-zettel-ref-get-overview-buffer-name (source-buffer)
-  "获取SOURCE-BUFFER对应的概览缓冲区名称。"
-  (format "*Org Zettel Ref: %s*" 
+  "Get the overview buffer name corresponding to SOURCE-BUFFER."
+  (format "*Org Zettel Ref: %s*"
           (file-name-base (buffer-file-name source-buffer))))
 
 (defun org-zettel-ref-extract-id-from-filename (filename)
-  "从文件名中提取ID。"
+  "Extract the ID from the filename."
   (when (string-match "\\([0-9]\\{8\\}T[0-9]\\{6\\}\\)" filename)
     (match-string 1 filename)))
 

@@ -261,6 +261,24 @@ name and FLIP is non-nil if the sort order should be reversed."
 (defconst org-zettel-ref-status-rating-regexp "--\\([^-]+\\)-\\([0-5]\\)\\(?:\\.[^.]*\\)?$"
   "Match the status and rating part in the file name.")
 
+(defun org-zettel-ref-clean-title-for-display (title)
+  "Clean TITLE for display, removing status and rating suffixes.
+  
+  Parameters:
+  - TITLE: Original title string
+  
+  Input: Title possibly containing --done-4 etc. suffixes
+  Output: Cleaned title
+  
+  This function removes status and rating suffixes, like '--done-4', '--reading-2' etc.,
+  to make list panel display cleaner titles."
+  (when title
+    ;; Remove status and rating suffixes (--status-rating format)
+    (let ((clean-title (replace-regexp-in-string "--[^-]+-[0-5]$" "" title)))
+      ;; Further clean possible other variants
+      (setq clean-title (replace-regexp-in-string "--[^-]+$" "" clean-title))
+      (string-trim clean-title))))
+
 ;; Parse file name
 (defun org-zettel-ref-parse-filename (filename)
   "Parse FILENAME into a list of (author title keywords status rating)."
@@ -283,7 +301,7 @@ name and FLIP is non-nil if the sort order should be reversed."
     (when (string-match org-zettel-ref-keywords-regexp filename)
       (setq keywords (split-string (match-string 1 filename) "_")))
 
-    ;; Parse status and rating - 找到最后一个匹配的状态和评级
+    ;; Parse status and rating - find the last matching status and rating
     (let ((start 0)
           (last-status nil)
           (last-rating nil))
@@ -309,7 +327,7 @@ For example: Stallman__GNUEmacs==editor_lisp--reading-3.org"
                     (when author (concat author "__"))
                     title
                     (when keywords (concat "==" (string-join keywords "_")))))
-         ;; 移除任何已存在的状态和评级标记
+         ;; Remove any existing status and rating markers
          (clean-name (replace-regexp-in-string "--[^-]+-[0-5]\\(?:\\.[^.]*\\)?$" "" base-name)))
     (concat clean-name
             (when (or status rating)
@@ -417,18 +435,29 @@ For example: Stallman__GNUEmacs==editor_lisp--reading-3.org"
 ;;;----------------------------------------------------------------------------
 
 (defun org-zettel-ref-list--format-entry (id entry)
-  "Format entry for tabulated list display.
-ID is the entry identifier.
-ENTRY is the org-zettel-ref-entry struct."
+  "Format entry for table list display, using cleaned title.
+  
+  Parameters:
+  - ID: Entry identifier
+  - ENTRY: org-zettel-ref-entry struct
+  
+  Input: Entry ID and entry data
+  Output: Formatted vector for table display
+  
+  This function uses information stored in the database, rather than re-parsing the file name,
+  to display clean titles without status and rating suffixes."
   (if (null entry)
       (progn 
         (message "Warning: Nil entry for id %s" id)
         (make-vector (length (org-zettel-ref-list-columns)) ""))
     (let* ((file-path (org-zettel-ref-ref-entry-file-path entry))
-           (title (or (org-zettel-ref-ref-entry-title entry)
-                     (file-name-base file-path)))
+           ;; Use information stored in the database, rather than re-parsing the file name
+           (raw-title (or (org-zettel-ref-ref-entry-title entry)
+                         (file-name-base file-path)))
+           ;; Further clean title to ensure no suffix
+           (clean-title (org-zettel-ref-clean-title-for-display raw-title))
            (title-with-props  ; Add file path property to title
-            (propertize title
+            (propertize (or clean-title "Untitled")
                        'file-path file-path
                        'help-echo file-path))
            (status-str (pcase (org-zettel-ref-ref-entry-read-status entry)
@@ -450,40 +479,61 @@ ENTRY is the org-zettel-ref-entry struct."
          "")))))
 
 (defun org-zettel-ref-list--get-entries ()
-  "Get entries for tabulated list display."
+  "Get entries for table list display, using cleaned title.
+  
+  Input: None
+  Output: Formatted entry list
+  
+  This function uses information stored in the database, rather than re-parsing the file name,
+  to display clean titles without status and rating suffixes."
   (let ((entries '())
         (db (org-zettel-ref-ensure-db)))
     (maphash
      (lambda (id entry)
        (when-let* ((file-path (org-zettel-ref-ref-entry-file-path entry))
                    (exists (file-exists-p file-path)))
-         (let* ((file-name (file-name-nondirectory file-path))
-                (parsed-info (org-zettel-ref-parse-filename file-name))
-                (author (nth 0 parsed-info))  
-                (title (nth 1 parsed-info))   
-                (keywords (nth 2 parsed-info))
-                ;; Get status and rating from filename
-                (status (or (nth 3 parsed-info) 'unread))
-                (rating (or (nth 4 parsed-info) 0))
-                ;; Convert status to display string
-                (status-str (pcase status
+         ;; Use information stored in the database, rather than re-parsing the file name
+         (let* ((raw-title (org-zettel-ref-ref-entry-title entry))
+                (clean-title (org-zettel-ref-clean-title-for-display raw-title))
+                (author (org-zettel-ref-ref-entry-author entry))
+                (keywords (org-zettel-ref-ref-entry-keywords entry))
+                (status (org-zettel-ref-ref-entry-read-status entry))
+                (rating (org-zettel-ref-ref-entry-rating entry))
+                ;; If database information is incomplete, parse the file name as a fallback
+                (parsed-info (when (or (not raw-title) (not author))
+                              (org-zettel-ref-parse-filename 
+                               (file-name-nondirectory file-path))))
+                ;; Use database information or parsed results
+                (final-title (or clean-title 
+                               (org-zettel-ref-clean-title-for-display (nth 1 parsed-info))
+                               "Untitled"))
+                (final-author (or author (nth 0 parsed-info) ""))
+                (final-keywords (or keywords (nth 2 parsed-info) '()))
+                (final-status (or status 
+                                (nth 3 parsed-info) 
+                                'unread))
+                (final-rating (or rating 
+                                (nth 4 parsed-info) 
+                                0))
+                ;; Convert status to display string (unicode symbols)
+                (status-str (pcase final-status
                             ('unread "⚪")
                             ('reading "🔵")
                             ('done "✅")
                             (_ "⚪")))
                 ;; Convert rating to stars
-                (rating-str (make-string rating ?⭐)))
+                (rating-str (make-string final-rating ?⭐)))
            (push (list file-path
                       (vector
-                       ;; Title column 
+                       ;; Title column - use cleaned title
                        (propertize 
-                        (or title "Untitled")
+                        final-title
                         'file-path file-path
                         'help-echo file-path)
                        ;; Author column 
                        (propertize 
-                        (or author "")
-                        'help-echo (format "Author: %s" (or author "Unknown")))
+                        final-author
+                        'help-echo (format "Author: %s" (or final-author "Unknown")))
                        ;; Status column
                        status-str
                        ;; Rating column
@@ -492,7 +542,7 @@ ENTRY is the org-zettel-ref-entry struct."
                        (format-time-string "%Y-%m-%d %H:%M:%S"
                                          (org-zettel-ref-ref-entry-modified entry))
                        ;; Keywords column
-                       (string-join (or keywords '()) ", ")))
+                       (string-join final-keywords ", ")))
                  entries))))
      (org-zettel-ref-db-refs db))
     (org-zettel-ref-debug-message-category 'core 
@@ -702,6 +752,55 @@ ENTRY is the org-zettel-ref-entry struct."
                     (progn
                       ;; Rename file
                       (rename-file old-file new-file-path t)
+                      ;; Update database
+                      (when-let* ((ref-id (org-zettel-ref-db-get-ref-id-by-path db old-file)) ; Re-fetch ref-id just in case, though it should be same
+                                (ref-entry (org-zettel-ref-db-get-ref-entry db ref-id)))
+                        ;; Get existing overview mapping information to ensure it remains unchanged
+                        (let ((existing-overview-id (org-zettel-ref-db-get-maps db ref-id))
+                              (existing-overview-entry (org-zettel-ref-db-get-overview-by-ref-id db ref-id)))
+                          (message "DEBUG: Renaming file - REF_ID: %s, Overview ID: %s" 
+                                   ref-id existing-overview-id)
+                          (when existing-overview-entry
+                            (message "DEBUG: Existing overview file: %s" 
+                                     (org-zettel-ref-overview-entry-file-path existing-overview-entry)))
+                          
+                          ;; Update file path mapping
+                          (remhash old-file (org-zettel-ref-db-ref-paths db))
+                          (puthash new-file-path ref-id (org-zettel-ref-db-ref-paths db))
+                          
+                          ;; Update reference entry information (but keep ref-id unchanged)
+                          (setf (org-zettel-ref-ref-entry-file-path ref-entry) new-file-path
+                                (org-zettel-ref-ref-entry-title ref-entry) new-title
+                                (org-zettel-ref-ref-entry-author ref-entry) new-author
+                                (org-zettel-ref-ref-entry-keywords ref-entry) new-keywords)
+                          (org-zettel-ref-db-update-ref-entry db ref-entry)
+                          
+                          ;; Ensure overview mapping relationship remains unchanged
+                          ;; No need to change overview mapping, because ref-id didn't change
+                          (when existing-overview-id
+                            (message "DEBUG: Overview mapping preserved - REF_ID: %s -> Overview ID: %s" 
+                                     ref-id existing-overview-id))
+                          
+                          ;; If overview file exists, update the SOURCE_FILE reference in its content
+                          (when (and existing-overview-entry 
+                                     (not org-zettel-ref-use-single-overview-file))
+                            (let ((overview-file-path (org-zettel-ref-overview-entry-file-path existing-overview-entry)))
+                              (when (file-exists-p overview-file-path)
+                                (condition-case update-err
+                                    (with-temp-buffer
+                                      (insert-file-contents overview-file-path)
+                                      ;; 更新overview文件中的SOURCE_FILE路径
+                                      (when (re-search-forward 
+                                             (format "^#\\+SOURCE_FILE: %s$" 
+                                                     (regexp-quote old-file)) nil t)
+                                        (replace-match (format "#+SOURCE_FILE: %s" new-file-path))
+                                        (write-file overview-file-path)
+                                        (message "DEBUG: Updated SOURCE_FILE reference in overview file")))
+                                  (error
+                                   (message "Warning: Could not update SOURCE_FILE in overview: %s" 
+                                            (error-message-string update-err)))))))
+                          
+                          (org-zettel-ref-db-save db)))
                       ;; Update database
                       (when-let* ((ref-id (org-zettel-ref-db-get-ref-id-by-path db old-file)) ; Re-fetch ref-id just in case, though it should be same
                                 (ref-entry (org-zettel-ref-db-get-ref-entry db ref-id)))
@@ -1263,10 +1362,10 @@ RATING should be a number between 0 and 5."
                  (stringp file)
                  (string-match-p "\\.org$" file)
                  (not (string-match-p "^\\." (file-name-nondirectory file))))
-        ;; 更新数据库
+        ;; Rescan the reference directory and update the database
         (let ((db (org-zettel-ref-ensure-db)))
           (org-zettel-ref-scan-directory db))
-        ;; 延迟刷新显示
+        ;; Delay refresh display
         (run-with-timer 
          0.5 nil
          (lambda ()
@@ -1277,7 +1376,7 @@ RATING should be a number between 0 and 5."
                  (message "Refreshed due to file change: %s" 
                          (file-name-nondirectory file)))))))))))
 
-;; 添加手动刷新数据库的命令
+;; Add command to force rescan of the reference directory and update the database
 (defun org-zettel-ref-force-rescan ()
   "Force a rescan of the reference directory and update the database."
   (interactive)
@@ -1558,6 +1657,43 @@ This command does NOT delete the actual source or overview files."
 ;; Add Keybinding (Example: C-c C-k) - Needs to be added where other keys are defined
 ;; (define-key org-zettel-ref-list-mode-map (kbd "C-c C-k") #'org-zettel-ref-list-remove-db-entries)
 
+(defun org-zettel-ref-cleanup-database-titles ()
+  """Clean up titles in the database, removing status and rating suffixes.
+
+  This function scans all entries in the database and cleans the title field
+  by removing status and rating suffixes. This ensures that the titles
+  stored in the database are clean. This is intended as a one-time
+  cleanup operation."""
+  (interactive)
+  (let* ((db (org-zettel-ref-ensure-db))
+         (cleaned-count 0)
+         (total-count 0))
+
+    (message "Starting database title cleanup...")
+
+    (maphash
+     (lambda (id entry)
+       (cl-incf total-count)
+       (let* ((original-title (org-zettel-ref-ref-entry-title entry))
+              (cleaned-title (when original-title
+                              (org-zettel-ref-clean-title-for-display original-title))))
+         (when (and original-title cleaned-title
+                   (not (string= original-title cleaned-title)))
+           (message "Cleaning title: '%s' -> '%s'" original-title cleaned-title)
+           (setf (org-zettel-ref-ref-entry-title entry) cleaned-title)
+           (org-zettel-ref-db-update-ref-entry db entry)
+           (cl-incf cleaned-count))))
+     (org-zettel-ref-db-refs db))
+
+    (when (> cleaned-count 0)
+      (org-zettel-ref-db-save db)
+      (message "Database title cleanup complete! Cleaned titles for %d/%d entries." cleaned-count total-count)
+      (when (eq major-mode 'org-zettel-ref-list-mode)
+        (org-zettel-ref-list-refresh)))
+    (when (= cleaned-count 0)
+      (message "Database titles are already clean, no cleanup needed (checked %d entries)." total-count))))
+
+
 ;;;----------------------------------------------------------------------------
 ;;; Overview Link Management
 ;;;----------------------------------------------------------------------------
@@ -1763,5 +1899,7 @@ In multi-file mode, opens the dedicated overview file."
     (princ "g - Refresh list\n\n")
     
     (princ "For more information, see the documentation in the source code.")))
+
+
 
 (provide 'org-zettel-ref-list)

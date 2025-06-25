@@ -123,7 +123,43 @@ Can be 'org-roam, 'denote, or nil for standalone mode.")
   (created nil)                            ; Creation time
   (modified nil)                           ; Modified time
   (read-status 'unread :type symbol)              ; Reading status: unread, reading, done
-  (rating 0 :type number))                        ; Rating: 0-5 stars
+  (rating 0 :type number)                        ; Rating: 0-5 stars
+  (user-data nil))                                    ; User data for extensions
+
+;;; User data access functions for ref-entry
+(defun org-zettel-ref-ref-entry-get-user-data (entry key)
+  "Get user data from a reference entry.
+  
+  Parameters:
+  - ENTRY: Reference entry structure
+  - KEY: Key to get data
+  
+  Input: Reference entry and data key
+  Output: Corresponding user data, nil if not found
+  
+  This function gets data from the user-data field of a reference entry."
+  (when (org-zettel-ref-ref-entry-p entry)
+    (let ((user-data (org-zettel-ref-ref-entry-user-data entry)))
+      (when (hash-table-p user-data)
+        (gethash key user-data)))))
+
+(defun org-zettel-ref-ref-entry-set-user-data (entry key value)
+  "Set user data in a reference entry.
+  
+  Parameters:
+  - ENTRY: Reference entry structure
+  - KEY: Key to set data
+  - VALUE: Value to set
+  
+  Input: Reference entry, data key, and data value
+  Output: Set value
+  
+  This function sets data in the user-data field of a reference entry."
+  (when (org-zettel-ref-ref-entry-p entry)
+    (unless (org-zettel-ref-ref-entry-user-data entry)
+      (setf (org-zettel-ref-ref-entry-user-data entry) (make-hash-table :test 'equal)))
+    (puthash key value (org-zettel-ref-ref-entry-user-data entry))
+    value))
 
 ;; 3. Overview entry structure
 (cl-defstruct (org-zettel-ref-overview-entry
@@ -612,29 +648,41 @@ DB is the database object."
     (maphash
      (lambda (id entry)
        (when (org-zettel-ref-ref-entry-p entry)
-         ;; Check if entry needs migration
-         (unless (and (slot-exists-p entry 'read-status)
-                     (slot-exists-p entry 'rating))
-           ;; Create a new entry with all fields
-           (let* ((new-entry (org-zettel-ref-ref-entry-create
-                             :id (org-zettel-ref-ref-entry-id entry)
-                             :file-path (org-zettel-ref-ref-entry-file-path entry)
-                             :title (org-zettel-ref-ref-entry-title entry)
-                             :author (org-zettel-ref-ref-entry-author entry)
-                             :keywords (org-zettel-ref-ref-entry-keywords entry)
-                             :created (org-zettel-ref-ref-entry-created entry)
-                             :modified (org-zettel-ref-ref-entry-modified entry)
-                             :read-status 'unread
-                             :rating 0)))
-             ;; Replace old entry with new one
-             (puthash id new-entry (org-zettel-ref-db-refs db))
-             (setq modified t)))))
+         ;; Check if entry needs migration by testing field access
+         (let ((needs-migration nil))
+           (condition-case nil
+               (progn
+                 (org-zettel-ref-ref-entry-read-status entry)
+                 (org-zettel-ref-ref-entry-rating entry)
+                 (org-zettel-ref-ref-entry-user-data entry))
+             (error
+              (setq needs-migration t)))
+           
+           (when needs-migration
+             ;; Create a new entry with all fields including user-data
+             (let* ((new-entry (org-zettel-ref-ref-entry-create
+                               :id (org-zettel-ref-ref-entry-id entry)
+                               :file-path (org-zettel-ref-ref-entry-file-path entry)
+                               :title (org-zettel-ref-ref-entry-title entry)
+                               :author (condition-case nil (org-zettel-ref-ref-entry-author entry) (error nil))
+                               :keywords (condition-case nil (org-zettel-ref-ref-entry-keywords entry) (error nil))
+                               :created (condition-case nil (org-zettel-ref-ref-entry-created entry) (error (current-time)))
+                               :modified (condition-case nil (org-zettel-ref-ref-entry-modified entry) (error (current-time)))
+                               :read-status (condition-case nil (org-zettel-ref-ref-entry-read-status entry) (error 'unread))
+                               :rating (condition-case nil (org-zettel-ref-ref-entry-rating entry) (error 0))
+                               :user-data nil))) ; 新字段，初始为nil
+               ;; Replace old entry with new one
+               (puthash id new-entry (org-zettel-ref-db-refs db))
+               (setq modified t)
+               (message "DEBUG: Migrated ref entry %s to include user-data field" id))))))
      (org-zettel-ref-db-refs db))
     ;; Save if modified
     (when modified
       (setf (org-zettel-ref-db-modified db) (current-time)
             (org-zettel-ref-db-dirty db) t)
-      (org-zettel-ref-db-save db))
+      (org-zettel-ref-db-save db)
+      (message "DEBUG: Database migration completed, %s entries migrated" 
+               (if modified "some" "no")))
     modified))
 
 (defun org-zettel-ref-db-load (file)
@@ -691,6 +739,10 @@ Return the database object or nil if loading fails."
                       (hash-table-count refs)
                       (hash-table-count overviews)
                       (hash-table-count map))
+              
+              ;; 自动运行迁移
+              (org-zettel-ref-db-migrate-entries db)
+              
               db)))
       (error
        (message "Error loading database from %s: %s" 
@@ -1066,5 +1118,4 @@ Return the statistics result."
 (provide 'org-zettel-ref-db)
 ;;; org-zettel-ref-db.el ends here
 
-;; Setter functions for ref-entry fields
 

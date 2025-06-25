@@ -17,3 +17,5 @@ org-zettel-ref-mode.el.backup
 org-zettel-ref-test
 org-zettel-ref-list-tests.el
 test-*.el
+*.md
+.developing/
