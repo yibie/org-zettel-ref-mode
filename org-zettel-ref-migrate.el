@@ -1,6 +1,8 @@
 ;;; org-zettel-ref-migrate.el --- Migration utilities for org-zettel-ref -*- lexical-binding: t; -*-
 
 (require 'org-zettel-ref-db)
+(require 'org-zettel-ref-core)
+(require 'org-element) ; Ensure org-element is loaded for robust parsing
 
 ;;;###autoload
 (defun org-zettel-ref-migrate ()
@@ -108,6 +110,126 @@ OLD-DATA is the old database data structure."
       (error
        (message "Error loading old database: %S" err)
        nil))))
+       
+(defun org-zettel-ref-convert-highlights-to-list ()
+  "Convert all highlight entries in the current Org buffer from headline format to list format.
+This function is interactive and should be called in an Org buffer (e.g., an overview file).
+This function uses `org-element` for robust parsing and will prompt for confirmation before making changes."
+  (interactive)
+  (unless (eq major-mode 'org-mode) (user-error "This command can only be run in an Org mode buffer."))
 
+  (when (y-or-n-p "Convert all highlight entries in this buffer from headline to list format? This action is irreversible without undo.")
+    (save-excursion
+      (let ((converted-count 0)
+            (original-buffer-modified-p (buffer-modified-p)))
+        (goto-char (point-min))
+        ;; Ensure org-element cache is reset for fresh parsing
+        (when (fboundp 'org-element-cache-reset) (org-element-cache-reset))
+
+        (org-with-wide-buffer
+          ;; Iterate through all level 2 headlines (our highlight entries)
+          (while (re-search-forward "^\\*\\* .*$" nil t)
+            (let* ((headline-start (match-beginning 0))
+                   (headline-end (match-end 0))
+                   (original-hl-id nil)
+                   (hl-type-sym nil)
+                   (hl-text-content nil)
+                   (hl-type-name nil)
+                   (hl-prefix nil)
+                   (hl-img-path nil)
+                   (hl-img-desc nil))
+
+              ;; Parse the headline element at its position for robust extraction
+              (save-excursion
+                (goto-char headline-start)
+                (let* ((headline-element (org-element-at-point))
+                       (properties (org-element-property :properties headline-element)))
+                  (setq original-hl-id (plist-get properties :ORIGINAL_HL_ID))
+                  
+                  ;; Fallback: try traditional org-entry-properties if org-element fails
+                  (when (null original-hl-id)
+                    (org-back-to-heading t)
+                    (let ((props (org-entry-properties)))
+                      (setq original-hl-id (cdr (assoc "ORIGINAL_HL_ID" props)))))
+                  
+                  (message "DEBUG: Properties from org-element: %s" properties)
+                  (message "DEBUG: ORIGINAL_HL_ID from org-element: %s" (plist-get properties :ORIGINAL_HL_ID))
+                  (message "DEBUG: ORIGINAL_HL_ID after fallback: %s" original-hl-id)
+                  
+                  ;; SOURCE_REF_ID is not directly used for formatting, but good to have for context if needed
+                  ;; (setq source-ref-id (plist-get properties :SOURCE_REF_ID))
+
+                  ;; Extract prefix and content from headline title
+                  (let* ((title (org-element-property :raw-value headline-element)))
+                    (setq hl-text-content title) ; Default to full title
+                    (cl-block nil
+                      (dolist (type-def org-zettel-ref-highlight-types)
+                        (let* ((prefix (plist-get (cdr type-def) :prefix))
+                               (prefix-re (regexp-quote prefix)))
+                          (when (string-match (concat "^" prefix-re " \\(.*\\)$") title)
+                            (setq hl-prefix prefix)
+                            (setq hl-text-content (match-string 1 title))
+                            (setq hl-type-sym (car type-def))
+                            (setq hl-type-name (plist-get (cdr type-def) :name))
+                            (cl-return))))))
+
+                  ;; Check for image link within the subtree
+                  (cl-block nil
+                    (org-element-map headline-element 'link
+                      (lambda (link)
+                        (when (string= (org-element-property :type link) "file")
+                          (let ((path (org-element-property :path link)))
+                            (when (string-match-p "\\.\\(jpg\\|jpeg\\|png\\|gif\\|svg\\|webp\\)$" path)
+                              (setq hl-img-path path)
+                              (setq hl-img-desc (org-element-property :description link))
+                              (setq hl-type-sym 'image)
+                              (setq hl-prefix "🖼️") ; Ensure image prefix
+                              (setq hl-text-content (format "[[file:%s]]" hl-img-path)) ; Content is the link
+                              (cl-return))))))) ; Found image, break map
+                  )) ; End of save-excursion for parsing
+
+            ;; Now, construct the new string and replace
+            (message "DEBUG: Found headline with ORIGINAL_HL_ID: %s, hl-text-content: %s" original-hl-id hl-text-content)
+            (when (and original-hl-id (or hl-text-content title)) ; Ensure we have essential data
+                ;; Delete old headline and its properties
+                ;; Need to get the end of the subtree *before* deleting
+                (let ((subtree-end (save-excursion (goto-char headline-start) (org-end-of-subtree t t))))
+                  (delete-region headline-start subtree-end))
+                ;; Insert new list item
+                (let ((display-text (if (eq hl-type-sym 'image) (or hl-img-desc hl-type-name) (or hl-text-content title))))
+                  (insert (format "- %s %s [[hl:%s][hl-%s]]\n" 
+                                 (or hl-prefix "") display-text original-hl-id original-hl-id)))
+                (setq converted-count (1+ converted-count))))))
+
+        (if (> converted-count 0)
+            (message "Converted %d highlight entries to list format." converted-count)
+          (message "No headline-formatted highlight entries found for conversion."))
+        (unless original-buffer-modified-p
+          (set-buffer-modified-p nil)))))) 
+
+(defun org-zettel-ref-check-for-headline-highlights (buffer)
+  "Check if BUFFER contains any highlight entries in headline format.
+Returns t if headline highlights are found, nil otherwise."
+  (with-current-buffer buffer
+    (save-excursion
+      (goto-char (point-min))
+      ;; Search for level 2 headlines that contain ORIGINAL_HL_ID property
+      (re-search-forward "^\\*\\* .*\\n:PROPERTIES:\\n:ORIGINAL_HL_ID: .+\\n:END:" nil t))))
+
+(defun org-zettel-ref-prompt-for-highlight-conversion (buffer)
+  "Prompt user to convert headline-formatted highlights to list format in BUFFER.
+If user agrees, performs the conversion."
+  (interactive)
+  (with-current-buffer buffer
+    (when (y-or-n-p (format "This overview file contains highlights in headline format, but your 'org-zettel-ref-highlight-format' is set to 'list'. Convert to list format now? (This will modify the file)"))
+      (message "Converting highlights to list format...")
+      (org-zettel-ref-convert-highlights-to-list)
+      (message "Conversion complete."))))
+      
 (provide 'org-zettel-ref-migrate)
-;;; org-zettel-ref-migrate.el ends here 
+;;; org-zettel-ref-migrate.el ends here
+
+
+
+
+

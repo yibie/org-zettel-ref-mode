@@ -1,0 +1,171 @@
+#+TITLE: org-zettel-ref-mode 单文件模式开发方案
+
+* 1. 引言与目标
+  - 简述当前 `org-zettel-ref-mode` 的多文件概览机制：每个源文件（reference）对应一个独立的概览文件（overview），用于存放高亮、笔记和AI摘要。
+  - 阐述单文件模式的目标：提供一个选项，将所有源文件的高亮、笔记和AI摘要同步到一个统一的 Org 文件中，以简化管理和查阅。
+
+* 2. 核心变更点
+** 模式切换与配置
+   - 新增 `defcustom` 布尔型变量 `org-zettel-ref-use-single-overview-file` (例如，默认值为 `nil`)。
+     - 当此变量为 `t` 时，启用单文件概览模式。
+     - 当此变量为 `nil` 时，使用现有的多文件概览模式，此时 `org-zettel-ref-mode-type` (`normal`, `denote`, `org-roam`) 控制多文件概览的具体行为。
+   - 新增 `defcustom` 字符串型变量 `org-zettel-ref-single-overview-file-path`，用于在 `org-zettel-ref-use-single-overview-file` 为 `t` 时，指定单一概览文件的完整路径 (例如 `~/org-zettel-ref-single-overview.org`)。
+   - `org-zettel-ref-mode-type` 变量的用途不变，即在非单文件模式下（`org-zettel-ref-use-single-overview-file` 为 `nil` 时）控制多概览文件的生成方式。
+
+** 单一概览文件的内部结构 (核心设计)
+   - 为了区分不同源文件的内容，单一概览文件需要一个清晰的层级结构。
+   - 提议结构：
+     #+BEGIN_SRC org
+     * [[file:path/to/source1.org][源文件1标题]]
+       :PROPERTIES:
+       :SOURCE_FILE_PATH: file:path/to/source1.org
+       :REF_ID: <ref_id_of_source1>
+       :END:
+     ** ❓ 高亮1文本 [[id:UUID-for-highlight1-from-source1][hl-1]]
+        :PROPERTIES:
+        :ID:               UUID-for-highlight1-from-source1  ; Org 自动管理的此标题的ID
+        :SOURCE_REF_ID:    <ref_id_of_source1>
+        :ORIGINAL_HL_ID:   1                                 ; 源文件中 <<hl-1>> 的 '1'
+        :END:
+     ** 📝 高亮2文本 [[id:UUID-for-highlight2-from-source1][hl-2]]
+        :PROPERTIES:
+        :ID:               UUID-for-highlight2-from-source1
+        :SOURCE_REF_ID:    <ref_id_of_source1>
+        :ORIGINAL_HL_ID:   2
+        :END:
+     ** Summary
+         AI生成的源文件1的摘要内容...
+
+     * [[file:path/to/source2.org][源文件2标题]]
+       :PROPERTIES:
+       :SOURCE_FILE_PATH: file:path/to/source2.org
+       :REF_ID: <ref_id_of_source2>
+       :END:
+     ** 🔧 高亮1文本 [[id:UUID-for-highlight1-from-source2][hl-1]]
+        :PROPERTIES:
+        :ID:               UUID-for-highlight1-from-source2
+        :SOURCE_REF_ID:    <ref_id_of_source2>
+        :ORIGINAL_HL_ID:   1
+     #+END_SRC
+   - *说明*:
+     - 每个源文件在单一概览文件中对应一个一级标题。标题本身是一个指向源文件的链接。
+     - 一级标题的 `PROPERTIES` DRAWER 中存储源文件的绝对路径 (格式为 `file:path/to/source.org`) 和其在数据库中的 `REF_ID`。
+     - 该源文件的所有高亮作为其二级子标题。
+     - 二级高亮标题本身是一个Org ID链接，格式为 `[[id:UUID-for-this-highlight-entry][hl-ORIGINAL_HL_ID]]`，其中 `UUID-for-this-highlight-entry` 是Org自动生成的该标题的ID，`hl-ORIGINAL_HL_ID` 是用户可见的描述，指明其对应源文件中的原始高亮ID（例如 "hl-1" 对应源文件的 "<<hl-1>>"）。
+     - 二级高亮标题的 `:PROPERTIES:` 抽屉中必须包含：
+       - `:ID:`: Org 自动管理的此标题的ID (UUID)。
+       - `:SOURCE_REF_ID:`: 此高亮最初来源于哪个源文件的数据库 `REF_ID`。
+       - `:ORIGINAL_HL_ID:`: 此高亮在源文件中原始的 `hl-ID` (例如 `<<hl-1>>` 中的 `1`)。
+     - AI生成的摘要作为源文件对应一级标题下的一个标准二级子标题 `** Summary`。
+
+* 3. 各模块详细修改方案
+** `org-zettel-ref-core.el`
+*** 初始化 (`org-zettel-ref-init`, `org-zettel-ref-ensure-entry`)
+    - 当 `org-zettel-ref-mode-type` 为 `single-file` 时：
+      - `org-zettel-ref-overview-file` (buffer-local) 变量应设置为 `org-zettel-ref-single-overview-file-path` 的值。
+      - `org-zettel-ref-current-overview-buffer` 将是这个单一概览文件的缓冲区。
+      - `org-zettel-ref-ensure-entry` 仍然为源文件创建数据库条目。但对于概览部分，它仅确保单一概览文件存在于文件系统。如果不存在，则创建此文件，可能包含一些基础结构（如 `#+TITLE: Unified Zettel Ref Overview`）。它不再为每个源文件创建单独的概览文件或数据库条目。
+*** 高亮同步 (`org-zettel-ref-sync-highlights`)
+    - 目标缓冲区始终是单一概览文件的缓冲区。
+    - 同步逻辑：
+      1. 获取当前源文件的 `REF_ID` 和标题。
+      2. 在单一概览文件中，查找或创建对应于此源文件的一级标题 (e.g., `* [[file:PATH][TITLE]]` 和相应的 `:REF_ID:` 属性)。
+      3. 遍历源文件中的所有高亮标记 (`<<hl-ID>> §TYPE{text}`).
+      4. 对于每个高亮，在上述一级标题下，查找或创建对应的二级高亮子标题。
+         - 子标题格式：`** PREFIX TEXT [[id:UUID-for-this-highlight-entry][hl-ID]]` (其中 `ID` 是从源文件 `<<hl-ID>>` 中提取的原始ID, `UUID-for-this-highlight-entry` 是为这个二级标题新生成的 Org ID)。
+         - 属性：`:ID: UUID-for-this-highlight-entry`, `:SOURCE_REF_ID: <source_ref_id>`, `:ORIGINAL_HL_ID: ID`
+      5. 更新或插入高亮内容和属性。注意处理图片等特殊高亮类型。
+*** 概览文件/缓冲区管理
+    - `org-zettel-ref-create-overview-file`: 在 `single-file` 模式下，此函数如果被调用（可能在首次初始化时），应负责创建 `org-zettel-ref-single-overview-file-path` 指定的文件，并可能写入初始内容。
+    - `org-zettel-ref-cleanup-overview`: 在 `single-file` 模式下，这个函数可能不应轻易关闭单一概览缓冲区，除非没有任何 `org-zettel-ref` 会话激活。其行为需要调整。
+    - `org-zettel-ref-get-overview-buffer-name`: 在 `single-file` 模式下，应返回基于单一概览文件路径的固定名称，例如 `*Org Zettel Ref Single Overview*`。
+
+** `org-zettel-ref-db.el` (数据库)
+*** `overviews` 和 `overview-paths` 哈希表
+    - 在 `single-file` 模式下：
+      - `overviews` 表可以只包含一个特殊条目，代表这个单一概览文件，其 `id` 可以是一个预定义常量，如 `"SINGLE_OVERVIEW_ID"`。
+      - `overview-paths` 表将这个单一概览文件的路径映射到这个 `"SINGLE_OVERVIEW_ID"`。
+    - 另一种思路是，在单文件模式下，这些表可以不被填充或使用，相关函数直接通过 `org-zettel-ref-single-overview-file-path` 获取信息。
+*** `map` 哈希表
+    - 所有源文件的 `ref-id` 都会映射到同一个代表单一概览文件的 `overview-id` (e.g., `"SINGLE_OVERVIEW_ID"`).
+*** 函数调整
+    - `org-zettel-ref-db-ensure-overview-entry`: 在 `single-file` 模式下，如果调用，它应确保代表单一概览文件的那个特殊条目存在于 `overviews` 和 `overview-paths` 中。它不会为每个源文件创建新的概览条目。
+    - `org-zettel-ref-db-get-overview-by-ref-id`: 输入任何 `ref-id`，在 `single-file` 模式下都应返回代表单一概览文件的那个特殊条目。
+    - `org-zettel-ref-db-add-map`: 将源文件的 `ref-id` 与单一概览文件的特殊 `overview-id` 关联。
+    - `org-zettel-ref-db-create-overview-entry`: 在 `single-file` 模式下，不应被直接用于为每个源文件创建条目。
+
+** `org-zettel-ref-highlight.el`
+*** `hl:` 和 `id:` 链接解析 (至关重要)
+    - 对于单文件模式下从单一概览文件跳转回源文件高亮：
+      - 需要通过 `advice` 等方式扩展 Emacs Lisp 中处理 `id:` 类型链接的函数 (例如 `org-id-open` 或相关底层函数)。
+      - 当用户在单一概览文件中点击形如 `[[id:UUID][hl-ORIGINAL_HL_ID]]` 的链接时：
+        1. Org mode 会通过其内置的 ID 系统定位到单一概览文件中具有相应 `:ID: UUID` 属性的标题。
+        2. 我们定制的 (advised) 函数会检查这个被定位的标题是否同时拥有我们定义的 `:SOURCE_REF_ID:` 和 `:ORIGINAL_HL_ID:` 属性。
+        3. 如果这两个属性存在：
+           a. 它会使用 `:SOURCE_REF_ID:` 从数据库 `org-zettel-ref-db-refs` 中找到对应的源文件条目，从而获得源文件路径 (`org-zettel-ref-ref-entry-file-path`)。
+           b. 然后打开或切换到该源文件缓冲区。
+           c. 接着在源文件缓冲区中搜索 `<<hl-ORIGINAL_HL_ID>>` 标记并跳转。
+        4. 如果这两个属性不存在，则链接行为回退到 Org mode 默认的 `id:` 链接处理方式。
+    - 对于多文件模式下，概览文件中的 `[[hl:ID_IN_SOURCE]]` 链接（如果仍保留这种形式），或者源文件内部可能存在的其他 `hl:` 链接，原有的 `org-link-set-parameters` for `"hl"` 类型的 `:follow` 函数仍然需要工作。我们需要确保两种链接类型的处理逻辑共存且正确。
+*** 高亮ID生成/管理
+    - 源文件中的 `org-zettel-ref-highlight-counter` 和 `<<hl-ID>>` 机制可以保持不变（ID在源文件内唯一）。
+    - 在单一概览文件中同步高亮条目时，`org-zettel-ref-sync-highlights` 负责为每个高亮条目（二级标题）调用 `(org-id-get-create)` 来生成并存储其唯一的 `:ID:` (UUID)。
+    - 链接的描述部分 `[hl-ORIGINAL_HL_ID]` 使用源文件中的原始ID。
+
+** `org-zettel-ref-list.el` (列表模式)
+*** "打开/跳转到概览" 操作
+    - 对于列表中的选定源文件，此操作应：
+      1. 打开 `org-zettel-ref-single-overview-file-path` 指定的单一概览文件。
+      2. 在该文件中，搜索对应于选定源文件的 `REF_ID` 的一级标题，并跳转到该标题处。
+*** 文件操作 (特别是删除 `org-zettel-ref-list-delete-file`)
+    - 当 `org-zettel-ref-mode-type` 为 `single-file` 时：
+      - "仅删除概览 (Delete Overview Only)":
+        - 找到单一概览文件中与该源文件对应的一级标题。
+        - 删除这个一级标题及其所有子内容（高亮、笔记、AI摘要等）。
+        - 单一概览文件本身不被删除。
+      - "同时删除 (Delete Both)":
+        - 删除源文件本身。
+        - 从数据库中移除源文件的条目。
+        - 从单一概览文件中移除其对应的一级标题及其所有子内容。
+*** 概览链接管理 (`org-zettel-ref-list-link-overview`, `org-zettel-ref-list-unlink-overview`)
+    - 这些功能在 `single-file` 模式下失去意义，应被禁用或提示用户当前模式不支持此操作。
+
+** `org-zettel-ref-ai.el` (AI 摘要)
+*** 摘要插入位置 (`org-zettel-ref-ai-generate-summary`)
+    - 生成的 `** Summary` 标题及其内容必须插入到单一概览文件中，作为对应源文件一级标题下的一个标准二级子标题。
+    - `org-zettel-ref-ai--find-insert-position`, `org-zettel-ref-ai--has-summary-p`, 和 `org-zettel-ref-ai--remove-summary` 都需要修改，使其操作限定在单一概览文件中特定源文件对应的一级标题的范围之内。
+
+* 4. 开发步骤建议 (渐进式开发)
+  1. *核心模式切换与配置*:
+     - 在 `org-zettel-ref-core.el` 中添加新模式类型和单一概览文件路径的 `defcustom`。
+     - 修改 `org-zettel-ref-init` 以识别新模式，初步设置 `org-zettel-ref-overview-file` 指向单一文件。
+  2. *数据库适配初稿*:
+     - 修改 `org-zettel-ref-db.el` 中的 `map` 和 `overviews` 相关逻辑，以支持单一概览文件的概念。
+  3. *基本高亮同步到单一文件*:
+     - 修改 `org-zettel-ref-sync-highlights` 以将高亮写入单一概览文件。
+     - 实现单一概览文件内的基本分段结构（为每个源文件创建一级标题）。
+  4. *关键的 `hl:` 链接解析*:
+     - 优先解决从单一概览文件跳回源文件高亮处的问题。这是核心可用性功能。
+  5. *列表模式 (`org-zettel-ref-list.el`) 功能适配*:
+     - 调整 "打开概览" 的行为，使其导航到单一概览文件中的正确区域。
+     - 实现 "删除概览部分" (即从单一文件中移除特定源文件的所有内容)。
+  6. *AI 摘要功能适配*:
+     - 确保摘要能正确插入到单一概览文件的对应源文件区域。
+  7. *完善数据库和文件操作*:
+     - 细化文件删除、重命名等操作在单文件模式下的行为。
+     - 确保数据库状态与单一概览文件内容的一致性。
+  8. *测试与精化*:
+     - 全面测试各种操作流程，包括文件创建、修改、删除、重命名等。
+     - 处理边缘情况和错误。
+  9. *文档更新*:
+     - 更新用户文档以说明新模式的用法和配置。
+
+* 5. 潜在风险与挑战
+  - *单一概览文件的性能*: 如果有大量源文件和高亮，单一概览文件可能会变得非常大，影响 Org mode 的性能。未来可能需要考虑归档或按需加载部分内容的机制。
+  - *并发编辑的复杂性*: 虽然 Emacs Lisp 是单线程的，但如果用户在多个源文件和单一概览文件之间快速切换并进行编辑和同步，逻辑需要足够健壮以避免数据不一致或同步冲突。
+  - *ID 命名与解析的健壮性*: `[[hl:REF_ID-ORIGINAL_HL_ID]]` 这种组合ID的生成和解析逻辑必须非常可靠。
+  - *用户体验*: 需要确保模式切换清晰，用户能够理解单文件模式的行为和限制。
+  - *错误处理和数据恢复*: 在文件操作（特别是删除单一概览文件中的部分内容时）需要有良好的错误处理。
+
+* 6. 总结
+  单文件模式是一个有价值的补充，可以为用户提供更集中的笔记管理方式。通过仔细规划和分步实施，可以成功集成到现有系统中，并提升用户体验。 

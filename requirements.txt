@@ -4,6 +4,10 @@ pdfplumber>=0.9.0
 PyPDF2>=3.0.0
 pdf2image>=1.16.3
 pytesseract>=0.3.10
+pymupdf4llm>=0.0.5
+camelot-py>=0.10.1
+tabula-py>=2.5.1
+# nougat-ocr>=0.1.10  # Disabled due to Python 3.13 compatibility issues
 
 # Document Processing
 html2text>=2020.1.16
@@ -12,6 +16,7 @@ beautifulsoup4>=4.12.0
 
 # Image Processing
 Pillow>=10.0.0
+opencv-python>=4.8.0
 
 # macOS specific
 pyobjc; sys_platform == 'darwin'

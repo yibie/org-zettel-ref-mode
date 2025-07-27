@@ -18,4 +18,5 @@ org-zettel-ref-test
 org-zettel-ref-list-tests.el
 test-*.el
 *.md
-.developing/
+#.developing/
+.claude/

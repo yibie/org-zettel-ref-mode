@@ -88,6 +88,15 @@ and can be manually triggered with `org-zettel-ref-ai-generate-summary'."
                  (const :tag "Multi-File (One note file per reference)" multi-file))
   :group 'org-zettel-ref)
 
+(defcustom org-zettel-ref-highlight-format 'headline
+  "Highlight display format in overview files.
+Choices:
+- 'headline: Use org headlines (*, **, ***)
+- 'list: Use ordered lists (-, +, 1.)
+- 'description: Use description lists (- term :: desc)"
+  :type '(choice (const headline) (const list) (const description))
+  :group 'org-zettel-ref)
+
 (defcustom org-zettel-ref-single-notes-file-path (expand-file-name "zettel-ref-notes.org" org-directory)
   "The path to the single Org file used for storing all literature notes when `org-zettel-ref-note-saving-style` is set to `single-file`."
   :type 'file
@@ -493,6 +502,16 @@ Returns a list of highlights, where each element is a list:
                   (throw 'highlight-deleted t))))
             (widen)))))))
 
+(defun org-zettel-ref--format-highlight-entry (original-hl-id hl-type-sym hl-text-content hl-type-name hl-prefix hl-img-path hl-img-desc format-type)
+  "Helper function to format highlight entry based on format-type."
+  (let ((display-text (if (eq hl-type-sym 'image) (or hl-img-desc hl-type-name) hl-text-content)))
+    (pcase format-type
+      ('headline (format "** %s %s\n" hl-prefix display-text))
+      ('list (format "- %s %s [[hl:%s][hl-%s]]\n" hl-prefix display-text original-hl-id original-hl-id))
+      ('description (format "- %s :: %s [[hl:%s][hl-%s]]\n" hl-prefix display-text original-hl-id original-hl-id))
+      (_ (error "Unknown highlight format type: %s" format-type)))))
+
+
 (defun org-zettel-ref--add-or-update-highlights (source-heading-point highlights)
   "Add or update highlights.
   
@@ -516,46 +535,72 @@ Returns a list of highlights, where each element is a list:
              (display-text (if (eq hl-type-sym 'image) (or hl-img-desc hl-type-name) hl-text-content))
              (found-existing nil))
         
-        ;; Find existing highlight entry
         (save-excursion
-          (goto-char source-heading-point)
-          (org-back-to-heading t)
-          (org-narrow-to-subtree)
-          (goto-char (point-min))
-          
-          (while (and (not found-existing) (re-search-forward "^\\** .*$" nil t))
-            (let ((props (org-entry-properties)))
-              (when (string= (cdr (assoc "ORIGINAL_HL_ID" props)) original-hl-id)
-                ;; Found existing entry, update content
-                (setq found-existing t)
+         (goto-char source-heading-point)
+         (org-back-to-heading t)
+         (org-narrow-to-subtree)
+         (goto-char (point-min))
+         
+         ;; --- Search for existing highlight ---
+         (let ((search-re (pcase org-zettel-ref-highlight-format
+                            ('headline (format ":ORIGINAL_HL_ID: +%s" original-hl-id))
+                            ('list (format "\\[hl:%s\\]" original-hl-id))
+                            ('description (format "\\[hl:%s\\]" original-hl-id)))))
+           (when (re-search-forward search-re nil t)
+             (setq found-existing t)
+             (pcase org-zettel-ref-highlight-format
+               ('headline
+                (org-back-to-heading t)
                 (let* ((heading-start (line-beginning-position))
                        (heading-end (line-end-position))
-                       (expected-heading (format "** %s %s" hl-prefix display-text)))
+                       (expected-heading (org-zettel-ref--format-highlight-entry original-hl-id hl-type-sym hl-text-content hl-type-name hl-prefix hl-img-path hl-img-desc 'headline)))
                   (delete-region heading-start heading-end)
-                  (insert expected-heading)
-                  ;; Process image content
-                  (when (and (eq hl-type-sym 'image) hl-img-path)
-                    (org-end-of-meta-data t)
-                    (unless (looking-at "\\(#\\+ATTR_ORG:.*\n\\)?\\[\\[file:")
-                      (insert (format "\n#+ATTR_ORG: :width 300\n[[file:%s]]\n" hl-img-path))))
-                  (message "DEBUG: Updated highlight entry: %s" original-hl-id)))))
-          (widen))
+                  (insert expected-heading))
+                (message "DEBUG: Updated headline highlight: %s" original-hl-id))
+               ('list
+                (beginning-of-line)
+                (let ((line-start (point)))
+                  (forward-line 1)
+                  (let ((line-end (point)))
+                    (delete-region line-start line-end) ; Delete the old line
+                    (insert (org-zettel-ref--format-highlight-entry original-hl-id hl-type-sym hl-text-content hl-type-name hl-prefix hl-img-path hl-img-desc 'list))
+                    (message "DEBUG: Updated list highlight: %s" original-hl-id)))
+               ('description
+                (beginning-of-line)
+                (let ((line-start (point)))
+                  (forward-line 1)
+                  (let ((line-end (point)))
+                    (delete-region line-start line-end) ; Delete the old line
+                    (insert (org-zettel-ref--format-highlight-entry original-hl-id hl-type-sym hl-text-content hl-type-name hl-prefix hl-img-path hl-img-desc 'description))
+                    (message "DEBUG: Updated description highlight: %s" original-hl-id)))))))
+         (widen))
         
-        ;; If not found, create new
+        ;; --- If not found, create new ---
         (unless found-existing
-          (save-excursion
-            (goto-char source-heading-point)
-            (org-back-to-heading t)
-            (org-end-of-subtree)
-            (unless (bolp) (insert "\n"))
-            (insert (format "** %s %s\n" hl-prefix display-text))
-            (org-entry-put nil "SOURCE_REF_ID" (org-entry-get source-heading-point "REF_ID"))
-            (org-entry-put nil "ORIGINAL_HL_ID" original-hl-id)
-            
-            ;; Process image type
-            (when (and (eq hl-type-sym 'image) hl-img-path)
-              (insert (format "\n#+ATTR_ORG: :width 300\n[[file:%s]]\n" hl-img-path)))
-            (message "DEBUG: Created new highlight entry: %s" original-hl-id)))))))
+         (save-excursion
+           (goto-char source-heading-point)
+           (org-back-to-heading t)
+           (org-end-of-subtree)
+           (unless (bolp) (insert "\n"))
+           
+           (pcase org-zettel-ref-highlight-format
+             ('headline
+              (insert (org-zettel-ref--format-highlight-entry original-hl-id hl-type-sym hl-text-content hl-type-name hl-prefix hl-img-path hl-img-desc 'headline))
+              (org-entry-put nil "SOURCE_REF_ID" (org-entry-get source-heading-point "REF_ID"))
+              (org-entry-put nil "ORIGINAL_HL_ID" original-hl-id)
+              (when (and (eq hl-type-sym 'image) hl-img-path)
+                (insert (format "\n#+ATTR_ORG: :width 300\n[[file:%s]]\n" hl-img-path)))
+              (message "DEBUG: Created new headline highlight: %s" original-hl-id))
+             ('list
+              (insert (org-zettel-ref--format-highlight-entry original-hl-id hl-type-sym hl-text-content hl-type-name hl-prefix hl-img-path hl-img-desc 'list))
+              (when (and (eq hl-type-sym 'image) hl-img-path)
+                (insert (format "  #+ATTR_ORG: :width 300\n  [[file:%s]]\n" hl-img-path)))
+              (message "DEBUG: Created new list highlight: %s" original-hl-id))
+             ('description
+              (insert (org-zettel-ref--format-highlight-entry original-hl-id hl-type-sym hl-text-content hl-type-name hl-prefix hl-img-path hl-img-desc 'description))
+              (when (and (eq hl-type-sym 'image) hl-img-path)
+                (insert (format "  #+ATTR_ORG: :width 300\n  [[file:%s]]\n" hl-img-path)))
+              (message "DEBUG: Created new description highlight: %s" original-hl-id)))))))))
 
 (defun org-zettel-ref--remove-all-ref-id-content (source-ref-id)
   "Remove all content related to the specified REF_ID from the overview file.
@@ -833,8 +878,13 @@ Returns nil if no changes needed, or new filepath if changes required."
           ;; Run initialization hook
           (run-hooks 'org-zettel-ref-init-hook)
           
+          ;; Check for highlight format migration
+          (when (and (eq org-zettel-ref-highlight-format 'list)
+                     (org-zettel-ref-check-for-headline-highlights overview-buffer))
+            (org-zettel-ref-prompt-for-highlight-conversion overview-buffer))
+          
           (message "Initialized org-zettel-ref for %s" (buffer-name))
-          overview-file)))))
+          overview-file))))
 
 (defun org-zettel-ref-ensure-entry (source-buffer)
   "Ensure database entries exist for the source buffer.
@@ -1168,6 +1218,13 @@ ARG is an optional argument."
    :follow #'org-zettel-ref-open-ref-link
    :export #'org-zettel-ref-export-ref-link
    :complete #'org-zettel-ref-complete-ref-link))
+
+(with-eval-after-load 'org
+  (org-link-set-parameters
+   "hl"
+   :follow #'org-zettel-ref-jump-to-source-highlight-from-overview
+   :export #'org-zettel-ref-export-ref-link ; Re-use existing export function if applicable, or create a new one
+   :complete #'org-zettel-ref-complete-ref-link)) ; Re-use existing complete function if applicable, or create a new one
 
 ;;------------------------------------------------------------------
 ;; Link migration tool

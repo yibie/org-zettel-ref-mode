@@ -320,10 +320,20 @@ org-zettel-ref-mode 现在支持直接通过 Emacs 调用外部 Python 脚本，
 
 不推荐将该脚本用于转换扫描版 PDF, 原因是转换速度慢, 而且转换的效果也不非常好.
 
+** 高亮格式转换
+
+org-zettel-ref-mode 现在支持将概览文件中的高亮从旧的标题（headline）格式转换为新的列表（list）格式。
+
+- **自动转换提示**：当您打开一个包含旧标题格式高亮的概览文件，并且您的 `org-zettel-ref-highlight-format` 配置为 `'list'` 或 `'description'` 时，系统将自动提示您是否进行转换。
+- **手动转换**：您也可以在任何 Org 概览文件中运行 =M-x org-zettel-ref-convert-highlights-to-list= 命令，手动将当前缓冲区中的所有标题格式高亮转换为列表格式。
+
+注意：转换操作是不可逆的，请在执行前确认。
+
 * 可调用指令列表
 
 以下是 org-zettel-ref-mode 提供的主要可调用指令：
 
+- =M-x org-zettel-ref-convert-highlights-to-list=: 将当前缓冲区中的高亮从标题格式转换为列表格式
 - =M-x org-zettel-ref-init=: 初始化 org-zettel-ref-mode，创建或打开概览文件
 - =M-x org-zettel-ref-add-quick-note=: 在当前位置添加快速笔记
 - =M-x org-zettel-ref-sync-overview=: 手动同步概览文件
@@ -341,6 +351,9 @@ org-zettel-ref-mode 现在支持直接通过 Emacs 调用外部 Python 脚本，
 * 可配置变量列表
 以下是 org-zettel-ref-mode 的主要可配置变量：
 
+- =setq org-zettel-ref-highlight-format 'headline=: 设置概览文件中高亮的显示格式。
+  - ='headline=: 使用 Org 标题（*，**，***）来组织高亮。这是传统格式。
+  - ='list=: 使用有序列表（-，+，1.）来显示高亮。
 - =setq org-zettel-ref-overview-directory "~/org-zettel-ref-overviews/"=: 设置概览文件存储目录
 - =setq org-zettel-ref-mode-type 'normal=: 设置模式类型（可选：'normal, 'denote, 'org-roam）
 - =setq org-zettel-ref-note-saving-style 'multi-file=: 决定文献笔记的保存方式。
@@ -394,6 +407,15 @@ A: 您可以使用 =M-x org-zettel-ref-check-roam-db= 命令来检查org-roam数
 如果问题持续存在，请通过 GitHub 仓库提交 issue，附上问题描述、重现步骤和调试日志。
 
 * 版本历史
+- v0.6.0 (2025-07-27)
+  - 新增：高亮显示格式选项
+    - 新增配置项：`org-zettel-ref-highlight-format`，允许用户选择在概览文件中高亮的显示格式（标题、列表、描述列表）。
+    - 改进：`org-zettel-ref--add-or-update-highlights` 函数已更新，以支持新的高亮格式。
+  - 增强：高亮链接跳转
+    - 修复了 `hl:` 链接无法正确跳转的问题，现在无论高亮是标题格式还是列表格式，都能正确跳转回源文件。
+  - 新增：高亮格式转换工具
+    - 新增命令：`org-zettel-ref-convert-highlights-to-list`，用于将旧的标题格式高亮转换为新的列表格式。
+    - 新增功能：当检测到旧格式高亮且配置为新格式时，自动提示用户进行转换。
 - v0.5.9 (2025-06-25)
   - 新增：单文件模式
     - 新增配置项： ~org-zettel-ref-use-single-overview-file~ 用于启用/禁用单文件模式

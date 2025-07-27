@@ -1,0 +1,22 @@
+# 简化版依赖 - 只需要最核心的包
+# 主要处理引擎
+marker-pdf>=1.8.0       # OCR 和 PDF 转换工具，支持图像化PDF (需要 Python 3.10+)
+pymupdf4llm>=0.0.5      # 专为学术PDF设计的转换工具（回退选项）
+Pillow>=10.0.0          # 图片处理
+psutil>=5.8.0           # 进程管理和资源监控（marker-pdf 安全包装器需要）
+
+# 可选的文档处理（如果需要处理其他格式）
+html2text>=2020.1.16   # HTML处理
+ebooklib>=0.18          # EPUB处理
+beautifulsoup4>=4.12.0  # HTML解析
+
+# 注意：还需要系统级别的 pandoc
+# macOS: brew install pandoc
+# Ubuntu: sudo apt-get install pandoc
+# Windows: 从 https://pandoc.org/installing.html 下载
+
+# OCR 功能说明：
+# ✓ marker-pdf 现已集成，支持处理图像化PDF（扫描件）
+# ✓ 需要 Python 3.10+ 版本
+# ✓ 首次使用会自动下载AI模型（约1-2GB）
+# ✓ 支持GPU加速（可选）

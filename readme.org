@@ -136,6 +136,15 @@ Before annotating or marking text in the org file for the first time, you can us
 2. `M-x org-zettel-ref-quick-markup`
 3. Choose the markup style you prefer
 
+*** Highlight Format Conversion
+
+org-zettel-ref-mode now supports converting highlights in overview files from the old headline format to the new list format.
+
+- **Automatic Conversion Prompt**: When you open an overview file containing old headline-formatted highlights, and your `org-zettel-ref-highlight-format` is set to `'list'` or `'description'`, the system will automatically prompt you to convert.
+- **Manual Conversion**: You can also run the command =M-x org-zettel-ref-convert-highlights-to-list= in any Org overview file to manually convert all headline-formatted highlights in the current buffer to list format.
+
+Note: The conversion operation is irreversible. Please confirm before proceeding.
+
 *** Sync Overview Files
 Automatic sync by default: Automatically runs when saving the source file.
 Manual sync: `M-x org-zettel-ref-sync-overview`
@@ -326,6 +335,7 @@ It is not recommended to use this script to convert scanned PDFs due to slow con
 
 Here are the main commands provided by org-zettel-ref-mode:
 
+- `M-x org-zettel-ref-convert-highlights-to-list`: Convert highlights in the current buffer from headline format to list format.
 - `M-x org-zettel-ref-init`: Initialize org-zettel-ref-mode, create or open an overview file
 - `M-x org-zettel-ref-add-quick-note`: Add a quick note at the current position
 - `M-x org-zettel-ref-sync-overview`: Manually sync the overview file
@@ -341,6 +351,10 @@ Here are the main commands provided by org-zettel-ref-mode:
 ** Configurable Variables
 
 Here are the main configurable variables for org-zettel-ref-mode:
+
+- `setq org-zettel-ref-highlight-format 'headline`: Set the display format for highlights in overview files.
+  - `'headline`: Uses Org headlines (*, **, ***) to organize highlights. This is the traditional format.
+  - `'list`: Uses ordered lists (-, +, 1.) to display highlights.
 
 - `setq org-zettel-ref-overview-directory "~/org-zettel-ref-overviews/"`: Set the overview file storage directory
 - `setq org-zettel-ref-mode-type 'normal`: Set the mode type (options: 'normal, 'denote, 'org-roam)
@@ -404,6 +418,15 @@ We welcome community contributions! Here are some ways you can get involved:
 
 ** Changlog
 *** 
+*** Version 0.6.0 (2025-07-27)
+  - Added: Highlight Display Format Options
+    - New configuration option: `org-zettel-ref-highlight-format`, allowing users to choose the display format for highlights in overview files (headline, list, description list).
+    - Improved: `org-zettel-ref--add-or-update-highlights` function updated to support new highlight formats.
+  - Enhanced: Highlight Link Jumping
+    - Fixed issues with `hl:` links not jumping correctly; now, highlights in both headline and list formats can correctly jump back to the source file.
+  - Added: Highlight Format Conversion Tool
+    - New command: `org-zettel-ref-convert-highlights-to-list`, for converting old headline-formatted highlights to the new list format.
+    - New feature: Automatic prompt for conversion when old format highlights are detected and the new format is configured.
 *** Version 0.5.9 (2025-06-25)
   - Added: Single file mode
     - Added configuration item: ~org-zettel-ref-use-single-overview-file~ for enabling/disabling single file mode
