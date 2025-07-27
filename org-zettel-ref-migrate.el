@@ -1,7 +1,6 @@
 ;;; org-zettel-ref-migrate.el --- Migration utilities for org-zettel-ref -*- lexical-binding: t; -*-
 
 (require 'org-zettel-ref-db)
-(require 'org-zettel-ref-core)
 (require 'org-element) ; Ensure org-element is loaded for robust parsing
 
 ;;;###autoload

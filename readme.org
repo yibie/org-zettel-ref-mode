@@ -417,7 +417,7 @@ We welcome community contributions! Here are some ways you can get involved:
 - Share your experiences and tips for using org-zettel-ref-mode.
 
 ** Changlog
-*** 
+
 *** Version 0.6.0 (2025-07-27)
   - Added: Highlight Display Format Options
     - New configuration option: `org-zettel-ref-highlight-format`, allowing users to choose the display format for highlights in overview files (headline, list, description list).

@@ -600,7 +600,7 @@ Returns a list of highlights, where each element is a list:
               (insert (org-zettel-ref--format-highlight-entry original-hl-id hl-type-sym hl-text-content hl-type-name hl-prefix hl-img-path hl-img-desc 'description))
               (when (and (eq hl-type-sym 'image) hl-img-path)
                 (insert (format "  #+ATTR_ORG: :width 300\n  [[file:%s]]\n" hl-img-path)))
-              (message "DEBUG: Created new description highlight: %s" original-hl-id)))))))))
+              (message "DEBUG: Created new description highlight: %s" original-hl-id))))))))))
 
 (defun org-zettel-ref--remove-all-ref-id-content (source-ref-id)
   "Remove all content related to the specified REF_ID from the overview file.
@@ -884,7 +884,7 @@ Returns nil if no changes needed, or new filepath if changes required."
             (org-zettel-ref-prompt-for-highlight-conversion overview-buffer))
           
           (message "Initialized org-zettel-ref for %s" (buffer-name))
-          overview-file))))
+          overview-file)))))
 
 (defun org-zettel-ref-ensure-entry (source-buffer)
   "Ensure database entries exist for the source buffer.
