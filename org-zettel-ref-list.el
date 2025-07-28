@@ -785,15 +785,14 @@ For example: Stallman__GNUEmacs==editor_lisp--reading-3.org"
                           (when (and existing-overview-entry 
                                      (not org-zettel-ref-use-single-overview-file))
                             (let ((overview-file-path (org-zettel-ref-overview-entry-file-path existing-overview-entry)))
-                              (when (file-exists-p overview-file-path)
+                              (when (and overview-file-path (file-exists-p overview-file-path))
                                 (condition-case update-err
                                     (with-temp-buffer
                                       (insert-file-contents overview-file-path)
-                                      ;; 更新overview文件中的SOURCE_FILE路径
-                                      (when (re-search-forward 
-                                             (format "^#\\+SOURCE_FILE: %s$" 
-                                                     (regexp-quote old-file)) nil t)
-                                        (replace-match (format "#+SOURCE_FILE: %s" new-file-path))
+                                      ;; 更新overview文件中的:SOURCE_FILE:属性
+                                      (goto-char (point-min))
+                                      (when (re-search-forward (format ":SOURCE_FILE:[ \t]+%s" (regexp-quote old-file)) nil t)
+                                        (replace-match (format ":SOURCE_FILE: %s" new-file-path))
                                         (write-file overview-file-path)
                                         (message "DEBUG: Updated SOURCE_FILE reference in overview file")))
                                   (error
@@ -1735,17 +1734,29 @@ In multi-file mode, opens the dedicated overview file."
                   (message "Section for %s not found in the single overview file."
                            (org-zettel-ref-ref-entry-title ref-entry)))))))
       ;; --- Multi-File Mode ---
-      (let ((overview-entry (org-zettel-ref-db-get-overview-by-ref-id db ref-id)))
-        (if (and overview-entry (org-zettel-ref-overview-entry-file-path overview-entry))
-            (let ((overview-file-path (org-zettel-ref-overview-entry-file-path overview-entry)))
-              (if (file-exists-p overview-file-path)
+      (let* ((db (org-zettel-ref-ensure-db))
+             (overview-file-path (buffer-file-name (current-buffer)))
+             (overview-id (when overview-file-path
+                           (gethash overview-file-path (org-zettel-ref-db-overview-paths db))))
+             (overview-entry (when overview-id
+                              (gethash overview-id (org-zettel-ref-db-overviews db))))
+             (ref-id (when overview-entry
+                      (org-zettel-ref-overview-entry-ref-id overview-entry)))
+             (ref-entry (when ref-id
+                         (org-zettel-ref-db-get-ref-entry db ref-id))))
+        (if ref-entry
+            (let ((source-file-path (org-zettel-ref-ref-entry-file-path ref-entry)))
+              (if (file-exists-p source-file-path)
                   (progn
-                    (find-file overview-file-path)
-                    (message "Opened dedicated overview file: %s" overview-file-path))
-                (message "Overview file for %s does not exist: %s"
-                         (org-zettel-ref-ref-entry-title ref-entry) overview-file-path)))
-          (message "No overview file linked to %s. You can link or create one via \'Link overview\' action (L)."
-                   (org-zettel-ref-ref-entry-title ref-entry)))))))
+                    (find-file source-file-path)
+                    (with-current-buffer (find-file-noselect source-file-path)
+                      (goto-char (point-min))
+                      (if (re-search-forward (format "<<hl-%s>>" path) nil t)
+                          (goto-char (match-beginning 0))
+                        (message "Highlight %s not found in %s" path (file-name-nondirectory source-file-path)))))
+                (message "Source file does not exist: %s" source-file-path)))
+          (message "Could not find a source file linked to this overview file. DB path: %s"
+                   (org-zettel-ref-db-get-db-file-path db)))))))
 
 
 (defun org-zettel-ref-list-link-overview ()

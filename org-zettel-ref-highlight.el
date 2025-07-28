@@ -592,50 +592,74 @@ Group 3: Content (for images including path and description)"
        (setq-local org-element-use-cache nil)))))
 
 (defun org-zettel-ref-jump-to-source-highlight-from-overview (path &optional data)
-  "Jump from a highlight entry in the single overview file to the corresponding highlight in the source file.
+  "Jump from a highlight entry in the overview file to the corresponding highlight in the source file.
 PATH is the highlight ID (e.g., \"1\", \"2\").
 DATA is the link data (optional, provided by org-mode).
-This command should be called when the point is on a highlight entry's headline or list item in the single overview file."
-  (unless (and org-zettel-ref-use-single-overview-file
-               (string= (buffer-file-name (current-buffer)) (expand-file-name org-zettel-ref-single-overview-file-path)))
-    (user-error "This command can only be used from the single overview file when single-file mode is active."))
+This command should be called when the point is on a highlight entry's headline or list item in the overview file."
+  (if (and org-zettel-ref-use-single-overview-file
+           (string= (buffer-file-name (current-buffer)) (expand-file-name org-zettel-ref-single-overview-file-path)))
+      ;; --- Single-File Mode ---
+      (save-excursion
+        (let (source-ref-id)
+          ;; The 'path' argument is our original-hl-id
+          (let ((original-hl-id path))
+            ;; Find the parent heading to get the SOURCE_REF_ID
+            ;; This logic is still needed as source-ref-id is not part of the 'path' argument
+            (org-back-to-heading t)
+            (let ((parent-props (org-entry-properties)))
+              (setq source-ref-id (cdr (assoc "REF_ID" parent-props))))
 
-  (save-excursion
-    (let (source-ref-id)
-      ;; The 'path' argument is our original-hl-id
-      (let ((original-hl-id path))
-        ;; Find the parent heading to get the SOURCE_REF_ID
-        ;; This logic is still needed as source-ref-id is not part of the 'path' argument
-        (org-back-to-heading t)
-        (let ((parent-props (org-entry-properties)))
-          (setq source-ref-id (cdr (assoc "REF_ID" parent-props))))
+            (message "DEBUG: Jump command - Source_Ref_ID: %s, Original_HL_ID: %s" source-ref-id original-hl-id)
 
-        (message "DEBUG: Jump command - Source_Ref_ID: %s, Original_HL_ID: %s" source-ref-id original-hl-id)
+            (unless source-ref-id
+              (user-error "Could not find source reference ID for this entry."))
+            (unless original-hl-id
+              (user-error "Could not find highlight ID for this entry."))
 
-        (unless source-ref-id
-          (user-error "Could not find source reference ID for this entry."))
-        (unless original-hl-id
-          (user-error "Could not find highlight ID for this entry."))
-
-        (let* ((db (org-zettel-ref-ensure-db))
-               (ref-entry (org-zettel-ref-db-get-ref-entry db source-ref-id))
-               (source-file-path (when ref-entry (org-zettel-ref-ref-entry-file-path ref-entry))))
-          (if source-file-path
-              (progn
-                (message
-                 "DEBUG: Jumping to source file: %s" source-file-path)
-                (let ((source-buffer (find-file-other-window source-file-path)))
-                  (with-selected-window (get-buffer-window source-buffer)
-                    (with-current-buffer source-buffer
-                      (widen)
-                      (goto-char (point-min))
-                      (let ((target-mark (concat "<<hl-" original-hl-id ">>")))
-                        (if (re-search-forward (regexp-quote target-mark) nil t)
-                            (progn
-                              (goto-char (match-beginning 0))
-                              (recenter-top-bottom)
-                              (message "Jumped to %s in %s" target-mark (file-name-nondirectory source-file-path)))
-                          (user-error "Target mark %s not found in %s" target-mark source-file-path)))))))
-            (user-error "Could not find source file for REF_ID: %s" source-ref-id)))))))
+            (let* ((db (org-zettel-ref-ensure-db))
+                   (ref-entry (org-zettel-ref-db-get-ref-entry db source-ref-id))
+                   (source-file-path (when ref-entry (org-zettel-ref-ref-entry-file-path ref-entry))))
+              (if source-file-path
+                  (progn
+                    (message
+                     "DEBUG: Jumping to source file: %s" source-file-path)
+                    (let ((source-buffer (find-file-other-window source-file-path)))
+                      (with-selected-window (get-buffer-window source-buffer)
+                        (with-current-buffer source-buffer
+                          (widen)
+                          (goto-char (point-min))
+                          (let ((target-mark (concat "<<hl-" original-hl-id ">>")))
+                            (if (re-search-forward (regexp-quote target-mark) nil t)
+                                (progn
+                                  (goto-char (match-beginning 0))
+                                  (recenter-top-bottom)
+                                  (message "Jumped to %s in %s" target-mark (file-name-nondirectory source-file-path)))
+                              (user-error "Target mark %s not found in %s" target-mark source-file-path)))))))
+                (user-error "Could not find source file for REF_ID: %s" source-ref-id))))))
+    ;; --- Multi-File Mode ---
+    ;; When not in single-file mode, find the source file from the current overview file.
+    (let* ((db (org-zettel-ref-ensure-db))
+           (overview-file-path (buffer-file-name (current-buffer)))
+           (overview-id (when overview-file-path
+                         (gethash overview-file-path (org-zettel-ref-db-overview-paths db))))
+           (overview-entry (when overview-id
+                           (gethash overview-id (org-zettel-ref-db-overviews db))))
+           (ref-id (when overview-entry
+                    (org-zettel-ref-overview-entry-ref-id overview-entry)))
+           (ref-entry (when ref-id
+                       (org-zettel-ref-db-get-ref-entry db ref-id))))
+      (if ref-entry
+          (let ((source-file-path (org-zettel-ref-ref-entry-file-path ref-entry)))
+            (if (file-exists-p source-file-path)
+                (progn
+                  (find-file source-file-path)
+                  (with-current-buffer (find-file-noselect source-file-path)
+                    (goto-char (point-min))
+                    (if (re-search-forward (format "<<hl-%s>>" path) nil t)
+                        (goto-char (match-beginning 0))
+                      (message "Highlight %s not found in %s" path (file-name-nondirectory source-file-path)))))
+              (message "Source file does not exist: %s" source-file-path)))
+        (message "Could not find a source file linked to this overview file. DB path: %s"
+                 (org-zettel-ref-db-get-db-file-path db))))))
 
 (provide 'org-zettel-ref-highlight)
