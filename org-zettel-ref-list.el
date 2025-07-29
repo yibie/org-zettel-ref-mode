@@ -249,6 +249,49 @@ name and FLIP is non-nil if the sort order should be reversed."
 ;;; File Name Parsing and Formatting
 ;;;----------------------------------------------------------------------------
 
+(defun org-zettel-ref-update-overview-source-file (db ref-id old-file new-file)
+  "Update SOURCE_FILE reference in overview file when source file is renamed.
+DB is the database object, REF-ID is the reference ID, OLD-FILE is the old file path,
+NEW-FILE is the new file path."
+  (when (and (not org-zettel-ref-use-single-overview-file))
+    (let ((overview-entry (org-zettel-ref-db-get-overview-by-ref-id db ref-id)))
+      (when (and overview-entry 
+                (org-zettel-ref-overview-entry-file-path overview-entry)
+                (file-exists-p (org-zettel-ref-overview-entry-file-path overview-entry)))
+        (condition-case update-err
+            (with-temp-buffer
+              (insert-file-contents (org-zettel-ref-overview-entry-file-path overview-entry))
+              ;; 更新overview文件中的:SOURCE_FILE:属性
+              (goto-char (point-min))
+              ;; 尝试多种可能的路径格式进行匹配和替换
+              (let ((old-file-basename (file-name-nondirectory old-file))
+                    (new-file-basename (file-name-nondirectory new-file))
+                    (updated nil))
+                ;; 尝试匹配绝对路径
+                (when (re-search-forward (format ":SOURCE_FILE:[ \t]+%s" (regexp-quote old-file)) nil t)
+                  (replace-match (format ":SOURCE_FILE: %s" new-file))
+                  (setq updated t))
+                ;; 尝试匹配相对路径（如果绝对路径匹配失败）
+                (unless updated
+                  (goto-char (point-min))
+                  (when (re-search-forward (format ":SOURCE_FILE:[ \t]+%s" (regexp-quote old-file-basename)) nil t)
+                    (replace-match (format ":SOURCE_FILE: %s" new-file-basename))
+                    (setq updated t)))
+                ;; 尝试匹配不带引号的路径
+                (unless updated
+                  (goto-char (point-min))
+                  (when (re-search-forward (format ":SOURCE_FILE:[ \t]+%s" (regexp-quote (file-name-sans-extension old-file-basename))) nil t)
+                    (replace-match (format ":SOURCE_FILE: %s" (file-name-sans-extension new-file-basename)))
+                    (setq updated t)))
+                (when updated
+                  (write-file (org-zettel-ref-overview-entry-file-path overview-entry))
+                  (message "DEBUG: Updated SOURCE_FILE reference in overview file"))
+                (unless updated
+                  (message "DEBUG: Could not find SOURCE_FILE reference to update in overview file"))))
+          (error
+           (message "Warning: Could not update SOURCE_FILE in overview: %s" 
+                    (error-message-string update-err))))))))
+
 (defconst org-zettel-ref-author-regexp "^\\(.*?\\)__"
   "Match the author part in the file name.") 
 
@@ -782,22 +825,7 @@ For example: Stallman__GNUEmacs==editor_lisp--reading-3.org"
                                      ref-id existing-overview-id))
                           
                           ;; If overview file exists, update the SOURCE_FILE reference in its content
-                          (when (and existing-overview-entry 
-                                     (not org-zettel-ref-use-single-overview-file))
-                            (let ((overview-file-path (org-zettel-ref-overview-entry-file-path existing-overview-entry)))
-                              (when (and overview-file-path (file-exists-p overview-file-path))
-                                (condition-case update-err
-                                    (with-temp-buffer
-                                      (insert-file-contents overview-file-path)
-                                      ;; 更新overview文件中的:SOURCE_FILE:属性
-                                      (goto-char (point-min))
-                                      (when (re-search-forward (format ":SOURCE_FILE:[ \t]+%s" (regexp-quote old-file)) nil t)
-                                        (replace-match (format ":SOURCE_FILE: %s" new-file-path))
-                                        (write-file overview-file-path)
-                                        (message "DEBUG: Updated SOURCE_FILE reference in overview file")))
-                                  (error
-                                   (message "Warning: Could not update SOURCE_FILE in overview: %s" 
-                                            (error-message-string update-err)))))))
+                          (org-zettel-ref-update-overview-source-file db ref-id old-file new-file-path)
                           
                           (org-zettel-ref-db-save db)))
                       ;; Update database
@@ -906,12 +934,16 @@ For example: Stallman__GNUEmacs==editor_lisp--reading-3.org"
                   (puthash new-filepath ref-id (org-zettel-ref-db-ref-paths db))
                   (setf (org-zettel-ref-ref-entry-file-path ref-entry) new-filepath
                         (org-zettel-ref-ref-entry-keywords ref-entry) new-keywords-list
-                        (org-zettel-ref-ref-entry-modified ref-entry) (current-time)))
-                ;; Update opened buffer
-                (when-let* ((buf (get-file-buffer file)))
-                  (with-current-buffer buf
-                    (set-visited-file-name new-filepath)
-                    (set-buffer-modified-p nil))))))))))
+                        (org-zettel-ref-ref-entry-modified ref-entry) (current-time))
+                  
+                  ;; Update overview file SOURCE_FILE reference if it exists
+                  (org-zettel-ref-update-overview-source-file db ref-id file new-filepath)
+                  
+                  ;; Update opened buffer
+                  (when-let* ((buf (get-file-buffer file)))
+                    (with-current-buffer buf
+                      (set-visited-file-name new-filepath)
+                      (set-buffer-modified-p nil))))))))))
     ;; Save database and refresh display
     (org-zettel-ref-db-save db)
     (org-zettel-ref-list-refresh)
@@ -1127,6 +1159,10 @@ Example: (t 'source \"Deleted source file only.\") or (nil 'error \"Error messag
                 ;; Update database mappings
                 (remhash file (org-zettel-ref-db-ref-paths db))
                 (puthash new-file ref-id (org-zettel-ref-db-ref-paths db))
+                
+                ;; Update overview file SOURCE_FILE reference if it exists
+                (org-zettel-ref-update-overview-source-file db ref-id file new-file)
+                
                 ;; Update any open buffer
                 (when-let ((buf (get-file-buffer file)))
                   (with-current-buffer buf
@@ -1182,6 +1218,10 @@ RATING should be a number between 0 and 5."
                 ;; Update database mappings
                 (remhash file (org-zettel-ref-db-ref-paths db))
                 (puthash new-file ref-id (org-zettel-ref-db-ref-paths db))
+                
+                ;; Update overview file SOURCE_FILE reference if it exists
+                (org-zettel-ref-update-overview-source-file db ref-id file new-file)
+                
                 ;; Update any open buffer
                 (when-let ((buf (get-file-buffer file)))
                   (with-current-buffer buf
